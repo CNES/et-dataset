@@ -37,7 +37,7 @@ def compute_savi(data:xr.Dataset) -> None:
     Huete, A.R (August 1988). "A soil-adjusted vegetation index (SAVI)". Remote Sensing of Environment. 25 (3): 295–309.
     """
     L = 0.5
-    data['savi'] = np.clip((1.0 + L) * (data.nir - data.red) / (data.nir + data.red + L),0.0,np.inf)
+    data['savi'] = np.clip((1.0 + L) * (data.nir - data.red) / (data.nir + data.red + L), -(1.0+L), (1.0+L))
 
 
 def compute_lai_from_savi(data: xr.Dataset) -> None:  
@@ -67,9 +67,7 @@ def compute_lai_from_evi2(data: xr.Dataset) -> None:
 def compute_lai_from_ndvi(data: xr.Dataset) -> None:  
     """
     Compute LAI
-    González Piqueras, J. Evapotranspiración de la Cubierta Vegetal Mediante la Determinación del Coeficiente de Cultivo por Teledetección. Extensión a Escala Regional: Acuífero 08.29 Mancha Oriental. Ph.D. Thesis, Universitat de València, Valencia, Spain, 2006.
     Jordi Inglada, Bio/geo-physical model calibration and inversion with probabilistic programming
     """
     data['lai'] = 0.11905544 * np.exp(data["ndvi"] * 3.45660706) - 0.06174835
-    #data["lai"] = 0.0287 * np.exp(5.081 * data["ndvi"])
 

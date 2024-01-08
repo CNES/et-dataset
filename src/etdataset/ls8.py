@@ -18,7 +18,7 @@ from sensorsio import landsat, utils
 from etdataset.logging import LoggerManager
 from etdataset.common import create_polygon
 from etdataset.grid import get_bb_from_s2_tile
-from etdataset.indices import compute_ndvi, compute_lai_from_ndvi
+from etdataset.vegetation_indices import compute_ndvi, compute_lai_from_ndvi
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -144,7 +144,7 @@ def create_dataset(product_path: str,
     # Drop time dimension
     ls8_xr = ls8_xr.isel(t=0, drop=True)
 
-    # Compute indices
+    # Compute vegetation indices
     compute_ndvi(ls8_xr)
     compute_lai_from_ndvi(ls8_xr)
 

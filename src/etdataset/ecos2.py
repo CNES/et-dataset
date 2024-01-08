@@ -18,7 +18,7 @@ from sensorsio import sentinel2, utils, ecostress_coll2
 from sensorsio.ecostress_coll2 import Ecostress
 
 from etdataset.logging import LoggerManager
-from etdataset.indices import compute_ndvi, compute_lai_from_ndvi
+from etdataset.vegetation_indices import compute_ndvi, compute_lai_from_ndvi
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -53,10 +53,9 @@ def compute_seli(data: xr.Dataset) -> None:
     Pasqualotto, N.; Delegido, J.; Van Wittenberghe, S.; Rinaldi, M.; Moreno, J. Multi-Crop 
     Green LAI Estimation with a New Simple Sentinel-2 LAI Index (SeLI). Sensors 2019, 19, 904.
     """
-    #data['seli'] = np.clip((data.nir2 - data.red_edge) / 
-    #                       (data.nir2 + data.red_edge + 1e-9),
-    #                       -1,1) #.transpose('y','x')
-    data['seli'] =(data.nir2 - data.red_edge) / (data.nir2 + data.red_edge + 1e-9)
+    data['seli'] = np.clip((data.nir2 - data.red_edge) / 
+                           (data.nir2 + data.red_edge + 1e-9),
+                           -1,1) #.transpose('y','x')
 
 
 def compute_lai_from_seli(data: xr.Dataset) -> None:  
@@ -145,10 +144,9 @@ def create_dataset(s2_path: str,
         if var not in ecos2_name_mapping.values():
             merged_xr = merged_xr.drop(var)
 
-    # Compute indices
-    compute_seli(merged_xr)
+    # Compute vegetation indices
     compute_ndvi(merged_xr)
-    compute_lai_from_seli(merged_xr)
+    compute_lai_from_ndvi(merged_xr)
 
     # Compute albedo
     compute_albedo(merged_xr)

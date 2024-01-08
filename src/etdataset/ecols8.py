@@ -19,7 +19,7 @@ from sensorsio.ecostress_coll2 import Ecostress
 
 from etdataset.logging import LoggerManager
 from etdataset.grid import get_bb_from_s2_tile
-from etdataset.indices import compute_ndvi, compute_lai_from_ndvi
+from etdataset.vegetation_indices import compute_ndvi, compute_lai_from_ndvi
 from etdataset.ls8 import compute_albedo
 
 logger = LoggerManager.get_logger(__name__)
@@ -108,7 +108,7 @@ def create_dataset(ls8_path: str,
         if var not in ecols8_name_mapping.values():
             merged_xr = merged_xr.drop(var)
 
-    # Compute indices
+    # Compute vegetation indices
     compute_ndvi(merged_xr)
     compute_lai_from_ndvi(merged_xr)
 
