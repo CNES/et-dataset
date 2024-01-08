@@ -18,7 +18,6 @@ from sensorsio import landsat, utils, ecostress_coll2
 from sensorsio.ecostress_coll2 import Ecostress
 
 from etdataset.logging import LoggerManager
-from etdataset.grid import get_bb_from_s2_tile
 from etdataset.vegetation_indices import compute_ndvi, compute_lai_from_ndvi
 from etdataset.ls8 import compute_albedo
 

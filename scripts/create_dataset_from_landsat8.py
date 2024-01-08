@@ -10,16 +10,14 @@ import geopandas as gpd
 
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
+from sensorsio import mgrs
 
-from etdataset.grid import get_s2_tiles_from_roi
 from etdataset.ls8 import create_dataset
 from etdataset.common import write_dataset
 
 """
 Create dataset from landsat8 dataset
 """
-
-S2_GRID_PATH="S2Atiles/S2Atiles.shp"
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -34,12 +32,6 @@ def get_parser() -> argparse.ArgumentParser:
                         dest='verbose', 
                         action='store_true',
                         help="Verbose mode")
-
-    parser.add_argument(
-        '-g', '--grid_sentinel2',
-        type=str,
-        help=
-        'Path to grid Sentinel2')
 
     parser.add_argument(
         '-l', '--landsat8',
@@ -80,16 +72,6 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
     
-    # Check S2 grid path
-    s2_grid_path = args.grid_sentinel2
-    if s2_grid_path is None:
-        if not os.environ.get("DATA_PATH"):
-            raise Exception("DATA_PATH not defined")
-        s2_grid_path = os.path.join(os.environ["DATA_PATH"],S2_GRID_PATH)
-    if not os.path.isfile(s2_grid_path):
-        raise Exception(f"Sentinel2 grid not found ({s2_grid_path})")
-    logger.debug(f"S2 grid path: {s2_grid_path}")
-
     # Check Landsat8 path
     ls8_path = args.landsat8
     if not os.path.isdir(ls8_path):
@@ -104,15 +86,15 @@ if __name__ == '__main__':
         logger.debug(f"Create output path: {output_path}")
         os.makedirs(output_path, exist_ok=True)
 
-    # Read S2 grid
-    s2_grid = gpd.read_file(s2_grid_path)
-    
     # Get tiles ID
     tile_ids = [] 
     if args.tile is not None:
         tile_ids.append(args.tile)
     if args.roi is not None:
-        tile_ids = get_s2_tiles_from_roi(args.roi,s2_grid)
+        roi = gpd.read_file(args.roi)
+        roi_poly = roi.geometry[0]
+        crs_poly = roi.crs
+        tile_ids = mgrs.get_mgrs_tiles_from_roi(roi_poly,crs_poly)
     logger.info(f"Tiles ID:{tile_ids}")
 
     # Create datasets
@@ -121,7 +103,7 @@ if __name__ == '__main__':
     with logging_redirect_tqdm():
         for tile_id in tqdm(tile_ids):
             logger.debug(f"Process tile: {tile_id}")
-            ls8 = create_dataset(ls8_path, tile_id, s2_grid)
+            ls8 = create_dataset(ls8_path, tile_id)
             datasets.append(ls8)
 
     # Write 

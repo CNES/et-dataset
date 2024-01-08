@@ -13,11 +13,10 @@ import numpy as np
 import rasterio as rio
 import xarray as xr
 
-from sensorsio import landsat, utils
+from sensorsio import landsat, mgrs, utils
 
 from etdataset.logging import LoggerManager
 from etdataset.common import create_polygon
-from etdataset.grid import get_bb_from_s2_tile
 from etdataset.vegetation_indices import compute_ndvi, compute_lai_from_ndvi
 
 logger = LoggerManager.get_logger(__name__)
@@ -85,7 +84,6 @@ def create_db(csv_path:str,
 
 def create_dataset(product_path: str,
                    tile_id: str,
-                   s2_grid: str | gpd.GeoDataFrame,
                    resolution:int = 57) -> xr.Dataset:
     """
     Create dataset from landsat product
@@ -93,8 +91,11 @@ def create_dataset(product_path: str,
     # Create an instance of Landsat8 from the product path
     ls8_ds = landsat.Landsat(product_path)
     
-    # Get bounding box for S2 tile
-    bb = get_bb_from_s2_tile(tile_id, s2_grid,ls8_ds.crs.to_epsg())
+    # Get bounding box for MRGS tile
+    bb = mgrs.get_bbox_mgrs_tile(tile_id, False)
+    bb = utils.bb_transform(mgrs.get_crs_mgrs_tile(tile_id),
+                            ls8_ds.crs,
+                            bb)
    
     # Read landsat data 
     # Every bands in the product is sampled at 30m 
