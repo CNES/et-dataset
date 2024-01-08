@@ -1,0 +1,12 @@
+# Temporary files
+*.swp
+
+# Python
+*.pyc
+__pycache__/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data
+*.tif
