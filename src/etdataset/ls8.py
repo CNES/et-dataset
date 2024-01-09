@@ -145,9 +145,12 @@ def create_dataset(product_path: str,
     # Drop time dimension
     ls8_xr = ls8_xr.isel(t=0, drop=True)
 
-    # Compute vegetation indices
+    # Compute NDVI
     compute_ndvi(ls8_xr)
-    compute_lai_from_ndvi(ls8_xr)
+    # Compute LAI with coefficients from 
+    # PADILLA, F. L. M., MAAS, S. J., GONZÁLEZ-DUGO, M. P., et al. 
+    # Monitoring regional wheat yield in Southern Spain using the GRAMI model and satellite imagery. Field Crops Research, 2012, vol. 130, p. 145-154.
+    compute_lai_from_ndvi(ls8_xr, 0.04, 4.91)
 
     # Compute albedo
     compute_albedo(ls8_xr)

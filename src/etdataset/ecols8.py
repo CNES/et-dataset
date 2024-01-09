@@ -107,9 +107,13 @@ def create_dataset(ls8_path: str,
         if var not in ecols8_name_mapping.values():
             merged_xr = merged_xr.drop(var)
 
-    # Compute vegetation indices
+    # Compute NDVI
     compute_ndvi(merged_xr)
-    compute_lai_from_ndvi(merged_xr)
+    # Compute LAI with coefficients from 
+    # PADILLA, F. L. M., MAAS, S. J., GONZÁLEZ-DUGO, M. P., et al. 
+    # Monitoring regional wheat yield in Southern Spain using the GRAMI model and satellite imagery. 
+    # Field Crops Research, 2012, vol. 130, p. 145-154.
+    compute_lai_from_ndvi(merged_xr, 0.04, 4.91)
 
     # Compute albedo
     compute_albedo(merged_xr)

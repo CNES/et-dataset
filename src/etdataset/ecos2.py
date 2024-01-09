@@ -47,26 +47,6 @@ def compute_albedo(data: xr.Dataset) -> None:
                      0.3417 * data.nir + 0.1170 * data.swir1 + 0.0338 * data.swir2
 
 
-def compute_seli(data: xr.Dataset) -> None:  
-    """
-    Compute SeLI
-    Pasqualotto, N.; Delegido, J.; Van Wittenberghe, S.; Rinaldi, M.; Moreno, J. Multi-Crop 
-    Green LAI Estimation with a New Simple Sentinel-2 LAI Index (SeLI). Sensors 2019, 19, 904.
-    """
-    data['seli'] = np.clip((data.nir2 - data.red_edge) / 
-                           (data.nir2 + data.red_edge + 1e-9),
-                           -1,1) #.transpose('y','x')
-
-
-def compute_lai_from_seli(data: xr.Dataset) -> None:  
-    """
-    Compute LAI
-    Pasqualotto, N.; Delegido, J.; Van Wittenberghe, S.; Rinaldi, M.; Moreno, J. Multi-Crop 
-    Green LAI Estimation with a New Simple Sentinel-2 LAI Index (SeLI). Sensors 2019, 19, 904.
-    """
-    data['lai'] = 5.405 * data["seli"] - 0.114
-
-
 def create_dataset(s2_path: str,
                    eco_path:str,
                    resolution:int = 57) -> xr.Dataset:
@@ -144,9 +124,13 @@ def create_dataset(s2_path: str,
         if var not in ecos2_name_mapping.values():
             merged_xr = merged_xr.drop(var)
 
-    # Compute vegetation indices
+    # Compute NDVI
     compute_ndvi(merged_xr)
-    compute_lai_from_ndvi(merged_xr)
+    # Compute LAI with coefficients from 
+    # SUN, Yuanheng, REN, Huazhong, ZHANG, Tianyuan, et al. 
+    # Crop leaf area index retrieval based on inverted difference vegetation index and NDVI. 
+    # IEEE Geoscience and Remote Sensing Letters, 2018, vol. 15, no 11, p. 1662-1666.
+    compute_lai_from_ndvi(merged_xr, 0.0066, 7.42)
 
     # Compute albedo
     compute_albedo(merged_xr)

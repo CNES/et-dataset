@@ -66,7 +66,7 @@ if __name__ == '__main__':
     logger.setLevel(log_level)
     
     # Check Seninel2 path
-    s2_path = args.seninel2
+    s2_path = args.sentinel2
     if not os.path.isdir(s2_path):
         raise Exception(f"Sentinel2 product not found ({s2_path})")
     logger.debug(f"Sentinel2 path: {s2_path}")
