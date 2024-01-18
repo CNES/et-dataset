@@ -1,0 +1,12 @@
+affine
+geopandas
+matplotlib
+notebook
+numpy
+pandas
+pyproj
+rasterio
+sensorsio
+shapely
+tqdm
+xarray
