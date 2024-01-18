@@ -14,8 +14,8 @@ import numpy as np
 import rasterio as rio
 import xarray as xr
 
-from sensorsio import landsat, utils, ecostress_coll2
-from sensorsio.ecostress_coll2 import Ecostress
+from sensorsio import landsat, utils, ecostress_v2
+from sensorsio.ecostress_v2 import EcostressV2
 
 from etdataset.logging import LoggerManager
 from etdataset.vegetation_indices import compute_ndvi, compute_lai_from_ndvi
@@ -46,11 +46,11 @@ def create_dataset(ls8_path: str,
     logger.debug(f"Ecostress path: {eco_path}")
 
     # Create an instance of ecostress from the product path
-    eco_ds = ecostress_coll2.Ecostress(eco_path)
+    eco_ds = ecostress_coll2.EcostressV2(eco_path)
     
     # Read ecostress product
     eco_xr = eco_ds.read_as_xarray([
-            Ecostress.LST,Ecostress.EMIS
+            EcostressV2.LST,EcostressV2.EMIS
         ],
                                    resolution=resolution,
                                    algorithm=rio.enums.Resampling.cubic)

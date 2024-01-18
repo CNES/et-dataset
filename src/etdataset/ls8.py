@@ -44,44 +44,6 @@ def compute_albedo(data: xr.Dataset) -> None:
     data['albedo'] = 0.356 * data.blue + 0.130 * data.red + 0.373 * data.nir + 0.085 * data.swir1 + 0.072 * data.swir2 - 0.0018
 
 
-def create_db(csv_path:str,
-              max_cloud_cover:float) -> gpd.GeoDataFrame:
-    """
-    Create database for Landsat8 product from CSV metadata file
-    """
-    ls8_df = pd.read_csv(ls8_db_path,
-                         parse_dates=['Date Acquired','Date Product Generated L2','Date Product Generated L1','Start Time', 'Stop Time'],
-                         encoding='ISO-8859-1')
-    nb_ls8_raw = len(ls8_df)
-    logger.debug(f'Found {nb_ls8_raw} Landsat8 products')
-    # Filter day acquisitions
-    ls8_df = ls8_df[ls8_df['Day/Night Indicator'] == 'DAY']
-    # Filter on clouds
-    ls8_df = ls8_df[ls8_df['Land Cloud Cover'] < max_cloud_cover]
-    nb_ls8_filtered = len(ls8_df)
-    logger.info(
-        f'Found {nb_ls8_filtered} Landsat8 day products with cloud cover < {max_cloud_cover}%'
-    )
-
-    # Convert ls8 start time to datetime
-    ls8_df['date'] = ls8_df['Start Time']
-    ls8_df['date_end'] = ls8_df['Stop Time']
-
-    # Convert filtered dataframe to a geodataframe
-    geometry = ls8_df.apply(lambda row: create_polygon(row['Corner Upper Left Latitude'],
-                                                     row['Corner Upper Left Longitude'],
-                                                     row['Corner Upper Right Latitude'],
-                                                     row['Corner Upper Right Longitude'],
-                                                     row['Corner Lower Left Latitude'],
-                                                     row['Corner Lower Left Longitude'],
-                                                     row['Corner Lower Right Latitude'],
-                                                     row['Corner Lower Right Longitude'],),axis=1)
-    ls8_gdf = gpd.GeoDataFrame(ls8_df[['Display ID','date', 'date_end','Land Cloud Cover']],
-                           crs=4326,
-                           geometry=geometry).rename(columns={'Display ID':'name','Land Cloud Cover':'cloud_cover'})
-    return ls8_gdf
-
-
 def create_dataset(product_path: str,
                    tile_id: str,
                    resolution:int = 57) -> xr.Dataset:

@@ -26,10 +26,10 @@ def create_polygon(ul_lat: float,
                    ll_long: float, 
                    lr_lat: float, 
                    lr_long: float) -> Polygon:
-    ul = Point(ul_lat,ul_long)
-    ur = Point(ur_lat,ur_long)
-    ll = Point(ll_lat,ll_long)
-    lr = Point(lr_lat,lr_long)
+    ul = Point(ul_long,ul_lat)
+    ur = Point(ur_long,ur_lat)
+    ll = Point(ll_long,ll_lat)
+    lr = Point(lr_long,lr_lat)
     points = [ul, ur, lr, ll]
     return Polygon([i for i in points])
 

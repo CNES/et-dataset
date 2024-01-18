@@ -101,7 +101,7 @@ if __name__ == '__main__':
     logger.info(f"Create datasets...")
     datasets = []
     with logging_redirect_tqdm():
-        for tile_id in tqdm(tile_ids):
+        for tile_id in tqdm(tile_ids, desc="Processing tiles..."):
             logger.debug(f"Process tile: {tile_id}")
             ls8 = create_dataset(ls8_path, tile_id)
             datasets.append(ls8)
@@ -109,6 +109,6 @@ if __name__ == '__main__':
     # Write 
     logger.info(f"Write datasets...")
     for ds in tqdm(datasets):
-        write_dataset(ds,dir=output_path)
+        write_dataset(ds,dir=output_path, desc="Writing dataset...")
 
     # End
