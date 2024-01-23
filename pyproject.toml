@@ -1,0 +1,125 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "et-dataset"
+dynamic = ["version"]
+description = ''
+readme = "README.md"
+requires-python = ">=3.10"
+license = ""
+keywords = []
+authors = [
+  { name = "Emmanuelle Sarrazin", email = "emmanuelle.sarrazin@cnes.fr" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "affine",
+  "geopandas",
+  "numpy",
+  "pandas",
+  "pyproj",
+  "rasterio",
+  "shapely",
+  "tqdm",
+  "xarray",
+]
+
+[project.optional-dependencies]
+dev = [
+  "hatch",
+]
+notebook = [
+  "matplotlib",
+  "jupyterlab",
+  "notebook",
+]
+
+[project.urls]
+Source = "https://gitlab.cnes.fr/cesbio/et-dataset"
+
+[project.scripts]
+et-dataset = "etdataset.cli:etdataset"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/etdataset"]
+
+[tool.hatch.version]
+path = "src/etdataset/__about__.py"
+
+[tool.hatch.envs.hatch-static-analysis]
+config-path = "ruff_defaults.toml"
+
+[tool.hatch.envs.default]
+dependencies = [
+  "coverage[toml]>=6.5",
+  "pytest",
+]
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "coverage run -m pytest {args:tests}"
+cov-report = [
+  "- coverage combine",
+  "coverage report",
+]
+cov = [
+  "test-cov",
+  "cov-report",
+]
+
+[[tool.hatch.envs.all.matrix]]
+python = ["3.10", "3.11", "3.12"]
+
+[tool.hatch.envs.types]
+dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/etdataset tests}"
+
+[tool.coverage.run]
+source_pkgs = ["etdataset", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/etdataset/__about__.py",
+]
+
+[tool.coverage.paths]
+et_dataset = ["src/etdataset", "*/et-dataset/src/etdataset"]
+tests = ["tests", "*/et-dataset/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+
+[tool.hatch.envs.style]
+detached = true
+dependencies = [
+  "black",
+  "isort",
+]
+
+[tool.hatch.envs.style.scripts]
+check = [
+  "black --check --diff .",
+  "isort --check-only --diff .",
+]
+fmt = [
+  "isort .",
+  "black .",
+  "check",
+]
+
