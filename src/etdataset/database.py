@@ -27,12 +27,12 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="rasterio")
 logger = LoggerManager.get_logger(__name__)
 
 
-def convert_date(date: str) -> datetime:
+def convert_date(date_str: str) -> datetime:
     try:
-        date = datetime.strptime(date, "%Y-%m-%d %H:%M:%S.%f")
+        date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S.%f")
     except ValueError:
         try:
-            date = datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
+            date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
         except ValueError:
             raise ValueError(f"Unregonized format for date ({date})")
     return date
@@ -41,8 +41,8 @@ def convert_date(date: str) -> datetime:
 def filter_with_roi(
     gdf: gpd.GeoDataFrame,
     roi_bbox: rio.coords.BoundingBox,
-    roi_crs: [CRS | int],
-    min_overlap: float = None,
+    roi_crs: CRS | int,
+    min_overlap: float = 30,
 ) -> gpd.GeoDataFrame:
     """
     Filter a GeoDataFrame with a ROI
@@ -129,7 +129,7 @@ def convert_product_to_collectionV2(
 def to_collectionV2(
     eco_gdf: gpd.GeoDataFrame,
     roi_bbox: rio.coords.BoundingBox,
-    roi_crs: [CRS | int],
+    roi_crs: CRS | int,
     min_overlap: float = 30,
 ):
     mgrs_tiles = mgrs.get_mgrs_tiles_from_roi(roi_bbox, roi_crs)
@@ -161,10 +161,10 @@ def read_raw_ls8_db(ls8_csv_path: str) -> pd.DataFrame:
 
 def create_ls8_db(
     ls8_csv_path: str,
-    min_date: datetime = None,
-    max_date: datetime = None,
-    roi_bbox: rio.coords.BoundingBox = None,
-    roi_crs: str = None,
+    min_date: datetime,
+    max_date: datetime,
+    roi_bbox: rio.coords.BoundingBox|None = None,
+    roi_crs: CRS|int|None = None,
     max_cloud_cover: float = 25,
     min_roi_overlap: float = 33,
 ) -> gpd.GeoDataFrame:
@@ -283,10 +283,10 @@ def read_raw_eco_db(eco_csv_path: str) -> pd.DataFrame:
 
 def create_eco_db(
     eco_csv_path: str,
-    min_date: datetime = None,
-    max_date: datetime = None,
+    min_date: datetime,
+    max_date: datetime,
     roi_bbox: rio.coords.BoundingBox = None,
-    roi_crs: str = None,
+    roi_crs: CRS|int|None = None,
     min_roi_overlap: float = 33,
 ) -> gpd.GeoDataFrame:
     """
@@ -359,10 +359,10 @@ def read_raw_s2_db(s2_csv_path: str) -> pd.DataFrame:
 
 def create_s2_db(
     s2_csv_path: str,
-    min_date: datetime = None,
-    max_date: datetime = None,
+    min_date: datetime,
+    max_date: datetime,
     roi_bbox: rio.coords.BoundingBox = None,
-    roi_crs: str = None,
+    roi_crs: CRS|int|None = None,
     min_roi_overlap: float = 33,
 ) -> gpd.GeoDataFrame:
     """

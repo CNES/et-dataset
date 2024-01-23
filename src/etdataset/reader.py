@@ -52,18 +52,18 @@ class ProductReader:
         return renamed
 
     @abstractmethod
-    def read_vis_bands(self) -> xr.DataArray:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         Read VIS bands
         """
-        return None
+        pass
 
     @abstractmethod
-    def read_tir_bands(self) -> xr.DataArray:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         Read TIR bands
         """
-        return None
+        pass
 
 
 @dataclass
@@ -129,7 +129,7 @@ class LandsatReader(ProductReader):
             - 0.0018
         )
 
-    def read_vis_bands(self):
+    def read_vis_bands(self) -> xr.Dataset:
         """
         # Read landsat data
         # Every bands in the product is sampled at 30m
@@ -191,7 +191,7 @@ class LandsatReader(ProductReader):
 
         return ls_xr
 
-    def read_tir_bands(self):
+    def read_tir_bands(self) -> xr.Dataset:
         """
         # Read Landsat TIR bands
         # Every bands in the product is sampled at 30m
@@ -284,7 +284,7 @@ class Sentinel2Reader(ProductReader):
             + 0.0338 * data.swir2
         )
 
-    def read_vis_bands(self) -> xr.DataArray:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         Read VIS bands
         """
@@ -345,7 +345,7 @@ class Sentinel2Reader(ProductReader):
         s2_xr.attrs["tile"] = self.tile
         return s2_xr
 
-    def read_tir_bands(self) -> xr.DataArray:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -377,13 +377,13 @@ class EcostressReader(ProductReader):
         self.bb = utils.bb_snap(self.ds.bounds, align=self.resolution)
         self.crs = self.ds.crs
 
-    def read_vis_bands(self) -> xr.DataArray:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         Read VIS bands
         """
         raise ProductReaderException("No VIS bands for Ecostress product")
 
-    def read_tir_bands(self) -> xr.DataArray:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         Read TIR bands
         """

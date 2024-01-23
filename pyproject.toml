@@ -125,3 +125,20 @@ fmt = [
   "flake8 --max-line-length 120 --exclude=.ipynb_checkpoints .",
 ]
 
+[tool.mypy]
+exclude = [
+    "plot.py",
+        ]
+
+[[tool.mypy.overrides]]
+module = [
+    "affine",
+    "geopandas",
+    "fiona.*",
+    "matplotlib.*",
+    "scipy.*",
+    "rasterio.*",
+    "sensorsio.*",
+    "shapely.*",
+        ]
+ignore_missing_imports = true
