@@ -6,49 +6,54 @@
 """
 Common function
 """
-import geopandas as gpd
-import os
-import rasterio as rio
 
+import geopandas as gpd
+import rasterio as rio
+from fiona.errors import DriverError
 from sensorsio import mgrs
 from shapely.geometry import Point, Polygon
 
 
+def BBoxException(Exception):
+    """
+    Exception for bounding box
+    """
 
-def create_polygon(ul_lat: float, 
-                   ul_long: float, 
-                   ur_lat: float, 
-                   ur_long: float, 
-                   ll_lat: float, 
-                   ll_long: float, 
-                   lr_lat: float, 
-                   lr_long: float) -> Polygon:
-    ul = Point(ul_long,ul_lat)
-    ur = Point(ur_long,ur_lat)
-    ll = Point(ll_long,ll_lat)
-    lr = Point(lr_long,lr_lat)
+
+def create_polygon(
+    ul_lat: float,
+    ul_long: float,
+    ur_lat: float,
+    ur_long: float,
+    ll_lat: float,
+    ll_long: float,
+    lr_lat: float,
+    lr_long: float,
+) -> Polygon:
+    ul = Point(ul_long, ul_lat)
+    ur = Point(ur_long, ur_lat)
+    ll = Point(ll_long, ll_lat)
+    lr = Point(lr_long, lr_lat)
     points = [ul, ur, lr, ll]
     return Polygon([i for i in points])
 
 
-def get_bbox(roi:str=None,tile:str=None):
+def get_bbox(roi: str = None, tile: str = None):
     """
     Get bounding box information (bbox and CRS)
     from a ROI shapefile or a MGRS tile
     """
     if roi is not None:
         # Roi shapefile
-        try: 
+        try:
             roi_gdf = gpd.read_file(roi)
             return rio.coords.BoundingBox(*roi_gdf.bounds.iloc[0].values), roi_gdf.crs
-        except:
-            raise Exception("Unable to read shapefile")
+        except DriverError as e:
+            raise BBoxException(f"Unable to read shapefile {roi}: {e}")
     elif tile is not None:
-        # Tile 
+        # Tile
         try:
             return mgrs.get_bbox_mgrs_tile(tile), 4326
-        except:
-            raise Exception("Unkown tile")
-    raise Exception("Roi format unkown")
-
-
+        except IndexError:
+            raise BBoxException("Unkown tile {tile}")
+    raise BBoxException("Roi format unkown: must be a shapefile or a tile")

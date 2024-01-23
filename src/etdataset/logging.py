@@ -29,26 +29,27 @@ class LoggerManager(object):
     def __init__(self, *args, **kwargs):
         pass
 
-
     @staticmethod
     def get_logger(name=None):
         if not name:
-            logging.basicConfig(level=LoggerManager._level,
-                                datefmt='%y-%m-%d %H:%M:%S',
-                                format='%(asctime)s :: %(levelname)s :: %(message)s')
+            logging.basicConfig(
+                level=LoggerManager._level,
+                datefmt="%y-%m-%d %H:%M:%S",
+                format="%(asctime)s :: %(levelname)s :: %(message)s",
+            )
             return logging.getLogger()
         elif name not in LoggerManager._loggers.keys():
-            logging.basicConfig(level=LoggerManager._level,
-                                datefmt='%y-%m-%d %H:%M:%S',
-                                format='%(asctime)s :: %(levelname)s :: %(message)s')
+            logging.basicConfig(
+                level=LoggerManager._level,
+                datefmt="%y-%m-%d %H:%M:%S",
+                format="%(asctime)s :: %(levelname)s :: %(message)s",
+            )
             LoggerManager._loggers[name] = logging.getLogger(str(name))
         return LoggerManager._loggers[name]
-
 
     @staticmethod
     def set_level(level):
         LoggerManager._level = level
         for name in LoggerManager._loggers.keys():
-            log = LoggerManager._loggers[name] 
+            log = LoggerManager._loggers[name]
             log.setLevel(LoggerManager._level)
-
