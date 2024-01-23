@@ -6,7 +6,6 @@ import os
 from datetime import datetime, timedelta
 
 import pandas as pd
-import pyproj
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
@@ -35,8 +34,8 @@ class DatasetException(Exception):
 
 def create_dataset(
     vis_path: str,
-    tir_path: str|None = None,
-    tile_id: str|None = None,
+    tir_path: str | None = None,
+    tile_id: str | None = None,
     output_dir: str = os.getcwd(),
 ) -> xr.Dataset:
     """
@@ -96,11 +95,11 @@ def create_dataset(
 
 
 def find_products(
-    ls8_db_path: str|None = None,
-    eco_db_path: str|None = None,
-    s2_db_path: str|None = None,
-    min_date: datetime|None = None,
-    max_date: datetime|None = None,
+    ls8_db_path: str | None = None,
+    eco_db_path: str | None = None,
+    s2_db_path: str | None = None,
+    min_date: datetime | None = None,
+    max_date: datetime | None = None,
     max_cloud_cover: float = 25,
     delta: timedelta = pd.Timedelta("3 day"),
     roi_bbox: rio.coords.BoundingBox = None,

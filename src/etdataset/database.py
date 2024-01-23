@@ -163,8 +163,8 @@ def create_ls8_db(
     ls8_csv_path: str,
     min_date: datetime,
     max_date: datetime,
-    roi_bbox: rio.coords.BoundingBox|None = None,
-    roi_crs: CRS|int|None = None,
+    roi_bbox: rio.coords.BoundingBox | None = None,
+    roi_crs: CRS | int | None = None,
     max_cloud_cover: float = 25,
     min_roi_overlap: float = 33,
 ) -> gpd.GeoDataFrame:
@@ -286,7 +286,7 @@ def create_eco_db(
     min_date: datetime,
     max_date: datetime,
     roi_bbox: rio.coords.BoundingBox = None,
-    roi_crs: CRS|int|None = None,
+    roi_crs: CRS | int | None = None,
     min_roi_overlap: float = 33,
 ) -> gpd.GeoDataFrame:
     """
@@ -362,7 +362,7 @@ def create_s2_db(
     min_date: datetime,
     max_date: datetime,
     roi_bbox: rio.coords.BoundingBox = None,
-    roi_crs: CRS|int|None = None,
+    roi_crs: CRS | int | None = None,
     min_roi_overlap: float = 33,
 ) -> gpd.GeoDataFrame:
     """

@@ -38,7 +38,7 @@ def create_polygon(
     return Polygon([i for i in points])
 
 
-def get_bbox(roi: (str|None) = None, tile: (str|None) = None):
+def get_bbox(roi: (str | None) = None, tile: (str | None) = None):
     """
     Get bounding box information (bbox and CRS)
     from a ROI shapefile or a MGRS tile
