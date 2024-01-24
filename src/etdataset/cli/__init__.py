@@ -145,10 +145,8 @@ def find(args: argparse.ArgumentParser) -> None:
     for product_column in product_columns:
         logger.info(f"{product_column} = {list(matches[product_column].unique())}")
     if len(product_columns) > 1:
-        logger.info(product_columns)
-        logger.info(matches.columns)
         for product, group in matches.groupby(product_columns[0]):
-            logger.info(
+            logger.debug(
                 f"Image: {product} - List of images:  {list(group[product_columns[1]].unique())}"
             )
     write_matches(matches, args.output)
