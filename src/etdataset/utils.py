@@ -59,6 +59,6 @@ def get_bbox_from_mgrs_tile(tile: str) -> (rio.coords.BoundingBox, CRS):
     """
     # Tile
     try:
-        return mgrs.get_bbox_mgrs_tile(tile), mgrs.get_crs_mgrs_tile(tile)
+        return mgrs.get_bbox_mgrs_tile(tile), CRS("epsg:4326")
     except IndexError:
         raise BBoxException("Unkown tile {tile}")
