@@ -43,3 +43,8 @@ git clone https://gitlab.cnes.fr/cesbio/et-dataset.git
 cd et-dataset
 pip install .
 ```
+
+With notebooks :
+```bash
+pip install .[notebook]
+```
