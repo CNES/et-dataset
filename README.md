@@ -4,12 +4,13 @@
 **Table of Contents**
 
 - [Introduction](#introduction)
-- [Ore-requistes](#pre-requistes)
+- [Pre-requistes](#pre-requistes)
 - [Installation](#installation)
 
 
 ## Introduction
 
+Python package to prepare datasets for evapotranspiration processing:
 * Find products
 * Create ET dataset
 
