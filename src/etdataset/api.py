@@ -15,9 +15,9 @@ from etdataset.database import (
     create_eco_db,
     create_ls8_db,
     create_s2_db,
-    select_products,
     to_collectionV2,
 )
+from etdataset.selection import select_products
 from etdataset.logging import LoggerManager
 from etdataset.reader import get_product_reader
 
