@@ -134,7 +134,7 @@ def find_products(
             roi_crs=roi_crs,
             min_roi_overlap=min_roi_overlap,
         )
-        eco_db_v2 = to_collectionV2(eco_db, roi_bbox, roi_crs, 30)
+        eco_db_v2 = to_collectionV2(eco_db, roi_bbox, roi_crs, min_roi_overlap)
         databases["ecostress"] = eco_db_v2
 
     # Get Sentinel2 products
