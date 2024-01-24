@@ -21,7 +21,7 @@ from shapely.geometry import Polygon
 from tqdm import tqdm
 
 from etdataset.logging import LoggerManager
-from etdataset.common import create_polygon
+from etdataset.utils import create_polygon
 
 warnings.filterwarnings("ignore", category=FutureWarning, module='rasterio')
 logger = LoggerManager.get_logger(__name__)
@@ -306,7 +306,7 @@ def create_s2_db(s2_csv_path:str,
 def select_products(gdf1: gpd.GeoDataFrame,
                     gdf2: gpd.GeoDataFrame, 
                     delta: timedelta,
-                    min_overlap: float):
+                    min_overlap: float) -> pd.DataFrame:
     """
     For each product in the first list gdf1, 
     search for a product in the second list gdf2,
@@ -326,8 +326,8 @@ def select_products(gdf1: gpd.GeoDataFrame,
         # If a combination exists
         if len(gdf2_selection) > 0:
             try:
-                res_inter = gpd.overlay(gdf1_selection,
-                                        gdf2_selection,
+                res_inter = gpd.overlay(gdf1_selection[["product_name","date","geometry"]],
+                                        gdf2_selection[["product_name","date","geometry"]],
                                         how='intersection')
                 if len(res_inter):
                     results = res_inter.copy()
@@ -343,9 +343,9 @@ def select_products(gdf1: gpd.GeoDataFrame,
 
     if len(gotchas) == 0:
         logger.warning("No matching found")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["product_name1","date_1","product_name_2","date_2"])
         
-    gotcha = pd.concat(gotchas)
+    gotcha = pd.concat(gotchas).drop("geometry",axis=1)
     gotcha = gotcha[gotcha.overlap > min_overlap]
     if len(gotcha) == 0:
         logger.warning("No matching found")
