@@ -11,6 +11,7 @@ import geopandas as gpd
 import rasterio as rio
 from fiona.errors import DriverError
 from sensorsio import mgrs
+from pyproj import CRS
 from shapely.geometry import Point, Polygon
 
 
@@ -38,22 +39,26 @@ def create_polygon(
     return Polygon([i for i in points])
 
 
-def get_bbox(roi: (str | None) = None, tile: (str | None) = None):
+def get_bbox_from_roi(roi_path: str) -> (rio.coords.BoundingBox, CRS):
     """
     Get bounding box information (bbox and CRS)
-    from a ROI shapefile or a MGRS tile
+    from a ROI shapefile 
     """
-    if roi is not None:
-        # Roi shapefile
-        try:
-            roi_gdf = gpd.read_file(roi)
-            return rio.coords.BoundingBox(*roi_gdf.bounds.iloc[0].values), roi_gdf.crs
-        except DriverError as e:
-            raise BBoxException(f"Unable to read shapefile {roi}: {e}")
-    elif tile is not None:
-        # Tile
-        try:
-            return mgrs.get_bbox_mgrs_tile(tile), 4326
-        except IndexError:
-            raise BBoxException("Unkown tile {tile}")
-    raise BBoxException("Roi format unkown: must be a shapefile or a tile")
+    # Roi shapefile
+    try:
+        roi_gdf = gpd.read_file(roi_path)
+        return rio.coords.BoundingBox(*roi_gdf.bounds.iloc[0].values), roi_gdf.crs
+    except DriverError as e:
+        raise BBoxException(f"Unable to read shapefile {roi}: {e}")
+
+
+def get_bbox_from_mgrs_tile(tile: str) -> (rio.coords.BoundingBox, CRS):
+    """
+    Get bounding box information (bbox and CRS)
+    from a MGRS_tile
+    """
+    # Tile
+    try:
+        return mgrs.get_bbox_mgrs_tile(tile), mgrs.get_crs_mgrs_tile(tile)
+    except IndexError:
+        raise BBoxException("Unkown tile {tile}")

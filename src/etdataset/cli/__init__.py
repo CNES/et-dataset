@@ -12,7 +12,7 @@ import pandas as pd
 
 from etdataset.api import create_dataset, find_products
 from etdataset.logging import LoggerManager
-from etdataset.utils import get_bbox
+from etdataset.utils import get_bbox_from_roi, get_bbox_from_mgrs_tile
 from etdataset.writer import export_matlab, write_dataset, write_matches
 
 LS8_PATH = "landsat_ot_c2_l2_655f86cd74953c8b.csv"
@@ -123,9 +123,9 @@ def find(args: argparse.ArgumentParser) -> None:
     roi_bbox = None
     roi_crs = None
     if args.tile is not None:
-        roi_bbox, roi_crs = get_bbox(tile=args.tile)
+        roi_bbox, roi_crs = get_bbox_from_mgrs_tile(args.tile)
     else:
-        roi_bbox, roi_crs = get_bbox(roi=args.roi)
+        roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
 
     matches = find_products(
         ls8_db_path=ls8_db_path,
