@@ -47,7 +47,7 @@ def create(args: argparse.ArgumentParser) -> None:
 
     # Create dataset
     data = create_dataset(
-        vis_path=args.vis, tir_path=args.tir, tile_id=args.tile, output_dir=args.output
+        vis_path=args.vis, tir_path=args.tir, tile_id=args.tile, use_mask=args.use_mask
     )
 
     # Write dataset
@@ -175,6 +175,9 @@ def get_parser() -> argparse.ArgumentParser:
     parser_create.add_argument("--tir", type=str, help="Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.")
     parser_create.add_argument(
         "-t", "--tile", type=str, help="Tile ID (Only for Landsat)"
+    )
+    parser_create.add_argument(
+        "--use_mask", dest="use_mask", action="store_true", help="Filter data with masks (Quality, Cloud, Water)"
     )
     parser_create.add_argument(
             "--output", type=str, help="Output dataset directory path (default: current directory)", default=os.getcwd()

@@ -36,7 +36,7 @@ def create_dataset(
     vis_path: str,
     tir_path: str | None = None,
     tile_id: str | None = None,
-    output_dir: str = os.getcwd(),
+    use_mask: bool = False,
 ) -> xr.Dataset:
     """
     Create a dataset
@@ -80,11 +80,11 @@ def create_dataset(
     tir_reader.bb = common_bbox
 
     # Read VIS
-    vis_xr = vis_reader.read_vis_bands()
+    vis_xr = vis_reader.read_vis_bands(use_mask)
     logger.debug(f"Read VIS: {type(vis_xr)}")
 
     # Read TIR
-    tir_xr = tir_reader.read_tir_bands()
+    tir_xr = tir_reader.read_tir_bands(use_mask)
     logger.debug(f"Read TIR: {type(tir_xr)}")
 
     # Merge

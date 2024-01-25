@@ -52,14 +52,14 @@ class ProductReader:
         return renamed
 
     @abstractmethod
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         Read VIS bands
         """
         pass
 
     @abstractmethod
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -129,7 +129,7 @@ class LandsatReader(ProductReader):
             - 0.0018
         )
 
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(self,use_mask: bool = False) -> xr.Dataset:
         """
         # Read landsat data
         # Every bands in the product is sampled at 30m
@@ -164,15 +164,16 @@ class LandsatReader(ProductReader):
         ls_xr.attrs["tile"] = self.tile
 
         # Filter QA from ls8
-        clear_pixels_mask = utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6)
-        not_filled_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0)
-        not_water_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7)
-        ls_xr = ls_xr.where(
-            np.logical_and(
-                np.logical_and(clear_pixels_mask, not_filled_mask), not_water_mask
-            ),
-            np.nan,
-        )
+        if use_mask:
+            clear_pixels_mask = utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6)
+            not_filled_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0)
+            not_water_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7)
+            ls_xr = ls_xr.where(
+                np.logical_and(
+                    np.logical_and(clear_pixels_mask, not_filled_mask), not_water_mask
+                ),
+                np.nan,
+            )
 
         # Apply name mapping
         ls_xr = self.rename_bands(ls_xr, LandsatReader.vis_band_mapping)
@@ -191,7 +192,7 @@ class LandsatReader(ProductReader):
 
         return ls_xr
 
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         # Read Landsat TIR bands
         # Every bands in the product is sampled at 30m
@@ -219,15 +220,16 @@ class LandsatReader(ProductReader):
         ls_xr.attrs["tile"] = self.tile
 
         # Filter QA from ls8
-        clear_pixels_mask = utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6)
-        not_filled_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0)
-        not_water_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7)
-        ls_xr = ls_xr.where(
-            np.logical_and(
-                np.logical_and(clear_pixels_mask, not_filled_mask), not_water_mask
-            ),
-            np.nan,
-        )
+        if use_mask:
+            clear_pixels_mask = utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6)
+            not_filled_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0)
+            not_water_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7)
+            ls_xr = ls_xr.where(
+                np.logical_and(
+                    np.logical_and(clear_pixels_mask, not_filled_mask), not_water_mask
+                ),
+                np.nan,
+            )
 
         # Apply name mapping
         ls_xr = self.rename_bands(ls_xr, LandsatReader.tir_band_mapping)
@@ -284,7 +286,7 @@ class Sentinel2Reader(ProductReader):
             + 0.0338 * data.swir2
         )
 
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         Read VIS bands
         """
@@ -308,13 +310,11 @@ class Sentinel2Reader(ProductReader):
 
         # Filter pixels
         # https://labo.obs-mip.fr/multitemp/sentinel-2/theias-sentinel-2-l2a-product-format/#English
-        # s2_xr = s2_xr.where(s2_xr.MG2 == 0, np.nan) #no data
-        # s2_xr = s2_xr.where(s2_xr.MG2 == 1, np.nan) #saturated
-        # s2_xr = s2_xr.where(s2_xr.MG2 == 3, np.nan) #cloud shadows
-        # s2_xr = s2_xr.where(s2_xr.MG2 == 6, np.nan) #water
-        # s2_xr = s2_xr.where(s2_xr.MG2 == 8, np.nan) #clouds
-        # s2_xr = s2_xr.where(s2_xr.MG2 == 9, np.nan) #clouds
-        # s2_xr = s2_xr.where(s2_xr.MG2 == 10, np.nan) #clouds
+        if use_mask:
+            not_water_mask = ~utils.extract_bitmask(s2_xr[sentinel2.Sentinel2.MG2.value].values, 0).astype(bool) # Bit 0 water
+            clear_pixels_mask = np.where(s2_xr[sentinel2.Sentinel2.CLM.value].values == 0,1,0) # Clear pixels
+            mask = np.logical_and(not_water_mask,clear_pixels_mask)
+            s2_xr = s2_xr.where(mask, np.nan)
 
         # Drop time dimension
         s2_xr = s2_xr.isel(t=0, drop=True)
@@ -345,7 +345,7 @@ class Sentinel2Reader(ProductReader):
         s2_xr.attrs["tile"] = self.tile
         return s2_xr
 
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -377,13 +377,13 @@ class EcostressReader(ProductReader):
         self.bb = utils.bb_snap(self.ds.bounds, align=self.resolution)
         self.crs = self.ds.crs
 
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         Read VIS bands
         """
         raise ProductReaderException("No VIS bands for Ecostress product")
 
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -397,7 +397,15 @@ class EcostressReader(ProductReader):
         )
 
         # Filter QA from ecostress
-        eco_xr = eco_xr.where(eco_xr.QC != 0, np.nan)
+        #https://ecostress.jpl.nasa.gov/downloads/userguides/2_ECOSTRESS_L2_UserGuide_06182019.pdf
+        if use_mask:
+            b0_mask = ~utils.extract_bitmask(eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 0).astype(bool)
+            b1_mask = ~utils.extract_bitmask(eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 1).astype(bool)
+            qa_mask = np.logical_and(b0_mask, b1_mask) 
+            not_cloud_mask = np.where(eco_xr[ecostress_v2.EcostressV2.CLOUDS.value].values,0,1) 
+            not_water_mask = np.where(eco_xr[ecostress_v2.EcostressV2.WATER.value].values,0,1) 
+            mask = np.logical_and(np.logical_and(qa_mask,not_cloud_mask),not_water_mask)
+            eco_xr = eco_xr.where(mask, np.nan)
 
         # Drop time dimension
         eco_xr = eco_xr.isel(t=0, drop=True)
