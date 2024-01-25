@@ -145,10 +145,8 @@ def find(args: argparse.ArgumentParser) -> None:
     for product_column in product_columns:
         logger.info(f"{product_column} = {list(matches[product_column].unique())}")
     if len(product_columns) > 1:
-        logger.info(product_columns)
-        logger.info(matches.columns)
         for product, group in matches.groupby(product_columns[0]):
-            logger.info(
+            logger.debug(
                 f"Image: {product} - List of images:  {list(group[product_columns[1]].unique())}"
             )
     write_matches(matches, args.output)
@@ -160,26 +158,26 @@ def get_parser() -> argparse.ArgumentParser:
     """
     # create the top-level parser
     parser = argparse.ArgumentParser(description="Manage ET dataset")
-    subparsers = parser.add_subparsers(help="create/find -h", required=True)
+    subparsers = parser.add_subparsers(help="Command list", required=True)
 
     # create the parser for the "create" command
     parser_create = subparsers.add_parser(
         "create",
         help="Help for the create command",
-        description="Create dataset from " "Landsat/Ecostress/Sentinel2 products",
+        description="Create dataset from Landsat/Ecostress/Sentinel2 products. The dataset is resampling at 60m resolution and corresponds to a MGRS tile.",
     )
     parser_create.add_argument(
         "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
     )
     parser_create.add_argument(
-        "--vis", type=str, required=True, help="Path to VIS product"
+        "--vis", type=str, required=True, help="Path to VIS product (optical bands)"
     )
-    parser_create.add_argument("--tir", type=str, help="Path to TIR product")
+    parser_create.add_argument("--tir", type=str, help="Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.")
     parser_create.add_argument(
         "-t", "--tile", type=str, help="Tile ID (Only for Landsat)"
     )
     parser_create.add_argument(
-        "--output", type=str, help="Output dataset dir path", default=os.getcwd()
+            "--output", type=str, help="Output dataset directory path (default: current directory)", default=os.getcwd()
     )
     parser_create.add_argument(
         "-m",
@@ -192,7 +190,7 @@ def get_parser() -> argparse.ArgumentParser:
 
     # create the parser for the "find" command
     parser_find = subparsers.add_parser(
-        "find", help="Help for the find command", description="Find matches "
+        "find", help="Help for the find command", description="Find matches between products that satisfy required criteria."
     )
     parser_find.add_argument(
         "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
@@ -216,36 +214,48 @@ def get_parser() -> argparse.ArgumentParser:
         help="Find among Ecostress products",
     )
     parser_find.add_argument(
-        "--min_date", help="Minimum date for acquisition", type=str, default=None
+        "--min_date", help="Minimum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
     )
     parser_find.add_argument(
-        "--max_date", help="Maximum date for acquisition", type=str, default=None
+        "--max_date", help="Maximum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
     )
     parser_find.add_argument(
         "--max_cloud_cover",
         type=int,
         default=25,
-        help="Maximum cloud cover (only for Landsat8 products)",
+        help="Maximum cloud cover (only for Landsat8 products) (default: 25)",
     )
     parser_find.add_argument(
         "--delta",
         type=str,
-        default="3 day",
-        help="Maximum time delta allowed between " "acquisitions",
+        default="3 days",
+        help="Maximum time delta allowed between acquisitions (default: 3 days)",
     )
     group = parser_find.add_mutually_exclusive_group(required=True)
     group.add_argument("-t", "--tile", type=str, help="Tile ID")
     group.add_argument(
-        "-r", "--roi", type=str, help="Region of interest in Shapefile format"
+        "-r", "--roi", type=str, help="Path of the region of interest in Shapefile format"
     )
     parser_find.add_argument(
         "--min_roi_overlap",
         type=int,
         default=50,
-        help="Minimum ROI overlap with products",
+        help="Minimum overlap between ROI and a product (default: 50)",
     )
     parser_find.add_argument(
-        "--output", type=str, help="CSV output file", default="matches.csv"
+        "--min_product_overlap",
+        type=int,
+        default=40,
+        help="Minimum overlap between two products (default: 40)",
+    )
+    parser_find.add_argument(
+        "--metadata",
+        type=str,
+        default=None,
+        help="Path to the directory containing metadata csv files",
+    )
+    parser_find.add_argument(
+            "--output", type=str, help="CSV output file (default: matches.csv)", default="matches.csv"
     )
     parser_find.set_defaults(func=find)
 
@@ -256,13 +266,13 @@ def etdataset() -> None:
     """
     Entry point
     """
-    # Check environment variables
-    if not os.environ.get("METADATA_PATH"):
-        raise Exception("METADATA_PATH not defined")
-
     # Parser arguments
     parser = get_parser()
     args = parser.parse_args()
+
+    # Check environment variables
+    if not os.environ.get("METADATA_PATH") and args.metatada is None:
+        raise Exception("You must provide the path to the directory containing the metadata csv files. You can use either the environment variable METADATA_PATH or the option --metadata in the command line")
 
     # Configure logging
     log_level = logging.DEBUG
