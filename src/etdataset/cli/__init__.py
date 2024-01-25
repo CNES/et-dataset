@@ -15,7 +15,7 @@ from etdataset.logging import LoggerManager
 from etdataset.utils import get_bbox_from_roi, get_bbox_from_mgrs_tile
 from etdataset.writer import export_matlab, write_dataset, write_matches
 
-LS8_PATH = "landsat_ot_c2_l2_655f86cd74953c8b.csv"
+LS8_PATH = "landsat_ot_c2_l2_659ed86540bcec65.csv"
 S2_PATH = "SENTINEL2.csv"
 ECO_PATH = "ecostress_eco2lste_655f877cf0476b91.csv"
 
