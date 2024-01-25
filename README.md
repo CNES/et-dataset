@@ -108,6 +108,32 @@ et-dataset find --landsat --min_date 2023-01-31 --max_date 2023-04-30 --max_clou
 
 ### Create command
 
+This command create a dataset by resampling on the same grid a VIS product and a TIR product.
+
+Compatible VIS products are:
+* Landsat L2A
+* Sentinel2 L2A
+
+Compatible TIR products are:
+* Landsat L2A
+* ECOSTRESS collectin V2 only 
+
+LAI is calculated from NDVI with the following formula:
+```math 
+LAI = 0.119 * exp(3.457 * NDVI) - 0.062
+```
+
+Albedo is computed with these following formula:
+
+* For Landsat (*Liang, S. Narrowband to Broadband Conversions of Land Surface Albedo I: Algorithms. Remote Sens. Environ. 2001, 76, 213–238.*)
+```math 
+Albedo = 0.356 * band_B2 + 0.130 * band_B4 + 0.373 * band_5 + 0.085 * band_B6 + 0.072 * band_B7 - 0.0018
+```
+* For Sentinel2 (*Bonafoni and al., Albedo Retrieval From Sentinel-2 by New Narrow-to-Broadband Conversion Coefficients, IEEE Geoscience and Remote Sensing Letters, 2020*)
+```math
+Albedo = 0.2266 * band_B2 + 0.1236 * band_B3 + 0.1573 * band_B4 + 0.3417 * band_B8 + 0.1170 * band_B11 +  0.0338 * band_B12
+```
+
 #### Command line
 
 ```bash
