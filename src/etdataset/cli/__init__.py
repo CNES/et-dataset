@@ -5,7 +5,6 @@
 import argparse
 import logging
 import os
-import sys
 from datetime import datetime
 
 import pandas as pd
@@ -13,7 +12,11 @@ import pandas as pd
 from etdataset.api import create_dataset, find_products, search
 from etdataset.provider import Collection
 from etdataset.logging import LoggerManager
-from etdataset.utils import get_bbox_from_roi, get_bbox_from_mgrs_tile, check_mgrs_format
+from etdataset.utils import (
+    get_bbox_from_roi,
+    get_bbox_from_mgrs_tile,
+    check_mgrs_format,
+)
 from etdataset.writer import export_matlab, write_dataset, write_matches, write_results
 
 LS8_PATH = "landsat_ot_c2_l2_659ed86540bcec65.csv"
@@ -110,7 +113,9 @@ def cli_find(args: argparse.ArgumentParser) -> None:
     logging.debug(f"Minimum acquisition date: {min_date}")
     logging.debug(f"Maximum acquisition date: {max_date}")
     if max_date < min_date:
-        raise ValueError("Maximum acquisition date must be more recent than minimum date")
+        raise ValueError(
+            "Maximum acquisition date must be more recent than minimum date"
+        )
     try:
         delta = pd.Timedelta(args.delta)
     except ValueError:
@@ -151,6 +156,7 @@ def cli_find(args: argparse.ArgumentParser) -> None:
             )
     write_matches(matches, args.output)
 
+
 def cli_search(args: argparse.ArgumentParser) -> None:
     """
     Search products
@@ -171,7 +177,9 @@ def cli_search(args: argparse.ArgumentParser) -> None:
             "Error: The format for maximum acquisition date must be Year-Month-Day"
         )
     if max_date < min_date:
-        raise ValueError("Maximum acquisition date must be more recent than minimum date")
+        raise ValueError(
+            "Maximum acquisition date must be more recent than minimum date"
+        )
     if args.tile is not None:
         check_mgrs_format(args.tile)
     roi_bbox, roi_crs = None, None
@@ -181,17 +189,19 @@ def cli_search(args: argparse.ArgumentParser) -> None:
         roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
 
     # Search
-    results = search(args.collection,
-           args.min_date,
-           args.max_date,
-           args.tile,
-           roi_bbox,
-           roi_crs, 
-           args.max_cloud_cover,
-           ) 
+    results = search(
+        args.collection,
+        args.min_date,
+        args.max_date,
+        args.tile,
+        roi_bbox,
+        roi_crs,
+        args.max_cloud_cover,
+    )
 
     # Write results
     write_results(results, args.output)
+
 
 def get_parser() -> argparse.ArgumentParser:
     """
@@ -212,15 +222,25 @@ def get_parser() -> argparse.ArgumentParser:
     parser_create.add_argument(
         "--vis", type=str, required=True, help="Path to VIS product (optical bands)"
     )
-    parser_create.add_argument("--tir", type=str, help="Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.")
+    parser_create.add_argument(
+        "--tir",
+        type=str,
+        help="Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.",
+    )
     parser_create.add_argument(
         "-t", "--tile", type=str, help="Tile ID (Only for Landsat)"
     )
     parser_create.add_argument(
-        "--use_mask", dest="use_mask", action="store_true", help="Filter data with masks (Quality, Cloud, Water)"
+        "--use_mask",
+        dest="use_mask",
+        action="store_true",
+        help="Filter data with masks (Quality, Cloud, Water)",
     )
     parser_create.add_argument(
-            "--output", type=str, help="Output dataset directory path (default: current directory)", default=os.getcwd()
+        "--output",
+        type=str,
+        help="Output dataset directory path (default: current directory)",
+        default=os.getcwd(),
     )
     parser_create.add_argument(
         "-m",
@@ -257,10 +277,18 @@ def get_parser() -> argparse.ArgumentParser:
         help="Find among Ecostress products",
     )
     parser_find.add_argument(
-        "--min_date", help="Minimum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
+        "--min_date",
+        help="Minimum date for acquisition in YYYY-MM-DD format",
+        type=str,
+        required=True,
+        default=None,
     )
     parser_find.add_argument(
-        "--max_date", help="Maximum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
+        "--max_date",
+        help="Maximum date for acquisition in YYYY-MM-DD format",
+        type=str,
+        required=True,
+        default=None,
     )
     parser_find.add_argument(
         "--max_cloud_cover",
@@ -277,7 +305,10 @@ def get_parser() -> argparse.ArgumentParser:
     group = parser_find.add_mutually_exclusive_group(required=True)
     group.add_argument("-t", "--tile", type=str, help="Tile ID")
     group.add_argument(
-        "-r", "--roi", type=str, help="Path of the region of interest in Shapefile format"
+        "-r",
+        "--roi",
+        type=str,
+        help="Path of the region of interest in Shapefile format",
     )
     parser_find.add_argument(
         "--min_roi_overlap",
@@ -298,10 +329,13 @@ def get_parser() -> argparse.ArgumentParser:
         help="Path to the directory containing metadata csv files",
     )
     parser_find.add_argument(
-            "--output", type=str, help="CSV output file (default: matches.csv)", default="matches.csv"
+        "--output",
+        type=str,
+        help="CSV output file (default: matches.csv)",
+        default="matches.csv",
     )
     parser_find.set_defaults(func=cli_find)
-    
+
     # create the parser for the "search" command
     parser_search = subparsers.add_parser(
         "search", help="Search products in a collection that satisfy required criteria"
@@ -312,15 +346,23 @@ def get_parser() -> argparse.ArgumentParser:
     parser_search.add_argument(
         "-c",
         "--collection",
-        type=lambda arg: Collection[arg], 
+        type=lambda arg: Collection[arg],
         choices=Collection,
         help="Collection of products",
     )
     parser_search.add_argument(
-        "--min_date", help="Minimum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
+        "--min_date",
+        help="Minimum date for acquisition in YYYY-MM-DD format",
+        type=str,
+        required=True,
+        default=None,
     )
     parser_search.add_argument(
-        "--max_date", help="Maximum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
+        "--max_date",
+        help="Maximum date for acquisition in YYYY-MM-DD format",
+        type=str,
+        required=True,
+        default=None,
     )
     parser_search.add_argument(
         "--max_cloud_cover",
@@ -331,10 +373,16 @@ def get_parser() -> argparse.ArgumentParser:
     group = parser_search.add_mutually_exclusive_group(required=True)
     group.add_argument("-t", "--tile", type=str, help="Tile ID")
     group.add_argument(
-        "-r", "--roi", type=str, help="Path of the region of interest in Shapefile format"
-        )
+        "-r",
+        "--roi",
+        type=str,
+        help="Path of the region of interest in Shapefile format",
+    )
     parser_search.add_argument(
-            "--output", type=str, help="CSV output file (default: results.csv)", default="results.csv"
+        "--output",
+        type=str,
+        help="CSV output file (default: results.csv)",
+        default="results.csv",
     )
     parser_search.set_defaults(func=cli_search)
 
@@ -351,7 +399,9 @@ def etdataset() -> None:
 
     # Check environment variables
     if not os.environ.get("METADATA_PATH") and args.metatada is None:
-        raise Exception("You must provide the path to the directory containing the metadata csv files. You can use either the environment variable METADATA_PATH or the option --metadata in the command line")
+        raise Exception(
+            "You must provide the path to the directory containing the metadata csv files. You can use either the environment variable METADATA_PATH or the option --metadata in the command line"
+        )
 
     # Configure logging
     log_level = logging.INFO

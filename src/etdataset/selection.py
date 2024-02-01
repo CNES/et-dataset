@@ -6,12 +6,10 @@
 """
 Select product
 """
-import os
 from datetime import timedelta
 
 import geopandas as gpd
 import pandas as pd
-import rasterio as rio
 from tqdm import tqdm
 
 from etdataset.logging import LoggerManager
