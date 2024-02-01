@@ -6,28 +6,29 @@
 """
 Manage provider for THEIA, EarthData and earthExplorer
 """
+import os
 from abc import abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
 
-import os
+import earthaccess
 import geopandas as gpd
 import rasterio as rio
-import earthaccess
-from enum import Enum
-from datetime import datetime
-from landsatxplore.api import API
 from earthaccess.auth import Auth as EarthDataAuth
 from earthaccess.results import DataGranule
-from theia_picker.download import TheiaCatalog
-from theia_picker.download import RequestsManager as TheiaAuth
-from shapely.geometry import Polygon, Point
+from landsatxplore.api import API
 from sensorsio.mgrs import get_bbox_mgrs_tile
+from shapely.geometry import Point, Polygon
+from theia_picker.download import RequestsManager as TheiaAuth
+from theia_picker.download import TheiaCatalog
+
 from etdataset.logging import LoggerManager
 from etdataset.utils import (
-    get_optimal_relative_orbit_for_mgrs_tile,
+    MGRS_FORMAT,
     bbox_to_polygon,
     create_polygon,
-    MGRS_FORMAT,
+    get_optimal_relative_orbit_for_mgrs_tile,
 )
 
 logger = LoggerManager.get_logger(__name__)
@@ -117,7 +118,8 @@ class TheiaProvider(Provider):
         Search on catalog
         """
         logger.debug(
-            f"Search on THEIA catalog: min_date={min_date}, max_date = {max_date}, tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
+            f"Search on THEIA catalog: min_date={min_date}, max_date = {max_date}, "
+            "tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
         )
         tile_name = None
         relative_orbit = None
@@ -260,7 +262,8 @@ class EarthDataProvider(Provider):
         Search on catalog
         """
         logger.debug(
-            f"Search on EarthData catalog: min_date={min_date}, max_date = {max_date}, tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
+            f"Search on EarthData catalog: min_date={min_date}, max_date = {max_date}, "
+            "tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
         )
         bbox = None
         if tile_id is not None:
@@ -514,7 +517,8 @@ class LandsatProvider(Provider):
         Search on catalog
         """
         logger.debug(
-            f"Search on EarthExplorer catalog: min_date={min_date}, max_date = {max_date}, tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
+            f"Search on EarthExplorer catalog: min_date={min_date}, max_date = {max_date}, "
+            "tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
         )
         bbox = None
         if tile_id is not None:

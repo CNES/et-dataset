@@ -17,12 +17,11 @@ from etdataset.database import (
     create_s2_db,
     to_collectionV2,
 )
-from etdataset.selection import select_products
 from etdataset.logging import LoggerManager
+from etdataset.provider import Collection, get_provider
 from etdataset.reader import get_product_reader
-from etdataset.provider import get_provider, Collection
+from etdataset.selection import select_products
 from etdataset.utils import check_mgrs_format
-
 
 logger = LoggerManager.get_logger(__name__)
 

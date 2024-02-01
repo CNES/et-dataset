@@ -5,8 +5,8 @@
 #
 """
 Manage products databases
-The product database is created by parsing the export 
-metadat csv file.
+The product database is created by parsing the export
+metadata csv file.
 """
 import os
 import warnings

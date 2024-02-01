@@ -10,12 +10,12 @@ from datetime import datetime
 import pandas as pd
 
 from etdataset.api import create_dataset, find_products, search
-from etdataset.provider import Collection
 from etdataset.logging import LoggerManager
+from etdataset.provider import Collection
 from etdataset.utils import (
-    get_bbox_from_roi,
-    get_bbox_from_mgrs_tile,
     check_mgrs_format,
+    get_bbox_from_mgrs_tile,
+    get_bbox_from_roi,
 )
 from etdataset.writer import export_matlab, write_dataset, write_matches, write_results
 
@@ -214,7 +214,8 @@ def get_parser() -> argparse.ArgumentParser:
     # create the parser for the "create" command
     parser_create = subparsers.add_parser(
         "create",
-        help="Create dataset from Landsat/Ecostress/Sentinel2 products. The dataset is resampling at 60m resolution and corresponds to a MGRS tile.",
+        help="Create dataset from Landsat/Ecostress/Sentinel2 products. "
+        "The dataset is resampling at 60m resolution and corresponds to a MGRS tile.",
     )
     parser_create.add_argument(
         "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
@@ -400,7 +401,9 @@ def etdataset() -> None:
     # Check environment variables
     if not os.environ.get("METADATA_PATH") and args.metatada is None:
         raise Exception(
-            "You must provide the path to the directory containing the metadata csv files. You can use either the environment variable METADATA_PATH or the option --metadata in the command line"
+            "You must provide the path to the directory containing the metadata csv files. "
+            "You can use either the environment variable METADATA_PATH or "
+            "the option --metadata in the command line"
         )
 
     # Configure logging
