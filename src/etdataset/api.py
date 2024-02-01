@@ -3,13 +3,16 @@
 
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import os
+import re
 from datetime import datetime, timedelta
 
+import geopandas as gpd
 import pandas as pd
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
 from sensorsio import utils
+from enum import Enum, auto
 
 from etdataset.database import (
     create_eco_db,
@@ -20,6 +23,9 @@ from etdataset.database import (
 from etdataset.selection import select_products
 from etdataset.logging import LoggerManager
 from etdataset.reader import get_product_reader
+from etdataset.provider import get_provider, Collection
+from etdataset.utils import get_mgrs_tile_names_from_roi, check_mgrs_format
+
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -29,7 +35,31 @@ class DatasetException(Exception):
     Exception for dataset creation
     """
 
-    pass
+
+class SearchException(Exception):
+    """
+    Exception for dataset creation
+    """
+
+
+class ROIException(Exception):
+    """
+    Exception for dataset creation
+    """
+
+
+def parse_date(date_str: str) -> datetime:
+    """ 
+    Parse date expected format YYYY-MM-DD
+    """
+    try:
+        date = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(
+                f"Error: The expected format for date must be Year-Month-Day (got: {date_str})"
+        )
+
+
 
 
 def create_dataset(
@@ -180,3 +210,45 @@ def find_products(
         )
 
     return res
+
+
+def search(collection: Collection,
+           min_date: str,
+           max_date: str,
+           tile_id: str | None = None,
+           roi_bbox: rio.coords.BoundingBox | None = None,
+           roi_crs: CRS | int | None = None,
+           max_cloud_cover: float = 20,
+           ) -> gpd.GeoDataFrame:
+    """
+    Search products in a collection
+    """
+    # Checks
+    _ = parse_date(min_date)
+    _ = parse_date(max_date)
+    if tile_id is None and roi_bbox is None:
+        raise SearchException("You must provide either a ROI bounding box or MGRS tile ID")
+    if roi_crs is None and roi_bbox is not None:
+        raise SearchException("You must provide a ROI bounding box with a CRS")
+    if tile_id is not None:
+        check_mgrs_format(tile_id)
+    if max_cloud_cover < 0 or max_cloud_cover > 100:
+        raise SearchException(f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}")
+
+    latlon_bbox = None
+    if roi_bbox is not None:
+        # Convert to latlon
+        latlon_bbox = utils.bb_transform(roi_crs,
+                                         4326,
+                                         roi_bbox)
+
+    # Get provider
+    provider = get_provider(collection)
+    logger.debug(f"Provider: {provider}")
+
+    # Search
+    results = provider.search(min_date, max_date, tile_id, latlon_bbox, max_cloud_cover)
+    logger.info(f"Number of products found: {len(results)}")
+
+    return results
+

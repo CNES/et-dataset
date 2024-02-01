@@ -10,10 +10,11 @@ from datetime import datetime
 
 import pandas as pd
 
-from etdataset.api import create_dataset, find_products
+from etdataset.api import create_dataset, find_products, search
+from etdataset.provider import Collection
 from etdataset.logging import LoggerManager
-from etdataset.utils import get_bbox_from_roi, get_bbox_from_mgrs_tile
-from etdataset.writer import export_matlab, write_dataset, write_matches
+from etdataset.utils import get_bbox_from_roi, get_bbox_from_mgrs_tile, check_mgrs_format
+from etdataset.writer import export_matlab, write_dataset, write_matches, write_results
 
 LS8_PATH = "landsat_ot_c2_l2_659ed86540bcec65.csv"
 S2_PATH = "SENTINEL2.csv"
@@ -23,7 +24,7 @@ logger = LoggerManager.get_logger(__name__)
 
 
 # sub-command functions
-def create(args: argparse.ArgumentParser) -> None:
+def cli_create(args: argparse.ArgumentParser) -> None:
     """
     Create dataset
     """
@@ -58,7 +59,7 @@ def create(args: argparse.ArgumentParser) -> None:
             write_dataset(data, directory=args.output)
 
 
-def find(args: argparse.ArgumentParser) -> None:
+def cli_find(args: argparse.ArgumentParser) -> None:
     """
     Find products
     """
@@ -109,8 +110,7 @@ def find(args: argparse.ArgumentParser) -> None:
     logging.debug(f"Minimum acquisition date: {min_date}")
     logging.debug(f"Maximum acquisition date: {max_date}")
     if max_date < min_date:
-        logger.error("Maximum acquisition date must be more recent than minimum date")
-        sys.exit(1)
+        raise ValueError("Maximum acquisition date must be more recent than minimum date")
     try:
         delta = pd.Timedelta(args.delta)
     except ValueError:
@@ -151,6 +151,47 @@ def find(args: argparse.ArgumentParser) -> None:
             )
     write_matches(matches, args.output)
 
+def cli_search(args: argparse.ArgumentParser) -> None:
+    """
+    Search products
+    """
+    logger.debug(f"Search arguments: {args}")
+
+    # Check arguments
+    try:
+        min_date = datetime.strptime(args.min_date, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(
+            "Error: The format for minimum acqsuisition date must be Year-Month-Day"
+        )
+    try:
+        max_date = datetime.strptime(args.max_date, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(
+            "Error: The format for maximum acquisition date must be Year-Month-Day"
+        )
+    if max_date < min_date:
+        raise ValueError("Maximum acquisition date must be more recent than minimum date")
+    if args.tile is not None:
+        check_mgrs_format(args.tile)
+    roi_bbox, roi_crs = None, None
+    if args.roi is not None:
+        if not os.path.isfile(args.roi):
+            raise FileNotFoundError(f"ROI file not found ({args.roi})")
+        roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
+
+    # Search
+    results = search(args.collection,
+           args.min_date,
+           args.max_date,
+           args.tile,
+           roi_bbox,
+           roi_crs, 
+           args.max_cloud_cover,
+           ) 
+
+    # Write results
+    write_results(results, args.output)
 
 def get_parser() -> argparse.ArgumentParser:
     """
@@ -163,8 +204,7 @@ def get_parser() -> argparse.ArgumentParser:
     # create the parser for the "create" command
     parser_create = subparsers.add_parser(
         "create",
-        help="Help for the create command",
-        description="Create dataset from Landsat/Ecostress/Sentinel2 products. The dataset is resampling at 60m resolution and corresponds to a MGRS tile.",
+        help="Create dataset from Landsat/Ecostress/Sentinel2 products. The dataset is resampling at 60m resolution and corresponds to a MGRS tile.",
     )
     parser_create.add_argument(
         "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
@@ -189,11 +229,11 @@ def get_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the dataset in Matlab format",
     )
-    parser_create.set_defaults(func=create)
+    parser_create.set_defaults(func=cli_create)
 
     # create the parser for the "find" command
     parser_find = subparsers.add_parser(
-        "find", help="Help for the find command", description="Find matches between products that satisfy required criteria."
+        "find", help="Find matches between products that satisfy required criteria"
     )
     parser_find.add_argument(
         "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
@@ -260,7 +300,43 @@ def get_parser() -> argparse.ArgumentParser:
     parser_find.add_argument(
             "--output", type=str, help="CSV output file (default: matches.csv)", default="matches.csv"
     )
-    parser_find.set_defaults(func=find)
+    parser_find.set_defaults(func=cli_find)
+    
+    # create the parser for the "search" command
+    parser_search = subparsers.add_parser(
+        "search", help="Search products in a collection that satisfy required criteria"
+    )
+    parser_search.add_argument(
+        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+    )
+    parser_search.add_argument(
+        "-c",
+        "--collection",
+        type=lambda arg: Collection[arg], 
+        choices=Collection,
+        help="Collection of products",
+    )
+    parser_search.add_argument(
+        "--min_date", help="Minimum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
+    )
+    parser_search.add_argument(
+        "--max_date", help="Maximum date for acquisition in YYYY-MM-DD format", type=str, required=True, default=None
+    )
+    parser_search.add_argument(
+        "--max_cloud_cover",
+        type=int,
+        default=25,
+        help="Maximum cloud cover (only for Landsat8 products) (default: 25)",
+    )
+    group = parser_search.add_mutually_exclusive_group(required=True)
+    group.add_argument("-t", "--tile", type=str, help="Tile ID")
+    group.add_argument(
+        "-r", "--roi", type=str, help="Path of the region of interest in Shapefile format"
+        )
+    parser_search.add_argument(
+            "--output", type=str, help="CSV output file (default: results.csv)", default="results.csv"
+    )
+    parser_search.set_defaults(func=cli_search)
 
     return parser
 
@@ -278,7 +354,7 @@ def etdataset() -> None:
         raise Exception("You must provide the path to the directory containing the metadata csv files. You can use either the environment variable METADATA_PATH or the option --metadata in the command line")
 
     # Configure logging
-    log_level = logging.DEBUG
+    log_level = logging.INFO
     if args.verbose:
         log_level = logging.DEBUG
 

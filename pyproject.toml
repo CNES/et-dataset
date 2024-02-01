@@ -32,7 +32,9 @@ dependencies = [
   "shapely",
   "tqdm",
   "xarray",
-  "sensorsio @ {root:uri}/../sensorsio"
+  "sensorsio @ {root:uri}/../sensorsio",
+  "theia-picker @ {root:uri}/../theia-picker",
+  "landsatxplore @ {root:uri}/../landsatxplore",
 ]
 
 [project.optional-dependencies]
