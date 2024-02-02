@@ -129,7 +129,7 @@ class LandsatReader(ProductReader):
             - 0.0018
         )
 
-    def read_vis_bands(self,use_mask: bool = False) -> xr.Dataset:
+    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
         """
         # Read landsat data
         # Every bands in the product is sampled at 30m
@@ -311,9 +311,15 @@ class Sentinel2Reader(ProductReader):
         # Filter pixels
         # https://labo.obs-mip.fr/multitemp/sentinel-2/theias-sentinel-2-l2a-product-format/#English
         if use_mask:
-            not_water_mask = ~utils.extract_bitmask(s2_xr[sentinel2.Sentinel2.MG2.value].values, 0).astype(bool) # Bit 0 water
-            clear_pixels_mask = np.where(s2_xr[sentinel2.Sentinel2.CLM.value].values == 0,1,0) # Clear pixels
-            mask = np.logical_and(not_water_mask,clear_pixels_mask)
+            not_water_mask = ~utils.extract_bitmask(
+                s2_xr[sentinel2.Sentinel2.MG2.value].values, 0
+            ).astype(
+                bool
+            )  # Bit 0 water
+            clear_pixels_mask = np.where(
+                s2_xr[sentinel2.Sentinel2.CLM.value].values == 0, 1, 0
+            )  # Clear pixels
+            mask = np.logical_and(not_water_mask, clear_pixels_mask)
             s2_xr = s2_xr.where(mask, np.nan)
 
         # Drop time dimension
@@ -397,14 +403,24 @@ class EcostressReader(ProductReader):
         )
 
         # Filter QA from ecostress
-        #https://ecostress.jpl.nasa.gov/downloads/userguides/2_ECOSTRESS_L2_UserGuide_06182019.pdf
+        # https://ecostress.jpl.nasa.gov/downloads/userguides/2_ECOSTRESS_L2_UserGuide_06182019.pdf
         if use_mask:
-            b0_mask = ~utils.extract_bitmask(eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 0).astype(bool)
-            b1_mask = ~utils.extract_bitmask(eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 1).astype(bool)
-            qa_mask = np.logical_and(b0_mask, b1_mask) 
-            not_cloud_mask = np.where(eco_xr[ecostress_v2.EcostressV2.CLOUDS.value].values,0,1) 
-            not_water_mask = np.where(eco_xr[ecostress_v2.EcostressV2.WATER.value].values,0,1) 
-            mask = np.logical_and(np.logical_and(qa_mask,not_cloud_mask),not_water_mask)
+            b0_mask = ~utils.extract_bitmask(
+                eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 0
+            ).astype(bool)
+            b1_mask = ~utils.extract_bitmask(
+                eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 1
+            ).astype(bool)
+            qa_mask = np.logical_and(b0_mask, b1_mask)
+            not_cloud_mask = np.where(
+                eco_xr[ecostress_v2.EcostressV2.CLOUDS.value].values, 0, 1
+            )
+            not_water_mask = np.where(
+                eco_xr[ecostress_v2.EcostressV2.WATER.value].values, 0, 1
+            )
+            mask = np.logical_and(
+                np.logical_and(qa_mask, not_cloud_mask), not_water_mask
+            )
             eco_xr = eco_xr.where(mask, np.nan)
 
         # Drop time dimension

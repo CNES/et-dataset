@@ -12,13 +12,14 @@
 ## Introduction
 
 Python package to prepare datasets for evapotranspiration processing:
-* Find products
-* Create ET dataset
+* Search on catalogs
+* Find products that satisfy criteria
+* Create ET dataset from products
 
 ## Pre-requistes
 
-* Export metadata for Landsat and ECOSTRESS collections on Earth Explorer 
-* Export Sentinel2 metadata with datalakeutils
+* Export metadata for Landsat and ECOSTRESS collections on Earth Explorer (for find)
+* Export Sentinel2 metadata with datalakeutils (for find)
 
 ## Installation
 
@@ -27,14 +28,6 @@ Python package to prepare datasets for evapotranspiration processing:
 ```bash
 python -m venv venv-etdataset
 source venv-etdataset/bin/activate
-```
-### Install sensorsio
-
-```bash
-git clone https://framagit.org/jmichel-otb/sensorsio.git
-cd sensorsio
-pip install .
-cd ..
 ```
 
 ### Install et-dataset
@@ -52,10 +45,41 @@ pip install .[notebook]
 
 ## Usage
 
+### Search products
+
+The command enables to search products in catalogs:
+* For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
+* For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
+* For ECOSTRESS (collection v2) [Earth Data](https://search.earthdata.nasa.gov/search)
+
+#### Command line
+```bash
+-> et-dataset search -h
+usage: et-dataset search [-h] [-v] [-c {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSS,Collection.HLSL}] --min_date MIN_DATE --max_date MAX_DATE [--max_cloud_cover MAX_CLOUD_COVER] (-t TILE | -r ROI) [--output OUTPUT]
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose mode
+  -c {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSS,Collection.HLSL}, --collection {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSS,Collection.HLSL}
+                        Collection of products
+  --min_date MIN_DATE   Minimum date for acquisition in YYYY-MM-DD format
+  --max_date MAX_DATE   Maximum date for acquisition in YYYY-MM-DD format
+  --max_cloud_cover MAX_CLOUD_COVER
+                        Maximum cloud cover (only for Landsat8 products) (default: 25)
+  -t TILE, --tile TILE  Tile ID
+  -r ROI, --roi ROI     Path of the region of interest in Shapefile format
+  --output OUTPUT       CSV output file (default: results.csv)
+```
+
+#### Notebooks
+
+* [search.ipynb](notebooks/search.ipynb): Examples of search in various catalog
+
+
 ### Find products
 
 The command give the list of products that satisfy criteria.
-For now, the products must be manually download :
+For now, the products must be manually download on the catalogs:
 * For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
 * For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
 * For ECOSTRESS (collection v2) [Earth Data](https://search.earthdata.nasa.gov/search)

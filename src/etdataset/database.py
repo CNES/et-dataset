@@ -5,12 +5,12 @@
 #
 """
 Manage products databases
-The product database is created by parsing the export 
-metadat csv file.
+The product database is created by parsing the export
+metadata csv file.
 """
 import os
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import lru_cache
 
 import geopandas as gpd
@@ -20,7 +20,6 @@ from pyproj import CRS
 from rasterio.warp import transform_bounds
 from sensorsio import mgrs
 from shapely.geometry import Polygon
-from tqdm import tqdm
 
 from etdataset.logging import LoggerManager
 from etdataset.utils import create_polygon
@@ -418,5 +417,3 @@ def create_s2_db(
         )
 
     return s2_df.reset_index(drop=True)
-
-
