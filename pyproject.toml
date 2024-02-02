@@ -32,9 +32,9 @@ dependencies = [
   "shapely",
   "tqdm",
   "xarray",
-  "sensorsio @ {root:uri}/../sensorsio",
-  "theia-picker @ {root:uri}/../theia-picker",
-  "landsatxplore @ {root:uri}/../landsatxplore",
+  "sensorsio @ git+https://framagit.org/jmichel-otb/sensorsio.git",
+  "theia-picker @ git+https://github.com/esarrazin/theia-picker.git",
+  "landsatxplore @ git+https://github.com/esarrazin/landsatxplore.git",
 ]
 
 [project.optional-dependencies]
