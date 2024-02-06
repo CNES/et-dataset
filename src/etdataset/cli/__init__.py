@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from etdataset.api import create_dataset, find_products, search
+from etdataset.api import create_dataset, find_products, search, download, FileParserException
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
 from etdataset.utils import (
@@ -202,6 +202,26 @@ def cli_search(args: argparse.ArgumentParser) -> None:
     # Write results
     write_results(results, args.output)
 
+def cli_download(args: argparse.ArgumentParser) -> None:
+    """
+    Download products
+    """
+    logger.debug(f"Download arguments: {args}")
+
+    if not os.path.isfile(args.list):
+        raise FileNotFoundError(f"File with products lit not found ({args.roi})")
+
+    try: 
+        products = pd.read_csv(args.list)
+    except Exception as e:
+        raise FileParserException(f"Error while reading product list: {e}")
+
+    # Download
+    download(
+        products,
+        args.output
+    )
+
 
 def get_parser() -> argparse.ArgumentParser:
     """
@@ -386,6 +406,29 @@ def get_parser() -> argparse.ArgumentParser:
         default="results.csv",
     )
     parser_search.set_defaults(func=cli_search)
+
+    # create the parser for the "download" command
+    parser_download = subparsers.add_parser(
+        "download", help="Download products from a list in CSV format"
+    )
+    parser_download.add_argument(
+        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+    )
+    parser_download.add_argument(
+        "-l",
+        "--list",
+        help="List of products (in CSV format)",
+        type=str,
+        required=True,
+        default=None,
+    )
+    parser_download.add_argument(
+        "--output",
+        type=str,
+        help="Download directory path (default: download)",
+        default="download",
+    )
+    parser_download.set_defaults(func=cli_download)
 
     return parser
 

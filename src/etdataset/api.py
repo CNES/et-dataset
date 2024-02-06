@@ -34,6 +34,12 @@ class DatasetException(Exception):
     """
 
 
+class FileParserException(Exception):
+    """
+    Exception for file parser
+    """
+
+
 class SearchException(Exception):
     """
     Exception for dataset creation
