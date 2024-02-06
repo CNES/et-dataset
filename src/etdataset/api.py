@@ -4,6 +4,8 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 from datetime import datetime, timedelta
 
+import os
+import numpy as np
 import geopandas as gpd
 import pandas as pd
 import rasterio as rio
@@ -249,3 +251,35 @@ def search(
     logger.info(f"Number of products found: {len(results)}")
 
     return results
+
+
+def download(
+        products: pd.DataFrame,
+        output_dir: str = os.path.join(os.getcwd(),"download"),
+     ) -> None:
+    """
+    Download products from catalog
+    The products to dowload are listed in a DataFrame.
+    The required column are "Product_name" and "URL" 
+    which must contain the URLs to download a product. 
+    The URLs column can be a str or a list of str.
+    """
+    # Checks
+    os.makedirs(output_dir,exist_ok=True)
+    if not "Product_name" in products.columns:
+        logger.exception("You must provide the product names.")
+    if not "URL" in products.columns:
+        logger.exception("You must provide the URL to download.")
+    # Download
+    for collection, group in products.groupby("Collection"):
+        logger.debug(f"Collection: {collection}")
+        provider = get_provider(Collection[collection])
+        logger.debug(f"Provider: {provider}")
+        urls = group[["Product_name","URL"]].copy()
+        if "Checksum" in group.columns:
+            urls["Checksum"] = group["Checksum"].values
+        else:
+            urls["Checksum"] = np.nan
+        provider.download(urls, output_dir)
+
+
