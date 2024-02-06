@@ -12,12 +12,19 @@
 ## Introduction
 
 Python package to prepare datasets for evapotranspiration processing:
-* Search on catalogs
-* Find products that satisfy criteria
+* Search on catalogs that satisfy criteria
+* Download products
+* Find products between 2 collections that satisfy criteria
 * Create ET dataset from products
 
 ## Pre-requistes
 
+To search and download products, you need accounts and set environment variables corresponding to login and password for each catalog: 
+* [Earth Explorer](https://earthexplorer.usgs.gov/): required to define `LANDSATXPLORE_USERNAME` and `LANDSATXPLORE_PASSWORD`
+* [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
+* [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
+
+For finding products: 
 * Export metadata for Landsat and ECOSTRESS collections on Earth Explorer (for find)
 * Export Sentinel2 metadata with datalakeutils (for find)
 
@@ -50,7 +57,7 @@ pip install .[notebook]
 The command enables to search products in catalogs:
 * For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
 * For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
-* For ECOSTRESS (collection v2) [Earth Data](https://search.earthdata.nasa.gov/search)
+* For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
 #### Command line
 ```bash
@@ -74,6 +81,35 @@ options:
 #### Notebooks
 
 * [search.ipynb](notebooks/search.ipynb): Examples of search in various catalog
+
+
+## Usage
+
+### Download products
+
+The command enables to download products from a product list from catalogs:
+* For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
+* For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
+* For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
+
+The product list must be provided in a CSV file format.
+The required column are *Product_name* and *URL* which must contain the URLs to download a product. 
+The *URL* column can be a str or a list of str.
+
+#### Command line
+```bash
+usage: et-dataset download [-h] [-v] -l LIST [--output OUTPUT]
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose mode
+  -l LIST, --list LIST  List of products (in CSV format)
+  --output OUTPUT       Download directory path (default: download)
+```
+
+#### Notebooks
+
+* [download.ipynb](notebooks/download.ipynb): Examples of download products
 
 
 ### Find products
