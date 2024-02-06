@@ -9,6 +9,7 @@ __pycache__/
 # Notebooks
 .ipynb_checkpoints/
 out/
+download/
 
 # Data
 *.tif
