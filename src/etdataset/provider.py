@@ -7,21 +7,24 @@
 Manage provider for THEIA, EarthData and earthExplorer
 """
 import os
+import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 import earthaccess
 import geopandas as gpd
+import pandas as pd
 import rasterio as rio
 from earthaccess.auth import Auth as EarthDataAuth
 from earthaccess.results import DataGranule
 from landsatxplore.api import API
+from landsatxplore.earthexplorer import EarthExplorer
 from sensorsio.mgrs import get_bbox_mgrs_tile
 from shapely.geometry import Point, Polygon
 from theia_picker.download import RequestsManager as TheiaAuth
-from theia_picker.download import TheiaCatalog
+from theia_picker.download import TheiaCatalog, Feature
 
 from etdataset.logging import LoggerManager
 from etdataset.utils import (
@@ -73,6 +76,15 @@ class Provider:
         """
         pass
 
+    @abstractmethod
+    def download(
+        self,
+        products: pd.DataFrame,
+        local_path: str = os.getcwd()) -> None:
+        """
+        Download produtcs from catalog
+        """
+        pass
 
 @dataclass
 class TheiaProvider(Provider):
@@ -104,7 +116,7 @@ class TheiaProvider(Provider):
             )
 
         self.catalog = TheiaCatalog(credentials={"ident": username, "pass": password})
-        self.auth = self.catalog._requests_mgr
+        self.auth = self.catalog.requests_mgr
 
     def search(
         self,
@@ -119,7 +131,7 @@ class TheiaProvider(Provider):
         """
         logger.debug(
             f"Search on THEIA catalog: min_date={min_date}, max_date = {max_date}, "
-            "tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
+            f"tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
         )
         tile_name = None
         relative_orbit = None
@@ -132,7 +144,7 @@ class TheiaProvider(Provider):
         # Request
         results = self.catalog.search(
             start_date=min_date,
-            end_date=max_date,
+            end_date=(datetime.strptime(max_date,"%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d"),
             tile_name=tile_name,
             level="LEVEL2A",
             bbox=bbox,
@@ -150,6 +162,7 @@ class TheiaProvider(Provider):
             f"Number of products found on Theia after cloud cover filtering: {len(results)}"
         )
         # Convert to GeoDataFrame
+        url_pattern = re.compile("(.*?\/download\/)")
         data = []
         geometry = []
         if len(results) > 0:
@@ -161,15 +174,14 @@ class TheiaProvider(Provider):
                     result.properties.collection,
                     result.properties.tile[1:],
                     result.properties.cloud_cover,
-                    result.properties.services.download.url,
+                    result.properties.relative_orbit_number,
+                    url_pattern.search(result.properties.services.download.url).group(0),
                     result.properties.services.download.checksum,
                 )
                 for result in results
             ]
             geometry = [
-                Polygon(
-                    tuple(tuple(coord) for coord in result.geometry["coordinates"][0])
-                )
+                Polygon(result.geometry.polygon[0])
                 for result in results
             ]
         return gpd.GeoDataFrame(
@@ -181,6 +193,7 @@ class TheiaProvider(Provider):
                 "Collection",
                 "Tile_ID",
                 "Cloud_cover",
+                "Relative_orbit",
                 "URL",
                 "Checksum",
             ],
@@ -188,6 +201,40 @@ class TheiaProvider(Provider):
             crs=4326,
         )
 
+    def download(
+        self,
+        products: pd.DataFrame,
+        local_path: str = os.getcwd()) -> None:
+        """
+        Download produtcs from catalog
+        """
+        logger.debug(
+            f"List of products to download: {products['Product_name'].values}"
+        )
+        url_id = re.compile("SENTINEL2\/(.*?)\/download\/")
+        for _,product in products.iterrows():
+            # Create feature instance
+            data = {'type': 'Feature',
+                    'id': url_id.search(product.URL).group(1),
+                    'properties': {'collection':'', 
+                       'productIdentifier':product.Product_name, 
+                       'title':'', 
+                       'productType':'',
+                       'startDate': datetime.now(),
+                       'processingLevel':'',
+                       'waterCover': 0,
+                       'snowCover': 0,
+                       'cloudCover': 0,
+                       'relativeOrbitNumber': 0,
+                       'location': '', 
+                       'services': {'download': {'url': product.URL,
+                                                 'mimeType': 'application/zip',
+                                                 'checksum': product.Checksum}}},
+                       'geometry': {'coordinates': list()},
+                   } 
+            feature = Feature(requests_mgr=self.auth,**data)
+            # Download
+            feature.download_archive(download_dir = local_path, renew_token = True)
 
 @dataclass
 class EarthDataProvider(Provider):
@@ -206,6 +253,8 @@ class EarthDataProvider(Provider):
         Initialize dataset
         """
         self.login()
+        if self.__class__ == EarthDataProvider:
+            raise TypeError("Cannot instantiate EarthDataProvider class.")
 
     def login(self) -> None:
         """
@@ -263,7 +312,7 @@ class EarthDataProvider(Provider):
         """
         logger.debug(
             f"Search on EarthData catalog: min_date={min_date}, max_date = {max_date}, "
-            "tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
+            f"tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
         )
         bbox = None
         if tile_id is not None:
@@ -275,7 +324,7 @@ class EarthDataProvider(Provider):
         results = earthaccess.search_data(
             short_name=self.short_name,
             doi=self.doi,
-            temporal=(min_date, max_date),
+            temporal=(min_date, (datetime.strptime(max_date,"%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")),
             bounding_box=bbox,
         )
         logger.debug(f"Number of products found on EarthData: {len(results)}")
@@ -291,7 +340,8 @@ class EarthDataProvider(Provider):
                     self.collection,
                     self._get_tile_id(result),
                     self._get_cloud_cover(result),
-                    result.data_links(),
+                    None,
+                    ",".join(result.data_links()),
                     None,
                 ]
                 for result in results
@@ -306,6 +356,7 @@ class EarthDataProvider(Provider):
                 "Collection",
                 "Tile_ID",
                 "Cloud_cover",
+                "Relative_orbit",
                 "URL",
                 "Checksum",
             ],
@@ -326,6 +377,28 @@ class EarthDataProvider(Provider):
             )
         return gdf
 
+    def download(
+        self,
+        products: pd.DataFrame,
+        local_path: str = os.getcwd()) -> None:
+        """
+        Download produtcs from catalog
+        """
+        logger.debug(
+            f"List of products to download: {products['Product_name'].values}"
+        )
+        results = []
+        for _, product in products.iterrows():
+            product_name = product.Product_name
+            product_dir = os.path.join(local_path,product_name)
+            os.makedirs(os.path.join(local_path,product_name),exist_ok=True)
+            # Parse URL
+            urls = [ url for url in product.URL.split(',') ] 
+            results.append(earthaccess.download(urls, product_dir))
+        logger.info(
+            f"Download products: {results}"
+        )
+
 
 @dataclass
 class EcostressProvider(EarthDataProvider):
@@ -335,7 +408,7 @@ class EcostressProvider(EarthDataProvider):
 
     short_name: str = "ECO_L2T_LSTE"
     doi: str = "10.5067/ECOSTRESS/ECO_L2T_LSTE.002"
-    collection: str = "Ecostress"
+    collection: str = "ECOSTRESS"
     name: str = "EarthData"
 
     def _get_geometry(self, result) -> Polygon:
@@ -358,15 +431,18 @@ class EcostressProvider(EarthDataProvider):
 
 
 @dataclass
-class HLSSProvider(EarthDataProvider):
+class HLSProvider(EarthDataProvider):
     """
-    Provider for HLS Sentinel2 via EarthData
+    Provider for HLS 
     """
 
-    short_name: str = "HLSS30"
-    doi: str = "10.5067/HLS/HLSS30.002"
-    collection: str = "HLSSentinel2"
-    name: str = "EarthData"
+    def __post_init__(self):
+        """
+        Initialize dataset
+        """
+        self.login()
+        if self.__class__ == EarthDataProvider:
+            raise TypeError("Cannot instantiate EarthDataProvider class.")
 
     def _get_geometry(self, result) -> None:
         """
@@ -408,53 +484,25 @@ class HLSSProvider(EarthDataProvider):
 
 
 @dataclass
-class HLSLProvider(EarthDataProvider):
+class HLSSProvider(HLSProvider):
+    """
+    Provider for HLS Sentinel2 via EarthData
+    """
+
+    short_name: str = "HLSS30"
+    doi: str = "10.5067/HLS/HLSS30.002"
+    collection: str = "HLSSENTINEL2"
+
+
+@dataclass
+class HLSLProvider(HLSProvider):
     """
     Provider for HLS Landsat via EarthData
     """
 
     short_name: str = "HLSL30"
     doi: str = "10.5067/HLS/HLSL30.002"
-    collection: str = "HLSLandsat"
-    name: str = "EarthData"
-
-    def _get_geometry(self, result) -> None:
-        """
-        Extract geometry from result
-        """
-        coords = result["umm"]["SpatialExtent"]["HorizontalSpatialDomain"]["Geometry"][
-            "GPolygons"
-        ][0]["Boundary"]["Points"]
-        points = [Point(coord["Longitude"], coord["Latitude"]) for coord in coords]
-        return Polygon(points)
-
-    def _get_tile_id(self, result) -> None:
-        """
-        Extract tile ID from result
-        """
-        elt = next(
-            filter(
-                lambda e: e["Name"] == "MGRS_TILE_ID",
-                result["umm"]["AdditionalAttributes"],
-            )
-        )
-        if elt is not None:
-            elt = elt["Values"][0]
-        return elt
-
-    def _get_cloud_cover(self, result) -> None:
-        """
-        Extract tile ID from result
-        """
-        elt = next(
-            filter(
-                lambda e: e["Name"] == "CLOUD_COVERAGE",
-                result["umm"]["AdditionalAttributes"],
-            )
-        )
-        if elt is not None:
-            elt = float(elt["Values"][0])
-        return elt
+    collection: str = "HLSLANDSAT"
 
 
 @dataclass
@@ -466,7 +514,9 @@ class LandsatProvider(Provider):
     name: str = "EarthExplorer"
     catalog: API = field(init=False)
     dataset: str = "landsat_ot_c2_l2"
-    collection: str = "Landsat"
+    collection: str = "LANDSAT"
+    auth: EarthExplorer = field(init=False)
+
 
     def __post_init__(self):
         """
@@ -489,6 +539,7 @@ class LandsatProvider(Provider):
 
         # Initialize a new API instance and get an access key
         self.catalog = API(username, password)
+        self.auth = EarthExplorer(username, password)
 
     def _get_geometry(self, result) -> None:
         """
@@ -518,7 +569,7 @@ class LandsatProvider(Provider):
         """
         logger.debug(
             f"Search on EarthExplorer catalog: min_date={min_date}, max_date = {max_date}, "
-            "tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
+            f"tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
         )
         bbox = None
         if tile_id is not None:
@@ -547,6 +598,7 @@ class LandsatProvider(Provider):
                     self.collection,
                     None,
                     result["cloud_cover"],
+                    None,
                     result["landsat_product_id"],
                     None,
                 ]
@@ -562,6 +614,7 @@ class LandsatProvider(Provider):
                 "Collection",
                 "Tile_ID",
                 "Cloud_cover",
+                "Relative_orbit",
                 "URL",
                 "Checksum",
             ],
@@ -575,13 +628,30 @@ class LandsatProvider(Provider):
         )
         return gdf
 
+    def download(
+        self,
+        products: pd.DataFrame,
+        local_path: str = os.getcwd()) -> None:
+        """
+        Download produtcs from catalog
+        """
+        logger.debug(
+            f"List of products to download: {products['Product_name'].values}"
+        )
+        for _, product in products.iterrows():
+            if os.path.isfile(os.path.join(local_path,product.URL+".tar")):
+                logger.info(f"Product directory for {product.Product_name} exists already. Skip product...")
+                continue
+            self.auth.download(product.URL, output_dir=local_path)
+
+
 
 class Collection(Enum):
     ECOSTRESS = EcostressProvider
     LANDSAT = LandsatProvider
     SENTINEL2 = TheiaProvider
-    HLSS = HLSSProvider
-    HLSL = HLSLProvider
+    HLSSENTINEL2 = HLSSProvider
+    HLSLANDSAT = HLSLProvider
 
 
 def get_provider(collection: Collection) -> Provider:
