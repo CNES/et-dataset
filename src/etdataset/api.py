@@ -22,35 +22,16 @@ from etdataset.database import (
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection, get_provider
 from etdataset.reader import get_product_reader
-from etdataset.selection import select_products
-from etdataset.utils import check_mgrs_format
+from etdataset.selection import select_products, filter_with_roi
+from etdataset.utils import check_mgrs_format, get_bbox_from_mgrs_tile
 
 logger = LoggerManager.get_logger(__name__)
 
 
-class DatasetException(Exception):
+class APIException(Exception):
     """
-    Exception for dataset creation
+    Exception related to arguments 
     """
-
-
-class FileParserException(Exception):
-    """
-    Exception for file parser
-    """
-
-
-class SearchException(Exception):
-    """
-    Exception for dataset creation
-    """
-
-
-class ROIException(Exception):
-    """
-    Exception for dataset creation
-    """
-
 
 def parse_date(date_str: str) -> datetime:
     """
@@ -59,7 +40,7 @@ def parse_date(date_str: str) -> datetime:
     try:
         date = datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(
+        raise APIException(
             f"Error: The expected format for date must be Year-Month-Day (got: {date_str})"
         )
     return date
@@ -84,7 +65,7 @@ def create_dataset(
     if vis_reader.tile is None and tir_reader.tile is None:
         if tile_id is None:
             logger.error("None of the products have MGRS tile information")
-            raise DatasetException("You must provide the MGRS tile ID")
+            raise APIException("You must provide the MGRS tile ID")
         vis_reader.tile = tile_id
         tir_reader.tile = tile_id
     elif vis_reader.tile is None and tir_reader.tile is not None:
@@ -98,7 +79,7 @@ def create_dataset(
             f"The products are not on the same MGRS tile : "
             f"VIS tile = {vis_reader.tile} and TIR tile = {tir_reader.tile}"
         )
-        raise DatasetException("The products are not on the same MGRS tile")
+        raise APIException("The products are not on the same MGRS tile")
 
     # Force the same bounding box
     common_bbox, common_crs = utils.bb_common(
@@ -127,93 +108,6 @@ def create_dataset(
     return merged_xr
 
 
-def find_products(
-    ls8_db_path: str | None = None,
-    eco_db_path: str | None = None,
-    s2_db_path: str | None = None,
-    min_date: datetime | None = None,
-    max_date: datetime | None = None,
-    max_cloud_cover: float = 25,
-    delta: timedelta = pd.Timedelta("3 day"),
-    roi_bbox: rio.coords.BoundingBox = None,
-    roi_crs: CRS | int = None,
-    min_roi_overlap: float = 50,
-    min_product_overlap: float = 40,
-) -> pd.DataFrame:
-    """
-    Find products
-    """
-    databases = {}
-    # Get landsat products
-    if ls8_db_path is not None:
-        ls8_db = create_ls8_db(
-            ls8_db_path,
-            min_date=min_date,
-            max_date=max_date,
-            max_cloud_cover=max_cloud_cover,
-            roi_bbox=roi_bbox,
-            roi_crs=roi_crs,
-            min_roi_overlap=min_roi_overlap,
-        )
-        databases["landsat"] = ls8_db
-
-    # Get ECOSTRESS products
-    if eco_db_path is not None:
-        eco_db = create_eco_db(
-            eco_db_path,
-            min_date=min_date,
-            max_date=max_date,
-            roi_bbox=roi_bbox,
-            roi_crs=roi_crs,
-            min_roi_overlap=min_roi_overlap,
-        )
-        eco_db_v2 = to_collectionV2(eco_db, roi_bbox, roi_crs, min_roi_overlap)
-        databases["ecostress"] = eco_db_v2
-
-    # Get Sentinel2 products
-    if s2_db_path is not None:
-        s2_db = create_s2_db(
-            s2_db_path,
-            min_date=min_date,
-            max_date=max_date,
-            roi_bbox=roi_bbox,
-            roi_crs=roi_crs,
-            min_roi_overlap=min_roi_overlap,
-        )
-        databases["sentinel2"] = s2_db
-
-    # Get ECOSTRESS products
-    # Select matches
-    res = pd.DataFrame()
-    if len(databases) == 1:
-        key = list(databases.keys())[0]
-        res = databases[key]
-        res.rename(
-            columns={
-                "product_name": f"product_name_{key}",
-                "date": f"date_{key}",
-            }
-        )
-    elif len(databases) > 1:
-        keys = list(databases.keys())
-        if len(databases) > 2:
-            logger.warning(
-                f"Matching only performed between the first two product lists : {keys[0]} and {keys[1]}"
-            )
-        res = select_products(
-            databases[keys[0]], databases[keys[1]], delta, min_product_overlap
-        )
-        res.rename(
-            columns={
-                "product_name_1": f"product_name_{keys[0]}",
-                "date_1": f"date_{keys[0]}",
-                "product_name_2": f"product_name_{keys[1]}",
-                "date_2": f"date_{keys[1]}",
-            }
-        )
-
-    return res
-
 
 def search(
     collection: Collection,
@@ -223,6 +117,7 @@ def search(
     roi_bbox: rio.coords.BoundingBox | None = None,
     roi_crs: CRS | int | None = None,
     max_cloud_cover: float = 20,
+    min_roi_overlap: float = 0,
 ) -> gpd.GeoDataFrame:
     """
     Search products in a collection
@@ -231,15 +126,15 @@ def search(
     _ = parse_date(min_date)
     _ = parse_date(max_date)
     if tile_id is None and roi_bbox is None:
-        raise SearchException(
+        raise APIException(
             "You must provide either a ROI bounding box or MGRS tile ID"
         )
     if roi_crs is None and roi_bbox is not None:
-        raise SearchException("You must provide a ROI bounding box with a CRS")
+        raise APIException("You must provide a ROI bounding box with a CRS")
     if tile_id is not None:
         check_mgrs_format(tile_id)
     if max_cloud_cover < 0 or max_cloud_cover > 100:
-        raise SearchException(
+        raise APIException(
             f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
         )
 
@@ -254,7 +149,19 @@ def search(
 
     # Search
     results = provider.search(min_date, max_date, tile_id, latlon_bbox, max_cloud_cover)
-    logger.info(f"Number of products found: {len(results)}")
+    logger.info(f"Products found for {collection.name} in catalog: {len(results)}")
+
+    # Get bounding box from tile
+    if tile_id is not None:
+        roi_bbox, roi_crs = get_bbox_from_mgrs_tile(tile_id)
+
+    # Filter with additional criteria for collection 1
+    results = filter_with_roi(results, 
+                                roi_bbox,
+                                roi_crs,
+                                min_overlap=min_roi_overlap)
+    logger.info(f"Products found for {collection.name} "
+                f"after ROI filtering: {len(results)}")
 
     return results
 
@@ -288,4 +195,106 @@ def download(
             urls["Checksum"] = np.nan
         provider.download(urls, output_dir)
 
+
+def select(
+    collection1: Collection,
+    collection2: Collection,
+    min_date: str,
+    max_date: str,
+    delta:  str | None = "3 day",
+    tile_id: str|None = None,
+    roi_bbox: rio.coords.BoundingBox = None,
+    roi_crs: CRS | int = None,
+    max_cloud_cover: float = 20,
+    min_roi_overlap: float = 40,
+    min_product_overlap: float = 40,
+    only_best_match:bool=False,
+) -> (pd.DataFrame,pd.DataFrame,pd.DataFrame):
+    """
+    Select products
+    """
+    # Checks
+    min_date_str = min_date
+    min_date = parse_date(min_date_str)
+    max_date_str = max_date
+    max_date = parse_date(max_date_str)
+    if max_date < min_date:
+        raise APIException(
+            "Maximum acquisition date must be more recent than minimum date"
+        )
+    try:
+        delta = pd.Timedelta(delta)
+    except ValueError:
+        raise APIException(
+            "Error: The format for delta acquisition time is not recognized (ex: 1 day)"
+        )
+    if tile_id is None and roi_bbox is None:
+        raise APIException(
+            "You must provide either a ROI bounding box or MGRS tile ID"
+        )
+    if roi_crs is None and roi_bbox is not None:
+        raise APIException("You must provide a ROI bounding box with a CRS")
+    if tile_id is not None:
+        check_mgrs_format(tile_id)
+    if max_cloud_cover < 0 or max_cloud_cover > 100:
+        raise APIException(
+            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+        )
+    if min_roi_overlap < 0 or min_roi_overlap > 100:
+        raise APIException(
+            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+        )
+    if min_product_overlap < 0 or min_product_overlap > 100:
+        raise APIException(
+            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+        )
+
+    # Search into collection 1
+    selection1 = search(
+                    collection1,
+                    min_date_str,
+                    max_date_str,
+                    tile_id=tile_id,
+                    roi_bbox=roi_bbox,
+                    roi_crs=roi_crs,
+                    max_cloud_cover=max_cloud_cover,
+                    min_roi_overlap=min_roi_overlap)
+
+    # Search into collection 2
+    selection2 = search(
+                    collection2,
+                    min_date_str,
+                    max_date_str,
+                    tile_id=tile_id,
+                    roi_bbox=roi_bbox,
+                    roi_crs=roi_crs,
+                    max_cloud_cover=max_cloud_cover,
+                    min_roi_overlap=min_roi_overlap)
+
+    if len(selection1) == 0 and len(selection2) == 0:
+        logger.warning("No product in one of the collection")
+        return pd.DataFrame()
+
+    # Select matches
+    matches = select_products(
+            selection1, selection2, delta, min_product_overlap,only_best_match
+    )
+    matches = matches.rename(
+            columns={
+                "Product_name_1": f"Product_name_{collection1.name}",
+                "Date_1": f"Date_{collection1.name}",
+                "Product_name_2": f"Product_name_{collection2.name}",
+                "Date_2": f"Date_{collection2.name}",
+            }
+        )
+    if len(matches) > 0:
+        selection1 = selection1.merge(matches[[f"Product_name_{collection1.name}"]],left_on="Product_name",right_on=f"Product_name_{collection1.name}").drop(columns=[f"Product_name_{collection1.name}"]).drop_duplicates(subset=['Product_name']).reset_index(drop=True)
+        selection2 = selection2.merge(matches[[f"Product_name_{collection2.name}"]],left_on="Product_name",right_on=f"Product_name_{collection2.name}").drop(columns=[f"Product_name_{collection2.name}"]).drop_duplicates(subset=['Product_name']).reset_index(drop=True)
+
+    else:
+        selection1 = pd.Dataframe()
+        selection2 = pd.Dataframe()
+
+    # Return results
+    return selection1, selection2, matches
 

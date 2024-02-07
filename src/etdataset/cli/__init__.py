@@ -9,22 +9,23 @@ from datetime import datetime
 
 import pandas as pd
 
-from etdataset.api import create_dataset, find_products, search, download, FileParserException
+from etdataset.api import create_dataset, select_products, search, download
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
 from etdataset.utils import (
     check_mgrs_format,
     get_bbox_from_mgrs_tile,
     get_bbox_from_roi,
+    read_product_list
 )
 from etdataset.writer import export_matlab, write_dataset, write_matches, write_results
 
-LS8_PATH = "landsat_ot_c2_l2_659ed86540bcec65.csv"
-S2_PATH = "SENTINEL2.csv"
-ECO_PATH = "ecostress_eco2lste_655f877cf0476b91.csv"
-
 logger = LoggerManager.get_logger(__name__)
 
+def CLIException(Exception):
+    """
+    Exception related to CLI arguments
+    """
 
 # sub-command functions
 def cli_create(args: argparse.ArgumentParser) -> None:
@@ -34,14 +35,14 @@ def cli_create(args: argparse.ArgumentParser) -> None:
     logger.debug(f"Create arguments: {args}")
     # Check VIS product path
     if not os.path.isdir(args.vis):
-        raise FileNotFoundError(f"VIS product not found ({args.vis})")
+        raise CLIException(f"VIS product not found ({args.vis})")
     logger.debug(f"VIS path: {args.vis}")
 
     # Check TIR path
     if args.tir is None:
         args.tir = args.vis
     if not os.path.isdir(args.tir):
-        raise FileNotFoundError(f"TIR product not found ({args.tir})")
+        raise CLIException(f"TIR product not found ({args.tir})")
     logger.debug(f"TIR path: {args.tir}")
 
     # Check output path
@@ -62,67 +63,51 @@ def cli_create(args: argparse.ArgumentParser) -> None:
             write_dataset(data, directory=args.output)
 
 
-def cli_find(args: argparse.ArgumentParser) -> None:
+def cli_select(args: argparse.ArgumentParser) -> None:
     """
-    Find products
+    Select products from 2 collections
     """
-    logger.debug(f"Find arguments: {args}")
-
-    # Landsat8 DB
-    ls8_db_path = None
-    if args.landsat:
-        ls8_db_path = os.path.join(os.environ["METADATA_PATH"], LS8_PATH)
-        if not os.path.isfile(ls8_db_path):
-            raise FileNotFoundError(f"Landsat8 database not found ({ls8_db_path})")
-    logger.debug(f"Landsat8 DB path: {ls8_db_path}")
-
-    # ECOSTRESS DB
-    eco_db_path = None
-    if args.ecostress:
-        eco_db_path = os.path.join(os.environ["METADATA_PATH"], ECO_PATH)
-        if not os.path.isfile(eco_db_path):
-            raise FileNotFoundError(f"ECOSTRESS database not found ({eco_db_path})")
-    logger.debug(f"ECOSTRESS DB path: {eco_db_path}")
-
-    # Sentinel2 DB
-    s2_db_path = None
-    if args.sentinel2:
-        s2_db_path = os.path.join(os.environ["METADATA_PATH"], S2_PATH)
-        if not os.path.isfile(s2_db_path):
-            raise FileNotFoundError(f"Sentinel2 database not found ({s2_db_path})")
-    logger.debug(f"Sentinel2 DB path: {s2_db_path}")
-
-    if args.landsat and args.ecostress and args.sentinel2:
-        logger.warning("Matches can be found only between two product list")
-        logger.warning("Skip Sentinel2")
-        s2_db_path = None
+    logger.debug(f"Select arguments: {args}")
 
     # Process date
     try:
-        min_date = datetime.strptime(args.min_date, "%Y-%m-%d")
+        _ = datetime.strptime(args.min_date, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(
+        raise CLIException(
             "Error: The format for minimum acqsuisition date must be Year-Month-Day"
         )
     try:
-        max_date = datetime.strptime(args.max_date, "%Y-%m-%d")
+       _ = datetime.strptime(args.max_date, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(
+        raise CLIException(
             "Error: The format for maximum acquisition date must be Year-Month-Day"
         )
-    logging.debug(f"Minimum acquisition date: {min_date}")
-    logging.debug(f"Maximum acquisition date: {max_date}")
     if max_date < min_date:
-        raise ValueError(
+        raise CLIException(
             "Maximum acquisition date must be more recent than minimum date"
         )
     try:
-        delta = pd.Timedelta(args.delta)
+        _ = pd.Timedelta(args.delta)
     except ValueError:
-        raise ValueError(
+        raise CLIException(
             "Error: The format for delta acquisition time is not recognized (ex: 1 day)"
         )
-    logger.debug(f"Delta acquisition date: {delta}")
+    if args.max_cloud_cover < 0 or args.max_cloud_cover > 100:
+        raise CLIException(
+            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+        )
+    if args.min_roi_overlap < 0 or args.min_roi_overlap > 100:
+        raise CLIException(
+            f"Min ROI overlap criteria must be between 0 and 100 (got : {max_cloud_cover}"
+        )
+    if args.min_product_overlap < 0 or args.min_product_overlap > 100:
+        raise CLIException(
+            f"Min product overlap criteria must be between 0 and 100 (got : {max_cloud_cover}"
+        )
+    # Check output path
+    if not os.path.isdir(args.output):
+        logger.debug(f"Create output path: {args.output}")
+        os.makedirs(args.output, exist_ok=True)
 
     # Get ROI bounding box and CRS from tile or shapefile
     roi_bbox = None
@@ -132,29 +117,25 @@ def cli_find(args: argparse.ArgumentParser) -> None:
     else:
         roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
 
-    matches = find_products(
-        ls8_db_path=ls8_db_path,
-        eco_db_path=eco_db_path,
-        s2_db_path=s2_db_path,
-        min_date=min_date,
-        max_date=max_date,
-        max_cloud_cover=args.max_cloud_cover,
+    products1, products2, matches = select_products(
+        args.coll1,
+        args.coll2,
+        args.min_date,
+        args.max_date,
         delta=delta,
         roi_bbox=roi_bbox,
         roi_crs=roi_crs,
+        max_cloud_cover=args.max_cloud_cover,
         min_roi_overlap=args.min_roi_overlap,
+        min_product_overlap=args.min_product_overlap,
     )
 
     # Write results
-    product_columns = [column for column in matches.columns if "product_name" in column]
-    for product_column in product_columns:
-        logger.info(f"{product_column} = {list(matches[product_column].unique())}")
-    if len(product_columns) > 1:
-        for product, group in matches.groupby(product_columns[0]):
-            logger.debug(
-                f"Image: {product} - List of images:  {list(group[product_columns[1]].unique())}"
-            )
-    write_matches(matches, args.output)
+    logger.info(f"Number of products in {args.coll1} = {len(products1)}")
+    logger.info(f"Number of products in {args.coll2} = {len(products2)}")
+    write_matches(matches, os.path.join(args.output,"matches.csv"))
+    write_results(products1, os.path.join(args.output,f"products_{args.coll1}.csv"))
+    write_results(products2, os.path.join(args.output,f"products_{args.coll2}.csv"))
 
 
 def cli_search(args: argparse.ArgumentParser) -> None:
@@ -167,17 +148,17 @@ def cli_search(args: argparse.ArgumentParser) -> None:
     try:
         min_date = datetime.strptime(args.min_date, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(
+        raise CLIException(
             "Error: The format for minimum acqsuisition date must be Year-Month-Day"
         )
     try:
         max_date = datetime.strptime(args.max_date, "%Y-%m-%d")
     except ValueError:
-        raise ValueError(
+        raise CLIException(
             "Error: The format for maximum acquisition date must be Year-Month-Day"
         )
     if max_date < min_date:
-        raise ValueError(
+        raise CLIException(
             "Maximum acquisition date must be more recent than minimum date"
         )
     if args.tile is not None:
@@ -185,8 +166,13 @@ def cli_search(args: argparse.ArgumentParser) -> None:
     roi_bbox, roi_crs = None, None
     if args.roi is not None:
         if not os.path.isfile(args.roi):
-            raise FileNotFoundError(f"ROI file not found ({args.roi})")
+            raise CLIException(f"ROI file not found ({args.roi})")
         roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
+    if args.max_cloud_cover < 0 or max_cloud_cover > 100:
+        raise CLIException(
+            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+        )
+
 
     # Search
     results = search(
@@ -209,12 +195,12 @@ def cli_download(args: argparse.ArgumentParser) -> None:
     logger.debug(f"Download arguments: {args}")
 
     if not os.path.isfile(args.list):
-        raise FileNotFoundError(f"File with products lit not found ({args.roi})")
+        raise CLIException(f"File with products lit not found ({args.roi})")
 
     try: 
-        products = pd.read_csv(args.list)
+        products = read_product_list(args.list)
     except Exception as e:
-        raise FileParserException(f"Error while reading product list: {e}")
+        raise CLIException(f"Error while reading product list: {e}")
 
     # Download
     download(
@@ -272,58 +258,52 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser_create.set_defaults(func=cli_create)
 
-    # create the parser for the "find" command
-    parser_find = subparsers.add_parser(
-        "find", help="Find matches between products that satisfy required criteria"
+    # create the parser for the "select" command
+    parser_select = subparsers.add_parser(
+        "select", help="Select product matches between 2 collections that satisfy required criteria"
     )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
     )
-    parser_find.add_argument(
-        "-l",
-        "--landsat",
-        action="store_true",
-        help="Find among Landsat products",
+    parser_select.add_argument(
+        "--coll1",
+        type=lambda arg: Collection[arg],
+        choices=Collection,
+        help="Fisrt collection of products",
     )
-    parser_find.add_argument(
-        "-s",
-        "--sentinel2",
-        action="store_true",
-        help="Find among Sentinel2 products",
+    parser_select.add_argument(
+        "--coll2",
+        type=lambda arg: Collection[arg],
+        choices=Collection,
+        help="Second collection of products",
     )
-    parser_find.add_argument(
-        "-e",
-        "--ecostress",
-        action="store_true",
-        help="Find among Ecostress products",
-    )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "--min_date",
         help="Minimum date for acquisition in YYYY-MM-DD format",
         type=str,
         required=True,
         default=None,
     )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "--max_date",
         help="Maximum date for acquisition in YYYY-MM-DD format",
         type=str,
         required=True,
         default=None,
     )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "--max_cloud_cover",
         type=int,
         default=25,
         help="Maximum cloud cover (only for Landsat8 products) (default: 25)",
     )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "--delta",
         type=str,
         default="3 days",
         help="Maximum time delta allowed between acquisitions (default: 3 days)",
     )
-    group = parser_find.add_mutually_exclusive_group(required=True)
+    group = parser_select.add_mutually_exclusive_group(required=True)
     group.add_argument("-t", "--tile", type=str, help="Tile ID")
     group.add_argument(
         "-r",
@@ -331,31 +311,25 @@ def get_parser() -> argparse.ArgumentParser:
         type=str,
         help="Path of the region of interest in Shapefile format",
     )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "--min_roi_overlap",
         type=int,
         default=50,
         help="Minimum overlap between ROI and a product (default: 50)",
     )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "--min_product_overlap",
         type=int,
         default=40,
         help="Minimum overlap between two products (default: 40)",
     )
-    parser_find.add_argument(
-        "--metadata",
-        type=str,
-        default=None,
-        help="Path to the directory containing metadata csv files",
-    )
-    parser_find.add_argument(
+    parser_select.add_argument(
         "--output",
         type=str,
-        help="CSV output file (default: matches.csv)",
-        default="matches.csv",
+        help="Output dir (current directory)",
+        default=os.getcwd(),
     )
-    parser_find.set_defaults(func=cli_find)
+    parser_select.set_defaults(func=cli_select)
 
     # create the parser for the "search" command
     parser_search = subparsers.add_parser(

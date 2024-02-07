@@ -103,8 +103,10 @@ def export_matlab(
 
 
 def write_matches(res: pd.DataFrame, output: str = "matches.csv") -> None:
-    res.to_csv(output,index=False)
+    if len(res) > 0:
+        res.to_csv(output,index=False)
 
 
 def write_results(res: pd.DataFrame, output: str = "results.csv") -> None:
-    res.to_csv(output,index=False)
+    if len(res) > 0:
+        res.to_csv(output,index=False)

@@ -13,8 +13,8 @@
 
 Python package to prepare datasets for evapotranspiration processing:
 * Search on catalogs that satisfy criteria
-* Download products
-* Find products between 2 collections that satisfy criteria
+* Download products from a product list
+* Select products between 2 collections that satisfy criteria
 * Create ET dataset from products
 
 ## Pre-requistes
@@ -23,10 +23,6 @@ To search and download products, you need accounts and set environment variables
 * [Earth Explorer](https://earthexplorer.usgs.gov/): required to define `LANDSATXPLORE_USERNAME` and `LANDSATXPLORE_PASSWORD`
 * [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
-
-For finding products: 
-* Export metadata for Landsat and ECOSTRESS collections on Earth Explorer (for find)
-* Export Sentinel2 metadata with datalakeutils (for find)
 
 ## Installation
 
@@ -80,7 +76,8 @@ options:
 
 #### Notebooks
 
-* [search.ipynb](notebooks/search.ipynb): Examples of search in various catalog
+* [search.ipynb](notebooks/search.ipynb): Examples of searches in various catalog
+* [search_landsat.ipynb](notebooks/search_landsat.ipynb): Examples of searches for Landsat
 
 
 ## Usage
@@ -112,59 +109,52 @@ options:
 * [download.ipynb](notebooks/download.ipynb): Examples of download products
 
 
-### Find products
+### Select products
 
-The command give the list of products that satisfy criteria.
-For now, the products must be manually download on the catalogs:
-* For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
-* For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
-* For ECOSTRESS (collection v2) [Earth Data](https://search.earthdata.nasa.gov/search)
+The command give the list of products in two collections that satisfy criteria.
+The products can then be downloaded via the download command.
 
 #### Command line
 
 ``` bash
-et-dataset find -h
-usage: et-dataset find [-h] [-v] [-l] [-s] [-e] --min_date MIN_DATE --max_date MAX_DATE [--max_cloud_cover MAX_CLOUD_COVER] [--delta DELTA] (-t TILE | -r ROI) [--min_roi_overlap MIN_ROI_OVERLAP]
-                       [--min_product_overlap MIN_PRODUCT_OVERLAP] [--metadata METADATA] [--output OUTPUT]
-
-Find matches between products that satisfy required criteria.
+usage: et-dataset select [-h] [-v]
+                         [--coll1 {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSSENTINEL2,Collection.HLSLANDSAT}]
+                         [--coll2 {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSSENTINEL2,Collection.HLSLANDSAT}]
+                         --min_date MIN_DATE --max_date MAX_DATE
+                         [--max_cloud_cover MAX_CLOUD_COVER] [--delta DELTA]
+                         (-t TILE | -r ROI)
+                         [--min_roi_overlap MIN_ROI_OVERLAP]
+                         [--min_product_overlap MIN_PRODUCT_OVERLAP]
+                         [--output OUTPUT]
 
 options:
   -h, --help            show this help message and exit
   -v, --verbose         Verbose mode
-  -l, --landsat         Find among Landsat products
-  -s, --sentinel2       Find among Sentinel2 products
-  -e, --ecostress       Find among Ecostress products
+  --coll1 {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSSENTINEL2,Collection.HLSLANDSAT}
+                        Fisrt collection of products
+  --coll2 {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSSENTINEL2,Collection.HLSLANDSAT}
+                        Second collection of products
   --min_date MIN_DATE   Minimum date for acquisition in YYYY-MM-DD format
   --max_date MAX_DATE   Maximum date for acquisition in YYYY-MM-DD format
   --max_cloud_cover MAX_CLOUD_COVER
-                        Maximum cloud cover (only for Landsat8 products) (default: 25)
-  --delta DELTA         Maximum time delta allowed between acquisitions (default: 3 days)
+                        Maximum cloud cover (only for Landsat8 products)
+                        (default: 25)
+  --delta DELTA         Maximum time delta allowed between acquisitions
+                        (default: 3 days)
   -t TILE, --tile TILE  Tile ID
   -r ROI, --roi ROI     Path of the region of interest in Shapefile format
   --min_roi_overlap MIN_ROI_OVERLAP
-                        Minimum overlap between ROI and a product (default: 50)
+                        Minimum overlap between ROI and a product (default:
+                        50)
   --min_product_overlap MIN_PRODUCT_OVERLAP
                         Minimum overlap between two products (default: 40)
-  --metadata METADATA   Path to the directory containing metadata csv files
-  --output OUTPUT       CSV output file (default: matches.csv)
-```
-  
-Example: Find ECOSTRESS/Sentinel2 product matches between 2023/02/15 and 2023/04/14 for tile 28PCA
-```bash
-et-dataset find  --ecostress --sentinel2 --min_date 2023-02-15 --max_date 2023-04-14 -t 28PCA
-```
-  
-Example: Find Landsat products between 2023/01/31 and 2023/04/30 over a ROI with cloud cover percentage below 10%
-```bash
-et-dataset find --landsat --min_date 2023-01-31 --max_date 2023-04-30 --max_cloud_cover 10 -r $DATA_PATH/zones/Zone_Senegal_Centre.shp
+  --output OUTPUT       Output dir (current directory)
 ```
 
 #### Notebooks
 
 * find_ecols8_matches.ipynb: Find matches between ECOSTRESS/Sentinel2
 * find_ecos2_matches.ipynb: Find matches between ECOSTRESS/Landsat 
-* find_ls8_matches.ipynb: Find Landsat products
 
 ### Create command
 
