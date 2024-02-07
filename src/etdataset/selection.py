@@ -8,17 +8,18 @@ Select product
 """
 from datetime import timedelta
 
-import rasterio as rio
 import geopandas as gpd
 import pandas as pd
-from tqdm import tqdm
+import rasterio as rio
 from pyproj import CRS
 from rasterio.warp import transform_bounds
 from shapely.geometry import Polygon
+from tqdm import tqdm
 
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
+
 
 def filter_with_roi(
     gdf: gpd.GeoDataFrame,
@@ -61,12 +62,13 @@ def filter_with_roi(
             )
         )
         filtered["overlap_percentage"] = filtered.apply(
-            lambda x: 100 * x.overlap_geometry.area / min(aoi_area,x.geometry.area), axis=1
+            lambda x: 100 * x.overlap_geometry.area / min(aoi_area, x.geometry.area),
+            axis=1,
         )
         if min_overlap is not None:
             filtered = filtered[filtered["overlap_percentage"] > min_overlap]
     except AttributeError:
-        logger.warning(f"Not products found")
+        logger.warning("Not products found")
         # No matches found
         return None
     logger.debug(f"Products found after filtering: {len(filtered)}")
@@ -74,7 +76,11 @@ def filter_with_roi(
 
 
 def select_products(
-    gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame, delta: timedelta, min_overlap: float, best_match=False
+    gdf1: gpd.GeoDataFrame,
+    gdf2: gpd.GeoDataFrame,
+    delta: timedelta,
+    min_overlap: float,
+    best_match=False,
 ) -> pd.DataFrame:
     """
     For each product in the first list gdf1,
@@ -131,11 +137,13 @@ def select_products(
     else:
         if best_match:
             best_matches = []
-            for (product_name_1, date_1), group in matches.groupby(["Product_name_1","Date_1"]):
+            for (product_name_1, date_1), group in matches.groupby(
+                ["Product_name_1", "Date_1"]
+            ):
                 best_date = date_1 + delta + pd.Timedelta("1 day")
                 best_overlap = 0
                 best_product = None
-                for _,row in group.iterrows():
+                for _, row in group.iterrows():
                     date_2 = row.Date_2
                     product_name_2 = row.Product_name_2
                     overlap = row.overlap
@@ -143,11 +151,25 @@ def select_products(
                         best_date = date_2
                         best_overlap = overlap
                         best_product = product_name_2
-                    elif abs((date_1 - best_date).days) == abs((date_2 - date_1).days) and overlap > best_overlap:
+                    elif (
+                        abs((date_1 - best_date).days) == abs((date_2 - date_1).days)
+                        and overlap > best_overlap
+                    ):
                         best_date = date_2
                         best_overlap = overlap
                         best_product = product_name_2
-                best_matches.append([product_name_1, date_1, best_product, best_date, best_overlap])
-            matches = pd.DataFrame(data=best_matches,columns=["Product_name_1", "Date_1", "Product_name_2", "Date_2", "overlap"])
+                best_matches.append(
+                    [product_name_1, date_1, best_product, best_date, best_overlap]
+                )
+            matches = pd.DataFrame(
+                data=best_matches,
+                columns=[
+                    "Product_name_1",
+                    "Date_1",
+                    "Product_name_2",
+                    "Date_2",
+                    "overlap",
+                ],
+            )
         logger.info(f"Found {len(matches)} matches")
     return matches.reset_index(drop=True)

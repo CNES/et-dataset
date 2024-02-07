@@ -7,10 +7,9 @@
 Common function
 """
 
-import os
 import re
-
 from datetime import datetime
+
 import geopandas as gpd
 import pandas as pd
 import rasterio as rio
@@ -115,6 +114,7 @@ def check_theia_tiles(tile_ids: list[str]) -> list[str]:
     theia_tiles = get_theia_tiles()
     return list(set(tile_ids) & set(theia_tiles.index))
 
+
 def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
     """
     Read a product list in CSV format and convert it to
@@ -123,17 +123,26 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
     # Read to DataFrame
     df = pd.read_csv(path)
     # Parse date
-    df["Date"] = df["Date"].apply(lambda date: datetime.strptime(date, '%Y-%m-%d').date())
+    df["Date"] = df["Date"].apply(
+        lambda date: datetime.strptime(date, "%Y-%m-%d").date()
+    )
     # Remove unnecessary column
     if "Unnamed: 0" in df.columns:
         df = df.drop(columns="Unnamed: 0")
-    # Parse date
+        # Parse date
         df
+
     # Convert geometry
     def convert_polygon(poly: str) -> Polygon:
-        pattern = re.compile("POLYGON \(\((.*?)\)\)")
+        pattern = re.compile("POLYGON (((.*?)))")
         coords = pattern.search(poly).group(1)
-        coords = (tuple(float(item) for item in coord.split(" ") if item.strip()) for coord in coords.split(","))
+        coords = (
+            tuple(float(item) for item in coord.split(" ") if item.strip())
+            for coord in coords.split(",")
+        )
         return Polygon(coords)
+
     geometry = df["geometry"].apply(lambda row: convert_polygon(row))
-    return gpd.GeoDataFrame(data=df[df.columns.difference(['b'], sort=False)],geometry=geometry,crs=crs)
+    return gpd.GeoDataFrame(
+        data=df[df.columns.difference(["b"], sort=False)], geometry=geometry, crs=crs
+    )

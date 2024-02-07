@@ -1,28 +1,23 @@
 #!/usr/bin/env python
 # coding: utf8
 
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
-from datetime import datetime, timedelta
-
 import os
-import numpy as np
+
+# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
+from datetime import datetime
+
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
 from sensorsio import utils
 
-from etdataset.database import (
-    create_eco_db,
-    create_ls8_db,
-    create_s2_db,
-    to_collectionV2,
-)
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection, get_provider
 from etdataset.reader import get_product_reader
-from etdataset.selection import select_products, filter_with_roi
+from etdataset.selection import filter_with_roi, select_products
 from etdataset.utils import check_mgrs_format, get_bbox_from_mgrs_tile
 
 logger = LoggerManager.get_logger(__name__)
@@ -30,8 +25,9 @@ logger = LoggerManager.get_logger(__name__)
 
 class APIException(Exception):
     """
-    Exception related to arguments 
+    Exception related to arguments
     """
+
 
 def parse_date(date_str: str) -> datetime:
     """
@@ -108,7 +104,6 @@ def create_dataset(
     return merged_xr
 
 
-
 def search(
     collection: Collection,
     min_date: str,
@@ -126,9 +121,7 @@ def search(
     _ = parse_date(min_date)
     _ = parse_date(max_date)
     if tile_id is None and roi_bbox is None:
-        raise APIException(
-            "You must provide either a ROI bounding box or MGRS tile ID"
-        )
+        raise APIException("You must provide either a ROI bounding box or MGRS tile ID")
     if roi_crs is None and roi_bbox is not None:
         raise APIException("You must provide a ROI bounding box with a CRS")
     if tile_id is not None:
@@ -156,39 +149,37 @@ def search(
         roi_bbox, roi_crs = get_bbox_from_mgrs_tile(tile_id)
 
     # Filter with additional criteria for collection 1
-    results = filter_with_roi(results, 
-                                roi_bbox,
-                                roi_crs,
-                                min_overlap=min_roi_overlap)
-    logger.info(f"Products found for {collection.name} "
-                f"after ROI filtering: {len(results)}")
+    results = filter_with_roi(results, roi_bbox, roi_crs, min_overlap=min_roi_overlap)
+    logger.info(
+        f"Products found for {collection.name} " f"after ROI filtering: {len(results)}"
+    )
 
     return results
 
 
 def download(
-        products: pd.DataFrame,
-        output_dir: str = os.path.join(os.getcwd(),"download"),
-     ) -> None:
+    products: pd.DataFrame,
+    output_dir: str = os.path.join(os.getcwd(), "download"),
+) -> None:
     """
     Download products from catalog
     The products to dowload are listed in a DataFrame.
-    The required column are "Product_name" and "URL" 
-    which must contain the URLs to download a product. 
+    The required column are "Product_name" and "URL"
+    which must contain the URLs to download a product.
     The URLs column can be a str or a list of str.
     """
     # Checks
-    os.makedirs(output_dir,exist_ok=True)
-    if not "Product_name" in products.columns:
+    os.makedirs(output_dir, exist_ok=True)
+    if "Product_name" not in products.columns:
         logger.exception("You must provide the product names.")
-    if not "URL" in products.columns:
+    if "URL" not in products.columns:
         logger.exception("You must provide the URL to download.")
     # Download
     for collection, group in products.groupby("Collection"):
         logger.debug(f"Collection: {collection}")
         provider = get_provider(Collection[collection])
         logger.debug(f"Provider: {provider}")
-        urls = group[["Product_name","URL"]].copy()
+        urls = group[["Product_name", "URL"]].copy()
         if "Checksum" in group.columns:
             urls["Checksum"] = group["Checksum"].values
         else:
@@ -201,15 +192,15 @@ def select(
     collection2: Collection,
     min_date: str,
     max_date: str,
-    delta:  str | None = "3 day",
-    tile_id: str|None = None,
+    delta: str | None = "3 day",
+    tile_id: str | None = None,
     roi_bbox: rio.coords.BoundingBox = None,
     roi_crs: CRS | int = None,
     max_cloud_cover: float = 20,
     min_roi_overlap: float = 40,
     min_product_overlap: float = 40,
-    only_best_match:bool=False,
-) -> (pd.DataFrame,pd.DataFrame,pd.DataFrame):
+    only_best_match: bool = False,
+) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
     """
     Select products
     """
@@ -229,9 +220,7 @@ def select(
             "Error: The format for delta acquisition time is not recognized (ex: 1 day)"
         )
     if tile_id is None and roi_bbox is None:
-        raise APIException(
-            "You must provide either a ROI bounding box or MGRS tile ID"
-        )
+        raise APIException("You must provide either a ROI bounding box or MGRS tile ID")
     if roi_crs is None and roi_bbox is not None:
         raise APIException("You must provide a ROI bounding box with a CRS")
     if tile_id is not None:
@@ -251,25 +240,27 @@ def select(
 
     # Search into collection 1
     selection1 = search(
-                    collection1,
-                    min_date_str,
-                    max_date_str,
-                    tile_id=tile_id,
-                    roi_bbox=roi_bbox,
-                    roi_crs=roi_crs,
-                    max_cloud_cover=max_cloud_cover,
-                    min_roi_overlap=min_roi_overlap)
+        collection1,
+        min_date_str,
+        max_date_str,
+        tile_id=tile_id,
+        roi_bbox=roi_bbox,
+        roi_crs=roi_crs,
+        max_cloud_cover=max_cloud_cover,
+        min_roi_overlap=min_roi_overlap,
+    )
 
     # Search into collection 2
     selection2 = search(
-                    collection2,
-                    min_date_str,
-                    max_date_str,
-                    tile_id=tile_id,
-                    roi_bbox=roi_bbox,
-                    roi_crs=roi_crs,
-                    max_cloud_cover=max_cloud_cover,
-                    min_roi_overlap=min_roi_overlap)
+        collection2,
+        min_date_str,
+        max_date_str,
+        tile_id=tile_id,
+        roi_bbox=roi_bbox,
+        roi_crs=roi_crs,
+        max_cloud_cover=max_cloud_cover,
+        min_roi_overlap=min_roi_overlap,
+    )
 
     if len(selection1) == 0 and len(selection2) == 0:
         logger.warning("No product in one of the collection")
@@ -277,19 +268,37 @@ def select(
 
     # Select matches
     matches = select_products(
-            selection1, selection2, delta, min_product_overlap,only_best_match
+        selection1, selection2, delta, min_product_overlap, only_best_match
     )
     matches = matches.rename(
-            columns={
-                "Product_name_1": f"Product_name_{collection1.name}",
-                "Date_1": f"Date_{collection1.name}",
-                "Product_name_2": f"Product_name_{collection2.name}",
-                "Date_2": f"Date_{collection2.name}",
-            }
-        )
+        columns={
+            "Product_name_1": f"Product_name_{collection1.name}",
+            "Date_1": f"Date_{collection1.name}",
+            "Product_name_2": f"Product_name_{collection2.name}",
+            "Date_2": f"Date_{collection2.name}",
+        }
+    )
     if len(matches) > 0:
-        selection1 = selection1.merge(matches[[f"Product_name_{collection1.name}"]],left_on="Product_name",right_on=f"Product_name_{collection1.name}").drop(columns=[f"Product_name_{collection1.name}"]).drop_duplicates(subset=['Product_name']).reset_index(drop=True)
-        selection2 = selection2.merge(matches[[f"Product_name_{collection2.name}"]],left_on="Product_name",right_on=f"Product_name_{collection2.name}").drop(columns=[f"Product_name_{collection2.name}"]).drop_duplicates(subset=['Product_name']).reset_index(drop=True)
+        selection1 = (
+            selection1.merge(
+                matches[[f"Product_name_{collection1.name}"]],
+                left_on="Product_name",
+                right_on=f"Product_name_{collection1.name}",
+            )
+            .drop(columns=[f"Product_name_{collection1.name}"])
+            .drop_duplicates(subset=["Product_name"])
+            .reset_index(drop=True)
+        )
+        selection2 = (
+            selection2.merge(
+                matches[[f"Product_name_{collection2.name}"]],
+                left_on="Product_name",
+                right_on=f"Product_name_{collection2.name}",
+            )
+            .drop(columns=[f"Product_name_{collection2.name}"])
+            .drop_duplicates(subset=["Product_name"])
+            .reset_index(drop=True)
+        )
 
     else:
         selection1 = pd.Dataframe()
@@ -297,4 +306,3 @@ def select(
 
     # Return results
     return selection1, selection2, matches
-

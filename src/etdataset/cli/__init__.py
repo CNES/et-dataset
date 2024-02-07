@@ -9,23 +9,25 @@ from datetime import datetime
 
 import pandas as pd
 
-from etdataset.api import create_dataset, select_products, search, download
+from etdataset.api import create_dataset, download, search, select_products
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
 from etdataset.utils import (
     check_mgrs_format,
     get_bbox_from_mgrs_tile,
     get_bbox_from_roi,
-    read_product_list
+    read_product_list,
 )
 from etdataset.writer import export_matlab, write_dataset, write_matches, write_results
 
 logger = LoggerManager.get_logger(__name__)
 
+
 def CLIException(Exception):
     """
     Exception related to CLI arguments
     """
+
 
 # sub-command functions
 def cli_create(args: argparse.ArgumentParser) -> None:
@@ -71,13 +73,13 @@ def cli_select(args: argparse.ArgumentParser) -> None:
 
     # Process date
     try:
-        _ = datetime.strptime(args.min_date, "%Y-%m-%d")
+        min_date = datetime.strptime(args.min_date, "%Y-%m-%d")
     except ValueError:
         raise CLIException(
             "Error: The format for minimum acqsuisition date must be Year-Month-Day"
         )
     try:
-       _ = datetime.strptime(args.max_date, "%Y-%m-%d")
+        max_date = datetime.strptime(args.max_date, "%Y-%m-%d")
     except ValueError:
         raise CLIException(
             "Error: The format for maximum acquisition date must be Year-Month-Day"
@@ -94,15 +96,15 @@ def cli_select(args: argparse.ArgumentParser) -> None:
         )
     if args.max_cloud_cover < 0 or args.max_cloud_cover > 100:
         raise CLIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            f"Cloud cover criteria must be between 0 and 100 (got : {args.max_cloud_cover})"
         )
     if args.min_roi_overlap < 0 or args.min_roi_overlap > 100:
         raise CLIException(
-            f"Min ROI overlap criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            f"Min ROI overlap criteria must be between 0 and 100 (got : {args.min_roi_overlap})"
         )
     if args.min_product_overlap < 0 or args.min_product_overlap > 100:
         raise CLIException(
-            f"Min product overlap criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            f"Min product overlap criteria must be between 0 and 100 (got : {args.min_product_overlap})"
         )
     # Check output path
     if not os.path.isdir(args.output):
@@ -122,7 +124,7 @@ def cli_select(args: argparse.ArgumentParser) -> None:
         args.coll2,
         args.min_date,
         args.max_date,
-        delta=delta,
+        delta=args.delta,
         roi_bbox=roi_bbox,
         roi_crs=roi_crs,
         max_cloud_cover=args.max_cloud_cover,
@@ -133,9 +135,9 @@ def cli_select(args: argparse.ArgumentParser) -> None:
     # Write results
     logger.info(f"Number of products in {args.coll1} = {len(products1)}")
     logger.info(f"Number of products in {args.coll2} = {len(products2)}")
-    write_matches(matches, os.path.join(args.output,"matches.csv"))
-    write_results(products1, os.path.join(args.output,f"products_{args.coll1}.csv"))
-    write_results(products2, os.path.join(args.output,f"products_{args.coll2}.csv"))
+    write_matches(matches, os.path.join(args.output, "matches.csv"))
+    write_results(products1, os.path.join(args.output, f"products_{args.coll1}.csv"))
+    write_results(products2, os.path.join(args.output, f"products_{args.coll2}.csv"))
 
 
 def cli_search(args: argparse.ArgumentParser) -> None:
@@ -168,11 +170,10 @@ def cli_search(args: argparse.ArgumentParser) -> None:
         if not os.path.isfile(args.roi):
             raise CLIException(f"ROI file not found ({args.roi})")
         roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
-    if args.max_cloud_cover < 0 or max_cloud_cover > 100:
+    if args.max_cloud_cover < 0 or args.max_cloud_cover > 100:
         raise CLIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            f"Cloud cover criteria must be between 0 and 100 (got : {args.max_cloud_cover})"
         )
-
 
     # Search
     results = search(
@@ -188,6 +189,7 @@ def cli_search(args: argparse.ArgumentParser) -> None:
     # Write results
     write_results(results, args.output)
 
+
 def cli_download(args: argparse.ArgumentParser) -> None:
     """
     Download products
@@ -197,16 +199,13 @@ def cli_download(args: argparse.ArgumentParser) -> None:
     if not os.path.isfile(args.list):
         raise CLIException(f"File with products lit not found ({args.roi})")
 
-    try: 
+    try:
         products = read_product_list(args.list)
     except Exception as e:
         raise CLIException(f"Error while reading product list: {e}")
 
     # Download
-    download(
-        products,
-        args.output
-    )
+    download(products, args.output)
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -260,7 +259,8 @@ def get_parser() -> argparse.ArgumentParser:
 
     # create the parser for the "select" command
     parser_select = subparsers.add_parser(
-        "select", help="Select product matches between 2 collections that satisfy required criteria"
+        "select",
+        help="Select product matches between 2 collections that satisfy required criteria",
     )
     parser_select.add_argument(
         "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
