@@ -313,9 +313,7 @@ class Sentinel2Reader(ProductReader):
         if use_mask:
             not_water_mask = ~utils.extract_bitmask(
                 s2_xr[sentinel2.Sentinel2.MG2.value].values, 0
-            ).astype(
-                bool
-            )  # Bit 0 water
+            ).astype(bool)  # Bit 0 water
             clear_pixels_mask = np.where(
                 s2_xr[sentinel2.Sentinel2.CLM.value].values == 0, 1, 0
             )  # Clear pixels

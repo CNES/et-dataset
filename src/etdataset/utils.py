@@ -7,8 +7,8 @@
 Common function
 """
 
-import os
 import re
+from datetime import datetime
 
 import geopandas as gpd
 import pandas as pd
@@ -107,48 +107,42 @@ def get_mgrs_tile_names_from_roi(
     return list(mgrs_tiles.Name.values)
 
 
-def get_optimal_relative_orbit_for_mgrs_tile(tile_id: str) -> int:
-    """
-    Given a MGRS tile return the best relative orbit
-    """
-    tile_bbox = mgrs.get_bbox_mgrs_tile(tile_id)
-    # Convert bounds to polygon
-    aoi = Polygon(
-        [
-            [tile_bbox[0], tile_bbox[1]],
-            [tile_bbox[0], tile_bbox[3]],
-            [tile_bbox[2], tile_bbox[3]],
-            [tile_bbox[2], tile_bbox[1]],
-        ]
-    )
-
-    orbits_df = gpd.read_file(
-        os.path.join(
-            os.path.dirname(os.path.abspath(mgrs.__file__)),
-            "data/sentinel2/orbits.gpkg",
-        )
-    )
-    intersections = []
-    orbits = []
-    for _, orbit_row in orbits_df.iterrows():
-        # Last test is to exclude weird duplicates (malformed gpkg ?)
-        if orbit_row.geometry.intersects(aoi) and orbit_row.orbit_number not in orbits:
-            orbits.append(orbit_row.orbit_number)
-            inter_aoi_orbit = aoi.intersection(orbit_row.geometry)
-            mgrs_orbit_coverage = inter_aoi_orbit.area / aoi.area
-            intersections.append((orbit_row.orbit_number, mgrs_orbit_coverage))
-    labels = ["relative_orbit_number", "tile_and_orbit_coverage"]
-    return int(
-        pd.DataFrame.from_records(intersections, columns=labels)
-        .sort_values(by="tile_and_orbit_coverage", ascending=False)
-        .iloc[0]
-        .relative_orbit_number
-    )
-
-
 def check_theia_tiles(tile_ids: list[str]) -> list[str]:
     """
     Given a list of MGRS tile IDs, return the tiles available on THEIA platform
     """
     theia_tiles = get_theia_tiles()
     return list(set(tile_ids) & set(theia_tiles.index))
+
+
+def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
+    """
+    Read a product list in CSV format and convert it to
+    GeoDataFrame
+    """
+    # Read to DataFrame
+    df = pd.read_csv(path)
+    # Parse date
+    df["Date"] = df["Date"].apply(
+        lambda date: datetime.strptime(date, "%Y-%m-%d").date()
+    )
+    # Remove unnecessary column
+    if "Unnamed: 0" in df.columns:
+        df = df.drop(columns="Unnamed: 0")
+        # Parse date
+        df
+
+    # Convert geometry
+    def convert_polygon(poly: str) -> Polygon:
+        pattern = re.compile("POLYGON (((.*?)))")
+        coords = pattern.search(poly).group(1)
+        coords = (
+            tuple(float(item) for item in coord.split(" ") if item.strip())
+            for coord in coords.split(",")
+        )
+        return Polygon(coords)
+
+    geometry = df["geometry"].apply(lambda row: convert_polygon(row))
+    return gpd.GeoDataFrame(
+        data=df[df.columns.difference(["b"], sort=False)], geometry=geometry, crs=crs
+    )

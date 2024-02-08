@@ -21,18 +21,15 @@ from earthaccess.auth import Auth as EarthDataAuth
 from earthaccess.results import DataGranule
 from landsatxplore.api import API
 from landsatxplore.earthexplorer import EarthExplorer
-from sensorsio.mgrs import get_bbox_mgrs_tile
+from sensorsio import mgrs
+from sensorsio.sentinel2 import find_tile_orbit_pairs
 from shapely.geometry import Point, Polygon
+from theia_picker.download import Feature
 from theia_picker.download import RequestsManager as TheiaAuth
-from theia_picker.download import TheiaCatalog, Feature
+from theia_picker.download import TheiaCatalog
 
 from etdataset.logging import LoggerManager
-from etdataset.utils import (
-    MGRS_FORMAT,
-    bbox_to_polygon,
-    create_polygon,
-    get_optimal_relative_orbit_for_mgrs_tile,
-)
+from etdataset.utils import MGRS_FORMAT, bbox_to_polygon, create_polygon
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -77,14 +74,12 @@ class Provider:
         pass
 
     @abstractmethod
-    def download(
-        self,
-        products: pd.DataFrame,
-        local_path: str = os.getcwd()) -> None:
+    def download(self, products: pd.DataFrame, local_path: str = os.getcwd()) -> None:
         """
         Download produtcs from catalog
         """
         pass
+
 
 @dataclass
 class TheiaProvider(Provider):
@@ -118,6 +113,83 @@ class TheiaProvider(Provider):
         self.catalog = TheiaCatalog(credentials={"ident": username, "pass": password})
         self.auth = self.catalog.requests_mgr
 
+    def _get_optimal_relative_orbit_for_mgrs_tile(self, tile_id: str) -> int:
+        """
+        Given a MGRS tile return the best relative orbit
+        """
+        tile_bbox = mgrs.get_bbox_mgrs_tile(tile_id)
+        # Convert bounds to polygon
+        aoi = Polygon(
+            [
+                [tile_bbox[0], tile_bbox[1]],
+                [tile_bbox[0], tile_bbox[3]],
+                [tile_bbox[2], tile_bbox[3]],
+                [tile_bbox[2], tile_bbox[1]],
+            ]
+        )
+
+        orbits_df = gpd.read_file(
+            os.path.join(
+                os.path.dirname(os.path.abspath(mgrs.__file__)),
+                "data/sentinel2/orbits.gpkg",
+            )
+        )
+        intersections = []
+        orbits = []
+        for _, orbit_row in orbits_df.iterrows():
+            # Last test is to exclude weird duplicates (malformed gpkg ?)
+            if (
+                orbit_row.geometry.intersects(aoi)
+                and orbit_row.orbit_number not in orbits
+            ):
+                orbits.append(orbit_row.orbit_number)
+                inter_aoi_orbit = aoi.intersection(orbit_row.geometry)
+                mgrs_orbit_coverage = inter_aoi_orbit.area / aoi.area
+                intersections.append((orbit_row.orbit_number, mgrs_orbit_coverage))
+        labels = ["relative_orbit_number", "tile_and_orbit_coverage"]
+        return int(
+            pd.DataFrame.from_records(intersections, columns=labels)
+            .sort_values(by="tile_and_orbit_coverage", ascending=False)
+            .iloc[0]
+            .relative_orbit_number
+        )
+
+    def _filter(
+        self,
+        results: gpd.GeoDataFrame,
+        latlon_bbox: rio.coords.BoundingBox,
+    ) -> gpd.GeoDataFrame:
+        """
+        Given a ROI, filter with tile_id and relative_orbit_number
+        """
+        to_keep = find_tile_orbit_pairs(latlon_bbox, 4326)
+        to_supp = to_keep[to_keep["tile_and_orbit_coverage"] <= 0.1][
+            ["tile_id", "relative_orbit_number"]
+        ].values
+        logger.debug(f"Tiles to remove: {to_supp}")
+        to_keep = to_keep[to_keep["tile_and_orbit_coverage"] > 0.1]
+        idx = (
+            to_keep.groupby(["tile_id"])["tile_and_orbit_coverage"].transform("max")
+            == to_keep["tile_and_orbit_coverage"]
+        )
+        to_keep = to_keep[idx][["tile_id", "relative_orbit_number"]].values
+        logger.debug(f"Tiles to keep: {to_keep}")
+        for id, orbit in to_supp:
+            results = results.drop(
+                results[
+                    (results.Tile_ID == str(id))
+                    & (results.Relative_orbit == int(orbit))
+                ].index
+            )
+        for id, orbit in to_keep:
+            results = results.drop(
+                results[
+                    (results.Tile_ID == str(id))
+                    & (results.Relative_orbit != int(orbit))
+                ].index
+            )
+        return results
+
     def search(
         self,
         min_date: str,
@@ -138,13 +210,15 @@ class TheiaProvider(Provider):
         bbox = None
         if tile_id is not None:
             tile_name = "T" + tile_id
-            relative_orbit = get_optimal_relative_orbit_for_mgrs_tile(tile_id)
+            relative_orbit = self._get_optimal_relative_orbit_for_mgrs_tile(tile_id)
         if latlon_bbox is not None:
             bbox = tuple(latlon_bbox)
         # Request
         results = self.catalog.search(
             start_date=min_date,
-            end_date=(datetime.strptime(max_date,"%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d"),
+            end_date=(
+                datetime.strptime(max_date, "%Y-%m-%d") + timedelta(days=1)
+            ).strftime("%Y-%m-%d"),
             tile_name=tile_name,
             level="LEVEL2A",
             bbox=bbox,
@@ -162,7 +236,7 @@ class TheiaProvider(Provider):
             f"Number of products found on Theia after cloud cover filtering: {len(results)}"
         )
         # Convert to GeoDataFrame
-        url_pattern = re.compile("(.*?\/download\/)")
+        url_pattern = re.compile("(.*?/download/)")
         data = []
         geometry = []
         if len(results) > 0:
@@ -175,16 +249,15 @@ class TheiaProvider(Provider):
                     result.properties.tile[1:],
                     result.properties.cloud_cover,
                     result.properties.relative_orbit_number,
-                    url_pattern.search(result.properties.services.download.url).group(0),
+                    url_pattern.search(result.properties.services.download.url).group(
+                        0
+                    ),
                     result.properties.services.download.checksum,
                 )
                 for result in results
             ]
-            geometry = [
-                Polygon(result.geometry.polygon[0])
-                for result in results
-            ]
-        return gpd.GeoDataFrame(
+            geometry = [Polygon(result.geometry.polygon[0]) for result in results]
+        gdf = gpd.GeoDataFrame(
             data=data,
             columns=[
                 "Product_name",
@@ -200,41 +273,50 @@ class TheiaProvider(Provider):
             geometry=geometry,
             crs=4326,
         )
+        if latlon_bbox is not None:
+            gdf = self._filter(gdf, latlon_bbox)
+            logger.debug(
+                f"Number of products found on Theia after tile filtering: {len(gdf)}"
+            )
+        return gdf
 
-    def download(
-        self,
-        products: pd.DataFrame,
-        local_path: str = os.getcwd()) -> None:
+    def download(self, products: pd.DataFrame, local_path: str = os.getcwd()) -> None:
         """
         Download produtcs from catalog
         """
-        logger.debug(
-            f"List of products to download: {products['Product_name'].values}"
-        )
-        url_id = re.compile("SENTINEL2\/(.*?)\/download\/")
-        for _,product in products.iterrows():
+        logger.debug(f"List of products to download: {products['Product_name'].values}")
+        url_id = re.compile("SENTINEL2/(.*?)/download/")
+        for _, product in products.iterrows():
             # Create feature instance
-            data = {'type': 'Feature',
-                    'id': url_id.search(product.URL).group(1),
-                    'properties': {'collection':'', 
-                       'productIdentifier':product.Product_name, 
-                       'title':'', 
-                       'productType':'',
-                       'startDate': datetime.now(),
-                       'processingLevel':'',
-                       'waterCover': 0,
-                       'snowCover': 0,
-                       'cloudCover': 0,
-                       'relativeOrbitNumber': 0,
-                       'location': '', 
-                       'services': {'download': {'url': product.URL,
-                                                 'mimeType': 'application/zip',
-                                                 'checksum': product.Checksum}}},
-                       'geometry': {'coordinates': list()},
-                   } 
-            feature = Feature(requests_mgr=self.auth,**data)
+            data = {
+                "type": "Feature",
+                "id": url_id.search(product.URL).group(1),
+                "properties": {
+                    "collection": "",
+                    "productIdentifier": product.Product_name,
+                    "title": "",
+                    "productType": "",
+                    "startDate": datetime.now(),
+                    "processingLevel": "",
+                    "waterCover": 0,
+                    "snowCover": 0,
+                    "cloudCover": 0,
+                    "relativeOrbitNumber": 0,
+                    "location": "",
+                    "services": {
+                        "download": {
+                            "url": product.URL,
+                            "mimeType": "application/zip",
+                            "checksum": product.Checksum,
+                        }
+                    },
+                },
+                "geometry": {"coordinates": list()},
+            }
+            feature = Feature(requests_mgr=self.auth, **data)
             # Download
-            feature.download_archive(download_dir = local_path, renew_token = True)
+            feature.download_archive(download_dir=local_path, renew_token=True)
+
 
 @dataclass
 class EarthDataProvider(Provider):
@@ -317,14 +399,19 @@ class EarthDataProvider(Provider):
         bbox = None
         if tile_id is not None:
             # Extract ROI
-            bbox = tuple(get_bbox_mgrs_tile(tile_id))
+            bbox = tuple(mgrs.get_bbox_mgrs_tile(tile_id))
         if latlon_bbox is not None:
             bbox = tuple(latlon_bbox)
         # Request
         results = earthaccess.search_data(
             short_name=self.short_name,
             doi=self.doi,
-            temporal=(min_date, (datetime.strptime(max_date,"%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")),
+            temporal=(
+                min_date,
+                (datetime.strptime(max_date, "%Y-%m-%d") + timedelta(days=1)).strftime(
+                    "%Y-%m-%d"
+                ),
+            ),
             bounding_box=bbox,
         )
         logger.debug(f"Number of products found on EarthData: {len(results)}")
@@ -377,27 +464,20 @@ class EarthDataProvider(Provider):
             )
         return gdf
 
-    def download(
-        self,
-        products: pd.DataFrame,
-        local_path: str = os.getcwd()) -> None:
+    def download(self, products: pd.DataFrame, local_path: str = os.getcwd()) -> None:
         """
         Download produtcs from catalog
         """
-        logger.debug(
-            f"List of products to download: {products['Product_name'].values}"
-        )
+        logger.debug(f"List of products to download: {products['Product_name'].values}")
         results = []
         for _, product in products.iterrows():
             product_name = product.Product_name
-            product_dir = os.path.join(local_path,product_name)
-            os.makedirs(os.path.join(local_path,product_name),exist_ok=True)
+            product_dir = os.path.join(local_path, product_name)
+            os.makedirs(os.path.join(local_path, product_name), exist_ok=True)
             # Parse URL
-            urls = [ url for url in product.URL.split(',') ] 
+            urls = [url for url in product.URL.split(",")]
             results.append(earthaccess.download(urls, product_dir))
-        logger.info(
-            f"Download products: {results}"
-        )
+        logger.info(f"Download products: {results}")
 
 
 @dataclass
@@ -415,12 +495,16 @@ class EcostressProvider(EarthDataProvider):
         """
         Extract geometry from result
         """
+        geom = result["umm"]["SpatialExtent"]["HorizontalSpatialDomain"]["Geometry"][
+            "BoundingRectangles"
+        ][0]
         return bbox_to_polygon(
-            list(
-                result["umm"]["SpatialExtent"]["HorizontalSpatialDomain"]["Geometry"][
-                    "BoundingRectangles"
-                ][0].values()
-            )
+            [
+                geom["WestBoundingCoordinate"],
+                geom["SouthBoundingCoordinate"],
+                geom["EastBoundingCoordinate"],
+                geom["NorthBoundingCoordinate"],
+            ]
         )
 
     def _get_tile_id(self, result) -> str:
@@ -433,7 +517,7 @@ class EcostressProvider(EarthDataProvider):
 @dataclass
 class HLSProvider(EarthDataProvider):
     """
-    Provider for HLS 
+    Provider for HLS
     """
 
     def __post_init__(self):
@@ -517,7 +601,6 @@ class LandsatProvider(Provider):
     collection: str = "LANDSAT"
     auth: EarthExplorer = field(init=False)
 
-
     def __post_init__(self):
         """
         Initialize dataset
@@ -574,7 +657,7 @@ class LandsatProvider(Provider):
         bbox = None
         if tile_id is not None:
             # Extract ROI
-            bbox = tuple(get_bbox_mgrs_tile(tile_id))
+            bbox = tuple(mgrs.get_bbox_mgrs_tile(tile_id))
         if latlon_bbox is not None:
             bbox = tuple(latlon_bbox)
         # Request
@@ -628,22 +711,18 @@ class LandsatProvider(Provider):
         )
         return gdf
 
-    def download(
-        self,
-        products: pd.DataFrame,
-        local_path: str = os.getcwd()) -> None:
+    def download(self, products: pd.DataFrame, local_path: str = os.getcwd()) -> None:
         """
         Download produtcs from catalog
         """
-        logger.debug(
-            f"List of products to download: {products['Product_name'].values}"
-        )
+        logger.debug(f"List of products to download: {products['Product_name'].values}")
         for _, product in products.iterrows():
-            if os.path.isfile(os.path.join(local_path,product.URL+".tar")):
-                logger.info(f"Product directory for {product.Product_name} exists already. Skip product...")
+            if os.path.isfile(os.path.join(local_path, product.URL + ".tar")):
+                logger.info(
+                    f"Product directory for {product.Product_name} exists already. Skip product..."
+                )
                 continue
             self.auth.download(product.URL, output_dir=local_path)
-
 
 
 class Collection(Enum):
