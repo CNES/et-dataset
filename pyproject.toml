@@ -46,6 +46,7 @@ notebook = [
   "matplotlib",
   "jupyterlab",
   "notebook",
+  "ipywidgets",
 ]
 
 [project.urls]
