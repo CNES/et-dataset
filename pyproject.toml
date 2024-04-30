@@ -32,6 +32,7 @@ dependencies = [
   "shapely",
   "tqdm",
   "xarray",
+  "earthaccess",
   "sensorsio @ git+https://framagit.org/esarrazin/sensorsio.git",
   "theia-picker @ git+https://github.com/esarrazin/theia-picker.git",
   "landsatxplore @ git+https://github.com/esarrazin/landsatxplore.git",
