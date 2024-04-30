@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # coding: utf8
-
-import os
-
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
+import os
 from datetime import datetime
 
 import geopandas as gpd
