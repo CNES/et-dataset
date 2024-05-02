@@ -33,7 +33,7 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
     rgb = xr.DataArray(
         np.dstack((arr.red.data, arr.green.data, arr.blue.data)),
         arr.coords.assign(band=["r", "g", "b"]),
-        {"y": arr.dims["y"], "x": arr.dims["x"], "band": 3},
+        {"y": arr.sizes["y"], "x": arr.sizes["x"], "band": 3},
     )
     rgb.plot.imshow(
         ax=axes[0, 0], rgb="band", vmin=rgb.quantile(0.01), vmax=rgb.quantile(0.99)
