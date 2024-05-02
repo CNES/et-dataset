@@ -4,6 +4,7 @@
 
 # Python
 *.pyc
+.coverage
 __pycache__/
 
 # Notebooks
