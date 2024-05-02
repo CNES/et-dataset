@@ -84,6 +84,12 @@ cov = [
   "cov-report",
 ]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore",
+  "default:::etdataset",
+        ]
+
 [[tool.hatch.envs.all.matrix]]
 python = ["3.10", "3.11", "3.12"]
 
