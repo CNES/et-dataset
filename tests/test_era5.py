@@ -184,7 +184,7 @@ class ERA5ReadParams:
     "parameters",
     [
         # Default
-        # ERA5ReadParams(),
+        ERA5ReadParams(),
         # Other options
         ERA5ReadParams(variables=[era5.ERA5Var.TEMPERATURE]),
         ERA5ReadParams(
