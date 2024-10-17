@@ -8,21 +8,33 @@ Logging module
 """
 
 import logging
+import typing as t
+
+_T = t.TypeVar("_T")
 
 
-class Singleton(type):
-    _instances = {}
+class Singleton(type, t.Generic[_T]):
+    """
+    Singleton class
+    """
 
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances.keys():
+    # _instances: dict[Singleton[_T], _T] = {}  # noqa
+    _instances = {}  # type: ignore
+
+    def __call__(cls, *args: t.Any, **kwargs: t.Any) -> _T:
+        if cls not in cls._instances:
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
 
 
 class LoggerManager(object):
+    """
+    Class to manager logger through the modules
+    """
+
     __metaclass__ = Singleton
 
-    _loggers = {}
+    _loggers: dict[str, logging.Logger] = {}
 
     _level = logging.INFO
 
@@ -31,6 +43,9 @@ class LoggerManager(object):
 
     @staticmethod
     def get_logger(name=None):
+        """
+        Get logger
+        """
         if not name:
             logging.basicConfig(
                 level=LoggerManager._level,
@@ -38,7 +53,7 @@ class LoggerManager(object):
                 format="%(asctime)s :: %(levelname)s :: %(message)s",
             )
             return logging.getLogger()
-        elif name not in LoggerManager._loggers.keys():
+        elif name not in LoggerManager._loggers:
             logging.basicConfig(
                 level=LoggerManager._level,
                 datefmt="%y-%m-%d %H:%M:%S",
@@ -49,7 +64,9 @@ class LoggerManager(object):
 
     @staticmethod
     def set_level(level):
+        """
+        Set logger level
+        """
         LoggerManager._level = level
-        for name in LoggerManager._loggers.keys():
-            log = LoggerManager._loggers[name]
+        for _, log in LoggerManager._loggers.items():
             log.setLevel(LoggerManager._level)

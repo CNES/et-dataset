@@ -6,12 +6,14 @@
 """
 Remote sensing products
 """
+
+import datetime
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import List, Type
 
 import affine
-import datetime
 import numpy as np
 import rasterio as rio
 import xarray as xr
@@ -28,8 +30,6 @@ class ProductReaderException(Exception):
     Exception for ReaderProduct
     """
 
-    pass
-
 
 @dataclass
 class ProductReader:
@@ -38,10 +38,23 @@ class ProductReader:
     """
 
     path: str
-    tile: str = field(init=False)
+    bb: rio.coords.BoundingBox = field(init=False)
+    crs: str = field(init=False)
+    _tile: str = field(init=False)
     date: datetime.date = field(init=False)
     time: datetime.time = field(init=False)
     resolution: int = field(default=60)
+
+    @property
+    def tile(self):
+        return self._tile
+
+    @tile.setter
+    def tile(self, tile_id: str):
+        """
+        Set MGRS tile
+        """
+        self._tile = tile_id
 
     def rename_bands(self, data: xr.Dataset, name_mapping: dict) -> xr.Dataset:
         """
@@ -76,7 +89,6 @@ class LandsatReader(ProductReader):
     Reader for Landsat product
     """
 
-    bb: str = field(init=False)
     ds: landsat.Landsat = field(init=False)
 
     vis_band_mapping = {
@@ -114,7 +126,9 @@ class LandsatReader(ProductReader):
         self._tile = tile_id
         # Get bounding box for MRGS tile
         bb = mgrs.get_bbox_mgrs_tile(tile_id, False)
-        self.bb = utils.bb_transform(mgrs.get_crs_mgrs_tile(tile_id), self.ds.crs, bb)
+        self.bb = utils.bb_transform(
+            mgrs.get_crs_mgrs_tile(tile_id).to_string(), self.ds.crs, bb
+        )
         # Snap bbox
         self.bb = utils.bb_snap(bb, align=self.resolution)
         self.crs = self.ds.crs
@@ -157,6 +171,9 @@ class LandsatReader(ProductReader):
             bounds=self.bb,
             algorithm=rio.enums.Resampling.average,
         )
+        if ls_xr is None:
+            raise ValueError(f"No data found ({self.path})")
+
         # Add transform
         ls_xr.attrs["transform"] = affine.Affine(
             self.resolution, 0.0, self.bb.left, 0.0, -self.resolution, self.bb.top
@@ -214,6 +231,9 @@ class LandsatReader(ProductReader):
             bounds=self.bb,
             algorithm=rio.enums.Resampling.average,
         )
+        if ls_xr is None:
+            raise ValueError(f"No data found ({self.path})")
+
         # Add transform
         ls_xr.attrs["transform"] = affine.Affine(
             self.resolution, 0.0, self.bb.left, 0.0, -self.resolution, self.bb.top
@@ -246,6 +266,7 @@ class LandsatReader(ProductReader):
 
         return ls_xr
 
+
 @dataclass
 class HLSReader(ProductReader):
     """
@@ -254,11 +275,11 @@ class HLSReader(ProductReader):
     This product can not be used for TIR (no emissivity).
     """
 
-    bb: str = field(init=False)
     ds: hls.HLS = field(init=False)
 
     class HLSParams(Enum):
-        HLSLandsat = {"bands":[
+        HLSLandsat = {
+            "bands": [
                 hls.HLS.Band.B2,
                 hls.HLS.Band.B3,
                 hls.HLS.Band.B4,
@@ -267,44 +288,45 @@ class HLSReader(ProductReader):
                 hls.HLS.Band.B7,
             ],
             "mapping": {
-                            "B02": "blue",
-                            "B03": "green",
-                            "B04": "red",
-                            "B05": "nir",
-                            "B06": "swir1",
-                            "B07": "swir2",
-                        },
-            }
-        HLSSentinel2 = {"bands":[
+                "B02": "blue",
+                "B03": "green",
+                "B04": "red",
+                "B05": "nir",
+                "B06": "swir1",
+                "B07": "swir2",
+            },
+        }
+        HLSSentinel2 = {
+            "bands": [
                 hls.HLS.Band.B2,
                 hls.HLS.Band.B3,
                 hls.HLS.Band.B4,
                 hls.HLS.Band.B8A,
                 hls.HLS.Band.B11,
                 hls.HLS.Band.B12,
-                        ],
-            "mapping":{
-                            "B02": "blue",
-                            "B03": "green",
-                            "B04": "red",
-                            "B8A": "nir",
-                            "B11": "swir1",
-                            "B12": "swir2",
-                        },
-            }
+            ],
+            "mapping": {
+                "B02": "blue",
+                "B03": "green",
+                "B04": "red",
+                "B8A": "nir",
+                "B11": "swir1",
+                "B12": "swir2",
+            },
+        }
 
     def __post_init__(self):
         """
         Initialize dataset
         """
-        # Test if band 8A is available to know if 
+        # Test if band 8A is available to know if
         # it is a HLSLandsat or HLSSentinel2
         self.params = self.HLSParams.HLSLandsat
         try:
             _ = hls.HLSSentinel2(self.path).build_band_path(hls.HLS.Band.B8A)
             self.params = self.HLSParams.HLSSentinel2
         except FileNotFoundError:
-                pass
+            pass
         # Create an instance of HLS from the product path
         if self.params == self.HLSParams.HLSLandsat:
             self.ds = hls.HLSLandsat(self.path)
@@ -337,21 +359,28 @@ class HLSReader(ProductReader):
         Read VIS bands
         """
         # Read HLS data (optical bands)
-        hls_xr = self.ds.read_as_xarray(self.params.value["bands"],
+        hls_xr = self.ds.read_as_xarray(
+            self.params.value["bands"],
             resolution=self.resolution,
             crs=self.crs,
             bounds=self.bb,
             algorithm=rio.enums.Resampling.average,
         )
+        if hls_xr is None:
+            raise ValueError(f"No data found ({self.path})")
 
         # Filter pixels
         if use_mask:
             not_water_mask = ~utils.extract_bitmask(
                 hls_xr[hls.HLS.QA.value].values, 5
-            ).astype(bool)  # Bit 5 water
+            ).astype(
+                bool
+            )  # Bit 5 water
             clear_pixels_mask = ~utils.extract_bitmask(
                 hls_xr[hls.HLS.QA.value].values, 1
-            ).astype(bool)  # Bit 1 cloud
+            ).astype(
+                bool
+            )  # Bit 1 cloud
             mask = np.logical_and(not_water_mask, clear_pixels_mask)
             hls_xr = hls_xr.where(mask, np.nan)
 
@@ -389,13 +418,13 @@ class HLSReader(ProductReader):
         """
         raise ProductReaderException("No TIR bands for HLS product")
 
+
 @dataclass
 class Sentinel2Reader(ProductReader):
     """
     Reader for Sentinel2 product
     """
 
-    bb: str = field(init=False)
     ds: sentinel2.Sentinel2 = field(init=False)
 
     vis_band_mapping = {
@@ -464,7 +493,9 @@ class Sentinel2Reader(ProductReader):
         if use_mask:
             not_water_mask = ~utils.extract_bitmask(
                 s2_xr[sentinel2.Sentinel2.MG2.value].values, 0
-            ).astype(bool)  # Bit 0 water
+            ).astype(
+                bool
+            )  # Bit 0 water
             clear_pixels_mask = np.where(
                 s2_xr[sentinel2.Sentinel2.CLM.value].values == 0, 1, 0
             )  # Clear pixels
@@ -514,7 +545,6 @@ class EcostressReader(ProductReader):
     Reader for Ecostress (collection V2) product
     """
 
-    bb: str = field(init=False)
     ds: ecostress_v2.EcostressV2 = field(init=False)
 
     tir_band_mapping = {
@@ -553,6 +583,8 @@ class EcostressReader(ProductReader):
             bounds=self.bb,
             algorithm=rio.enums.Resampling.cubic,
         )
+        if eco_xr is None:
+            raise ValueError(f"No data found ({self.path})")
 
         # Filter QA from ecostress
         # https://ecostress.jpl.nasa.gov/downloads/userguides/2_ECOSTRESS_L2_UserGuide_06182019.pdf
@@ -597,16 +629,19 @@ class EcostressReader(ProductReader):
         return eco_xr
 
 
-def get_product_reader(product_path: str) -> ProductReader:
+def get_product_reader(product_path: str, resolution=60) -> ProductReader:
     """
     Get the product reader
     """
-    reader = None
-    for product_reader in [LandsatReader, Sentinel2Reader, EcostressReader, HLSReader]:
+    reader_list: List[Type[ProductReader]] = [
+        LandsatReader,
+        Sentinel2Reader,
+        EcostressReader,
+        HLSReader,
+    ]
+    for product_reader in reader_list:
         try:
-            reader = product_reader(product_path)
-            if reader is not None:
-                return reader
+            return product_reader(product_path, resolution=resolution)
         except Exception:
             continue
     raise ProductReaderException("No reader compatible")

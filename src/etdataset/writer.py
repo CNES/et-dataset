@@ -6,6 +6,7 @@
 """
 Common function
 """
+
 import os
 
 import numpy as np
@@ -15,7 +16,19 @@ import xarray as xr
 from rasterio.enums import ColorInterp
 from scipy.io import savemat
 
-BANDS = ["red", "blue", "green", "nir", "lst", "emis", "ndvi", "albedo", "lai"]
+BANDS = [
+    "red",
+    "blue",
+    "green",
+    "nir",
+    "lst",
+    "emis",
+    "ndvi",
+    "albedo",
+    "lai",
+    "ra",
+    "rg",
+]
 
 
 def write_dataset(

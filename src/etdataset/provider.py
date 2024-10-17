@@ -6,12 +6,14 @@
 """
 Manage provider for THEIA, EarthData and earthExplorer
 """
+
 import os
 import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import Enum
+from typing import Any, List, Tuple
 
 import earthaccess
 import geopandas as gpd
@@ -64,7 +66,7 @@ class Provider:
         self,
         min_date: str,
         max_date: str,
-        tile_ids: list[str] | None = None,
+        tile_ids: str | None = None,
         bbox_latlon: rio.coords.BoundingBox | None = None,
         max_cloud_cover: float = 20,
     ) -> gpd.GeoDataFrame:
@@ -237,25 +239,29 @@ class TheiaProvider(Provider):
         )
         # Convert to GeoDataFrame
         url_pattern = re.compile("(.*?/download/)")
-        data = []
+        data: List[Tuple[str, date, str, str, str, str, str, str, str]] = []
         geometry = []
         if len(results) > 0:
-            data = [
-                (
-                    result.properties.product_identifier,
-                    result.properties.acquisition_date.date(),
-                    self.name,
-                    result.properties.collection,
-                    result.properties.tile[1:],
-                    result.properties.cloud_cover,
-                    result.properties.relative_orbit_number,
-                    url_pattern.search(result.properties.services.download.url).group(
-                        0
-                    ),
-                    result.properties.services.download.checksum,
+            for result in results:
+                url_matching = url_pattern.search(
+                    result.properties.services.download.url
                 )
-                for result in results
-            ]
+                if url_matching is None:
+                    continue
+                url = url_matching.group(0)
+                data.append(
+                    (
+                        result.properties.product_identifier,
+                        result.properties.acquisition_date.date(),
+                        self.name,
+                        result.properties.collection,
+                        result.properties.tile[1:],
+                        result.properties.cloud_cover,
+                        result.properties.relative_orbit_number,
+                        url,
+                        result.properties.services.download.checksum,
+                    )
+                )
             geometry = [Polygon(result.geometry.polygon[0]) for result in results]
         gdf = gpd.GeoDataFrame(
             data=data,
@@ -288,9 +294,13 @@ class TheiaProvider(Provider):
         url_id = re.compile("SENTINEL2/(.*?)/download/")
         for _, product in products.iterrows():
             # Create feature instance
-            data = {
+            url_id_matching = url_id.search(product.URL)
+            if url_id_matching is None:
+                continue
+            data_id = url_id_matching.group(1)
+            data: dict[str, Any] = {
                 "type": "Feature",
-                "id": url_id.search(product.URL).group(1),
+                "id": data_id,
                 "properties": {
                     "collection": "",
                     "productIdentifier": product.Product_name,
@@ -352,25 +362,28 @@ class EarthDataProvider(Provider):
             )
         self.auth = earthaccess.login()
 
-    def _get_geometry(self, result: DataGranule) -> None:
+    @abstractmethod
+    def _get_geometry(self, result: DataGranule) -> Polygon:
         """
         Extract geometry from result
         """
-        return None
+        pass
 
-    def _get_tile_id(self, result: DataGranule) -> None:
+    @abstractmethod
+    def _get_tile_id(self, result: DataGranule) -> str:
         """
         Extract tile ID from result
         """
-        return None
+        pass
 
-    def _get_cloud_cover(self, result: DataGranule) -> None:
+    @abstractmethod
+    def _get_cloud_cover(self, result: DataGranule) -> float:
         """
         Extract tile ID from result
         """
-        return None
+        pass
 
-    def _get_date(self, result: DataGranule) -> None:
+    def _get_date(self, result: DataGranule) -> date:
         """
         Extract acquisition date
         """
@@ -511,7 +524,10 @@ class EcostressProvider(EarthDataProvider):
         """
         Extract tile ID from result
         """
-        return MGRS_FORMAT.search(result["umm"]["GranuleUR"]).group(0)
+        matching = MGRS_FORMAT.search(result["umm"]["GranuleUR"])
+        if matching is None:
+            raise ValueError("Tile not found in result")
+        return matching.group(0)
 
 
 @dataclass
@@ -528,7 +544,7 @@ class HLSProvider(EarthDataProvider):
         if self.__class__ == EarthDataProvider:
             raise TypeError("Cannot instantiate EarthDataProvider class.")
 
-    def _get_geometry(self, result) -> None:
+    def _get_geometry(self, result) -> Polygon:
         """
         Extract geometry from result
         """
@@ -624,7 +640,7 @@ class LandsatProvider(Provider):
         self.catalog = API(username, password)
         self.auth = EarthExplorer(username, password)
 
-    def _get_geometry(self, result) -> None:
+    def _get_geometry(self, result) -> Polygon:
         """
         Extract geometry from result
         """

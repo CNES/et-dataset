@@ -5,11 +5,12 @@
 import argparse
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime
 
 import pandas as pd
 
-from etdataset.api import create_dataset, download, search, select_products
+from etdataset.api import create_dataset, download, search, select
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
 from etdataset.utils import (
@@ -29,8 +30,51 @@ def CLIException(Exception):
     """
 
 
+@dataclass
+class CreateArgs(argparse.Namespace):
+    vis: str
+    tir: str | None
+    radiation: str | None
+    tile: str | None
+    use_mask: bool
+    output: str
+    matlab: bool
+
+
+@dataclass
+class SelectArgs(argparse.Namespace):
+    coll1: Collection
+    coll2: Collection
+    min_date: str
+    max_date: str
+    max_cloud_cover: int
+    delta: str
+    roi: str | None
+    tile: str | None
+    min_roi_overlap: int
+    min_product_overlap: int
+    output: str
+
+
+@dataclass
+class SearchArgs(argparse.Namespace):
+    collection: Collection
+    min_date: str
+    max_date: str
+    max_cloud_cover: int
+    roi: str | None
+    tile: str | None
+    output: str
+
+
+@dataclass
+class DownloadArgs(argparse.Namespace):
+    list: str
+    output: str
+
+
 # sub-command functions
-def cli_create(args: argparse.ArgumentParser) -> None:
+def cli_create(args: CreateArgs) -> None:
     """
     Create dataset
     """
@@ -54,7 +98,11 @@ def cli_create(args: argparse.ArgumentParser) -> None:
 
     # Create dataset
     data = create_dataset(
-        vis_path=args.vis, tir_path=args.tir, tile_id=args.tile, use_mask=args.use_mask
+        vis_path=args.vis,
+        tir_path=args.tir,
+        tile_id=args.tile,
+        radiation=args.radiation,
+        use_mask=args.use_mask,
     )
 
     # Write dataset
@@ -65,7 +113,7 @@ def cli_create(args: argparse.ArgumentParser) -> None:
             write_dataset(data, directory=args.output)
 
 
-def cli_select(args: argparse.ArgumentParser) -> None:
+def cli_select(args: SelectArgs) -> None:
     """
     Select products from 2 collections
     """
@@ -116,10 +164,10 @@ def cli_select(args: argparse.ArgumentParser) -> None:
     roi_crs = None
     if args.tile is not None:
         roi_bbox, roi_crs = get_bbox_from_mgrs_tile(args.tile)
-    else:
+    elif args.roi is not None:
         roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
 
-    products1, products2, matches = select_products(
+    products1, products2, matches = select(
         args.coll1,
         args.coll2,
         args.min_date,
@@ -140,7 +188,7 @@ def cli_select(args: argparse.ArgumentParser) -> None:
     write_results(products2, os.path.join(args.output, f"products_{args.coll2}.csv"))
 
 
-def cli_search(args: argparse.ArgumentParser) -> None:
+def cli_search(args: SearchArgs) -> None:
     """
     Search products
     """
@@ -190,7 +238,7 @@ def cli_search(args: argparse.ArgumentParser) -> None:
     write_results(results, args.output)
 
 
-def cli_download(args: argparse.ArgumentParser) -> None:
+def cli_download(args: DownloadArgs) -> None:
     """
     Download products
     """
@@ -200,7 +248,7 @@ def cli_download(args: argparse.ArgumentParser) -> None:
         raise CLIException(f"File with products lit not found ({args.roi})")
 
     try:
-        products = read_product_list(args.list)
+        products = read_product_list(args.list, 4326)
     except Exception as e:
         raise CLIException(f"Error while reading product list: {e}")
 
@@ -219,7 +267,7 @@ def get_parser() -> argparse.ArgumentParser:
     # create the parser for the "create" command
     parser_create = subparsers.add_parser(
         "create",
-        help="Create dataset from Landsat/Ecostress/Sentinel2 products. "
+        help="Create dataset from Landsat/Ecostress/Sentinel2/HLS products. "
         "The dataset is resampling at 60m resolution and corresponds to a MGRS tile.",
     )
     parser_create.add_argument(
@@ -232,6 +280,9 @@ def get_parser() -> argparse.ArgumentParser:
         "--tir",
         type=str,
         help="Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.",
+    )
+    parser_create.add_argument(
+        "--radiation", type=str, required=True, help="Path to radiation product"
     )
     parser_create.add_argument(
         "-t", "--tile", type=str, help="Tile ID (Only for Landsat)"

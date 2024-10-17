@@ -6,6 +6,7 @@
 """
 Select product
 """
+
 from datetime import timedelta
 
 import geopandas as gpd
@@ -24,7 +25,7 @@ logger = LoggerManager.get_logger(__name__)
 def filter_with_roi(
     gdf: gpd.GeoDataFrame,
     roi_bbox: rio.coords.BoundingBox,
-    roi_crs: CRS | int,
+    roi_crs: CRS | None,
     min_overlap: float = 30,
 ) -> gpd.GeoDataFrame:
     """
