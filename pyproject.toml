@@ -24,6 +24,8 @@ classifiers = [
 ]
 dependencies = [
   "affine",
+  "cdsapi",
+  "cftime",
   "geopandas",
   "numpy",
   "pandas",
@@ -33,8 +35,8 @@ dependencies = [
   "tqdm",
   "xarray",
   "earthaccess",
-  "sensorsio @ git+https://framagit.org/esarrazin/sensorsio.git",
-  "theia-picker @ git+https://github.com/esarrazin/theia-picker.git",
+  "sensorsio",
+  "theia-picker",
   "landsatxplore @ git+https://github.com/esarrazin/landsatxplore.git",
 ]
 
@@ -147,12 +149,17 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
     "affine",
+    "earthaccess.*",
     "geopandas",
     "fiona.*",
+    "landsatxplore.*",
     "matplotlib.*",
     "scipy.*",
     "rasterio.*",
     "sensorsio.*",
     "shapely.*",
+    "theia_picker.*",
+    "cdsapi",
+    "pytest",
         ]
 ignore_missing_imports = true
