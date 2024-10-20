@@ -407,7 +407,9 @@ def interpolate(
             dst_bounds = rio.coords.BoundingBox(*src_bounds)
 
         # If we change resolution
-        if src_resolutionx != resolution or src_resolutiony != resolution:
+        if resolution is not None and (
+            src_resolutionx != resolution or src_resolutiony != resolution
+        ):
             need_to_reproject = True
             dst_resolutionx = resolution
             dst_resolutiony = resolution
