@@ -26,8 +26,8 @@ BANDS = [
     "ndvi",
     "albedo",
     "lai",
-    "ra",
-    "rg",
+    "rsd",
+    "rld",
 ]
 
 

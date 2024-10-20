@@ -14,7 +14,7 @@ import numpy as np
 import xarray as xr
 
 
-def rescale(data: np.array, qmin: float, qmax: float) -> np.array:
+def rescale(data: np.ndarray, qmin: float, qmax: float) -> np.ndarray:
     arr = np.clip(data, qmin, qmax)
     min = np.nanmin(arr)
     max = np.nanmax(arr)
@@ -34,7 +34,7 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
     ):
         nb_plots += 1
     for band in bands:
-        if band in ["lst", "emis", "albedo", "ndvi", "lai", "rg", "ra"]:
+        if band in ["lst", "emis", "albedo", "ndvi", "lai", "rsd", "rld"]:
             nb_plots += 1
     ncol = 2
     nrow = math.ceil(nb_plots / 2)
@@ -54,7 +54,8 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
             arr.coords.assign(band=["r", "g", "b"]),
             {"y": arr.sizes["y"], "x": arr.sizes["x"], "band": 3},
         )
-        rgb.plot.imshow(
+        xr.plot.imshow(  # type: ignore
+            darray=rgb,
             ax=axes[irow, icol],
             rgb="band",
             vmin=rgb.quantile(0.01),
@@ -136,28 +137,28 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
             icol = 0
             irow += 1
 
-    # Rg
-    if "rg" in bands:
-        arr.rg.plot(
+    # Downwelling shortwave radiation
+    if "rsd" in bands:
+        arr.rsd.plot(
             ax=axes[irow, icol],
-            vmin=arr.rg.quantile(0.01),
-            vmax=arr.rg.quantile(0.99),
+            vmin=arr.rsd.quantile(0.01),
+            vmax=arr.rsd.quantile(0.99),
         )
-        axes[irow, icol].set_title("Rg")
+        axes[irow, icol].set_title("Downwelling shortwave radiation")
         axes[irow, icol].grid(True)
         icol += 1
         if icol == 2:
             icol = 0
             irow += 1
 
-    # Ra
-    if "ra" in bands:
-        arr.ra.plot(
+    # Downwelling longwave radiation
+    if "rld" in bands:
+        arr.rld.plot(
             ax=axes[irow, icol],
-            vmin=arr.ra.quantile(0.01),
-            vmax=arr.ra.quantile(0.99),
+            vmin=arr.rld.quantile(0.01),
+            vmax=arr.rld.quantile(0.99),
         )
-        axes[irow, icol].set_title("Ra")
+        axes[irow, icol].set_title("Downwelling longwave radiation")
         axes[irow, icol].grid(True)
         icol += 1
         if icol == 2:
