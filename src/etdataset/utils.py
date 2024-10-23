@@ -9,6 +9,7 @@ Common function
 
 import re
 from datetime import datetime
+from typing import Tuple
 
 import geopandas as gpd
 import pandas as pd
@@ -69,7 +70,7 @@ def bbox_to_polygon(bounds: list[float] | rio.coords.BoundingBox) -> Polygon:
     )
 
 
-def get_bbox_from_roi(roi_path: str) -> (rio.coords.BoundingBox, CRS):
+def get_bbox_from_roi(roi_path: str) -> Tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a ROI shapefile
@@ -82,7 +83,7 @@ def get_bbox_from_roi(roi_path: str) -> (rio.coords.BoundingBox, CRS):
         raise BBoxException(f"Unable to read shapefile {roi_path}: {e}")
 
 
-def get_bbox_from_mgrs_tile(tile: str) -> (rio.coords.BoundingBox, CRS):
+def get_bbox_from_mgrs_tile(tile: str) -> Tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a MGRS_tile
@@ -135,7 +136,10 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
     # Convert geometry
     def convert_polygon(poly: str) -> Polygon:
         pattern = re.compile("POLYGON (((.*?)))")
-        coords = pattern.search(poly).group(1)
+        matching = pattern.search(poly)
+        if matching is None:
+            raise ValueError("Error during polygon conversion")
+        coords = matching.group(1)
         coords = (
             tuple(float(item) for item in coord.split(" ") if item.strip())
             for coord in coords.split(",")

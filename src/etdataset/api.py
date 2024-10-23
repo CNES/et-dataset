@@ -3,22 +3,27 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import os
 from datetime import datetime
+from typing import Tuple
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio as rio
 import xarray as xr
+from dateutil.parser import parse as parse_dateutil
 from pyproj import CRS
 from sensorsio import utils
 
-from etdataset.logging import LoggerManager
-from etdataset.provider import Collection, get_provider
-from etdataset.reader import get_product_reader
-from etdataset.selection import filter_with_roi, select_products
-from etdataset.utils import check_mgrs_format, get_bbox_from_mgrs_tile
+from .logging import LoggerManager
+from .provider import Collection, get_provider
+from .reader import get_product_reader
+from .selection import filter_with_roi, select_products
+from .utils import check_mgrs_format, get_bbox_from_mgrs_tile
+from .era5 import ERA5Data, ERA5Var, interpolate_on_grid
 
 logger = LoggerManager.get_logger(__name__)
+
+RESOLUTION = 60
 
 
 class APIException(Exception):
@@ -33,10 +38,10 @@ def parse_date(date_str: str) -> datetime:
     """
     try:
         date = datetime.strptime(date_str, "%Y-%m-%d")
-    except ValueError:
+    except ValueError as exc:
         raise APIException(
             f"Error: The expected format for date must be Year-Month-Day (got: {date_str})"
-        )
+        ) from exc
     return date
 
 
@@ -44,6 +49,7 @@ def create_dataset(
     vis_path: str,
     tir_path: str | None = None,
     tile_id: str | None = None,
+    radiation: str | None = None,
     use_mask: bool = False,
 ) -> xr.Dataset:
     """
@@ -52,8 +58,8 @@ def create_dataset(
     if tir_path is None:
         tir_path = vis_path
     # Get reader
-    vis_reader = get_product_reader(vis_path)
-    tir_reader = get_product_reader(tir_path)
+    vis_reader = get_product_reader(vis_path, resolution=RESOLUTION)
+    tir_reader = get_product_reader(tir_path, resolution=RESOLUTION)
 
     # Check tile
     if vis_reader.tile is None and tir_reader.tile is None:
@@ -79,7 +85,7 @@ def create_dataset(
     common_bbox, common_crs = utils.bb_common(
         bounds=[vis_reader.bb, tir_reader.bb],
         src_crs=[vis_reader.crs, tir_reader.crs],
-        snap=60,
+        snap=RESOLUTION,
         target_crs=vis_reader.crs,
     )
     vis_reader.crs = common_crs
@@ -99,6 +105,46 @@ def create_dataset(
     merged_xr = xr.merge((vis_xr, tir_xr), combine_attrs="no_conflicts")
     logger.debug(f"Merged: {merged_xr.attrs}")
 
+    # Read flux
+    if radiation is not None:
+        logger.debug(f"Read radiation data in {radiation}")
+        acquisition_datetime = datetime.combine(merged_xr.tir_date, merged_xr.tir_time)
+        radiation_ds = ERA5Data(radiation)
+        if "ssrdc" not in radiation_ds.get_available_variables():
+            raise ValueError(f"Variable 'ssrdc' is missing in {radiation}")
+        if "strdc" not in radiation_ds.get_available_variables():
+            raise ValueError(f"Variable 'strdc' is missing in {radiation}")
+        if merged_xr.tir_date not in list(
+            set(
+                [parse_dateutil(dt).date() for dt in radiation_ds.get_available_dates()]
+            )
+        ):
+            raise ValueError(f"Date {merged_xr.tir_date} is missing in {radiation}")
+        # Get data interplate for the acquisition time
+        rsd = radiation_ds.get(
+            ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD, date=acquisition_datetime
+        )
+        rld = radiation_ds.get(
+            ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD, date=acquisition_datetime
+        )
+        # Transform radiation in W.m-2 TODO: Put the factor in ERA5
+        rsd /= 3600
+        rld /= 3600
+        # Spatial interpolation
+        grid = merged_xr["red"]
+        # TODO: Improve API for interpolate on grid
+        grid.attrs = {
+            "crs": merged_xr.crs,
+            "bounds": None,
+            "transform": merged_xr.transform,
+            "resolution": None,
+        }
+        rsd = interpolate_on_grid(rsd, grid)  # type: ignore
+        rld = interpolate_on_grid(rld, grid)  # type: ignore
+        merged_xr["rsd"] = rsd
+        merged_xr["rld"] = rld
+        # xr.merge((merged_xr, rsd, rld), combine_attrs="no_conflicts")
+
     return merged_xr
 
 
@@ -108,7 +154,7 @@ def search(
     max_date: str,
     tile_id: str | None = None,
     roi_bbox: rio.coords.BoundingBox | None = None,
-    roi_crs: CRS | int | None = None,
+    roi_crs: CRS | None = None,
     max_cloud_cover: float = 20,
     min_roi_overlap: float = 0,
 ) -> gpd.GeoDataFrame:
@@ -130,9 +176,11 @@ def search(
         )
 
     latlon_bbox = None
-    if roi_bbox is not None:
+    if roi_bbox is not None and roi_crs is not None:
         # Convert to latlon
-        latlon_bbox = utils.bb_transform(roi_crs, 4326, roi_bbox)
+        latlon_bbox = utils.bb_transform(
+            roi_crs.to_string(), CRS.from_epsg(4326).to_string(), roi_bbox
+        )
 
     # Get provider
     provider = get_provider(collection)
@@ -175,7 +223,7 @@ def download(
     # Download
     for collection, group in products.groupby("Collection"):
         logger.debug(f"Collection: {collection}")
-        provider = get_provider(Collection[collection])
+        provider = get_provider(Collection[str(collection)])
         logger.debug(f"Provider: {provider}")
         urls = group[["Product_name", "URL"]].copy()
         if "Checksum" in group.columns:
@@ -190,29 +238,27 @@ def select(
     collection2: Collection,
     min_date: str,
     max_date: str,
-    delta: str | None = "3 day",
+    delta: str = "3 day",
     tile_id: str | None = None,
-    roi_bbox: rio.coords.BoundingBox = None,
-    roi_crs: CRS | int = None,
+    roi_bbox: rio.coords.BoundingBox | None = None,
+    roi_crs: CRS | None = None,
     max_cloud_cover: float = 20,
     min_roi_overlap: float = 40,
     min_product_overlap: float = 40,
     only_best_match: bool = False,
-) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Select products
     """
     # Checks
-    min_date_str = min_date
-    min_date = parse_date(min_date_str)
-    max_date_str = max_date
-    max_date = parse_date(max_date_str)
-    if max_date < min_date:
+    min_datetime = parse_date(min_date)
+    max_datetime = parse_date(max_date)
+    if max_datetime < min_datetime:
         raise APIException(
             "Maximum acquisition date must be more recent than minimum date"
         )
     try:
-        delta = pd.Timedelta(delta)
+        delta_time = pd.Timedelta(delta)
     except ValueError:
         raise APIException(
             "Error: The format for delta acquisition time is not recognized (ex: 1 day)"
@@ -239,8 +285,8 @@ def select(
     # Search into collection 1
     selection1 = search(
         collection1,
-        min_date_str,
-        max_date_str,
+        min_date,
+        max_date,
         tile_id=tile_id,
         roi_bbox=roi_bbox,
         roi_crs=roi_crs,
@@ -251,8 +297,8 @@ def select(
     # Search into collection 2
     selection2 = search(
         collection2,
-        min_date_str,
-        max_date_str,
+        min_date,
+        max_date,
         tile_id=tile_id,
         roi_bbox=roi_bbox,
         roi_crs=roi_crs,
@@ -262,11 +308,11 @@ def select(
 
     if len(selection1) == 0 and len(selection2) == 0:
         logger.warning("No product in one of the collection")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     # Select matches
     matches = select_products(
-        selection1, selection2, delta, min_product_overlap, only_best_match
+        selection1, selection2, delta_time, min_product_overlap, only_best_match
     )
     matches = matches.rename(
         columns={
@@ -299,8 +345,8 @@ def select(
         )
 
     else:
-        selection1 = pd.Dataframe()
-        selection2 = pd.Dataframe()
+        selection1 = pd.DataFrame()
+        selection2 = pd.DataFrame()
 
     # Return results
     return selection1, selection2, matches

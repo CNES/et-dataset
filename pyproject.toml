@@ -24,6 +24,8 @@ classifiers = [
 ]
 dependencies = [
   "affine",
+  "cdsapi",
+  "cftime",
   "geopandas",
   "numpy",
   "pandas",
@@ -33,8 +35,8 @@ dependencies = [
   "tqdm",
   "xarray",
   "earthaccess",
-  "sensorsio @ git+https://framagit.org/esarrazin/sensorsio.git",
-  "theia-picker @ git+https://github.com/esarrazin/theia-picker.git",
+  "sensorsio",
+  "theia-picker",
   "landsatxplore @ git+https://github.com/esarrazin/landsatxplore.git",
 ]
 
@@ -46,6 +48,7 @@ notebook = [
   "matplotlib",
   "jupyterlab",
   "notebook",
+  "ipywidgets",
 ]
 
 [project.urls]
@@ -82,6 +85,12 @@ cov = [
   "test-cov",
   "cov-report",
 ]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore",
+  "default:::etdataset",
+        ]
 
 [[tool.hatch.envs.all.matrix]]
 python = ["3.10", "3.11", "3.12"]
@@ -140,12 +149,17 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
     "affine",
+    "earthaccess.*",
     "geopandas",
     "fiona.*",
+    "landsatxplore.*",
     "matplotlib.*",
     "scipy.*",
     "rasterio.*",
     "sensorsio.*",
     "shapely.*",
+    "theia_picker.*",
+    "cdsapi",
+    "pytest",
         ]
 ignore_missing_imports = true

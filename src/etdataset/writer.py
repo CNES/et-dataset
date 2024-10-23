@@ -6,6 +6,7 @@
 """
 Common function
 """
+
 import os
 
 import numpy as np
@@ -15,14 +16,26 @@ import xarray as xr
 from rasterio.enums import ColorInterp
 from scipy.io import savemat
 
-BANDS = ["red", "blue", "green", "nir", "lst", "emis", "ndvi", "albedo", "lai"]
+BANDS = [
+    "red",
+    "blue",
+    "green",
+    "nir",
+    "lst",
+    "emis",
+    "ndvi",
+    "albedo",
+    "lai",
+    "rsd",
+    "rld",
+]
 
 
 def write_dataset(
     xrds: xr.Dataset, bands: list[str] = BANDS, directory: str = os.getcwd()
 ):
-    row = xrds.dims["y"]
-    col = xrds.dims["x"]
+    row = xrds.sizes["y"]
+    col = xrds.sizes["x"]
     if bands is None:
         bands = [i for i in xrds.data_vars]
     if xrds.attrs["vis"] == xrds.attrs["tir"]:
@@ -52,8 +65,8 @@ def write_dataset(
 
 
 def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
-    row = xrds.dims["y"]
-    col = xrds.dims["x"]
+    row = xrds.sizes["y"]
+    col = xrds.sizes["x"]
     if xrds.attrs["vis"] == xrds.attrs["tir"]:
         filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
     else:

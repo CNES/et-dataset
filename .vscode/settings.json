@@ -1,0 +1,27 @@
+{
+    "python.defaultInterpreterPath": "${userHome}/pyenvs/etdataset/bin/python3",
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestPath": "${userHome}/pyenvs/etdataset/bin/pytest",
+    "python.testing.unittestEnabled": false,
+    "pylint.enabled": true,
+    "pylint.args": [
+        "logging-format-style=fstr",
+    ],
+    "mypy-type-checker.args": [
+        "--ignore-missing-imports",
+        "--follow-imports=silent",
+        "--show-column-numbers"
+    ],
+    "flake8.args": [
+        "--max-line-length=120",
+    ],
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/venv/**": true,
+    },
+    "python.envFile": "${workspaceFolder}/.env",
+}
