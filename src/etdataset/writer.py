@@ -29,6 +29,9 @@ BANDS = [
     "rsd",
     "rld",
     "fdiff",
+    "qa",
+    "cloud",
+    "water",
 ]
 
 
