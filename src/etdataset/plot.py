@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
+from matplotlib.colors import ListedColormap
+
 
 def rescale(data: np.ndarray, qmin: float, qmax: float) -> np.ndarray:
     arr = np.clip(data, qmin, qmax)
@@ -34,7 +36,19 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
     ):
         nb_plots += 1
     for band in bands:
-        if band in ["lst", "emis", "albedo", "ndvi", "lai", "rsd", "rld"]:
+        if band in [
+            "lst",
+            "emis",
+            "cloud",
+            "water",
+            "qa",
+            "albedo",
+            "ndvi",
+            "lai",
+            "rsd",
+            "rld",
+            "fdiff",
+        ]:
             nb_plots += 1
     ncol = 2
     nrow = math.ceil(nb_plots / 2)
@@ -109,6 +123,40 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
             icol = 0
             irow += 1
 
+    # Water
+    if "water" in bands:
+        valid_cMap = ListedColormap([(0.0, 0.0, 0.0, 0.0), (0.0, 0.0, 1.0, 1.0)])
+        arr.water.plot(ax=axes[irow, icol], cmap=valid_cMap, add_colorbar=False)
+        axes[irow, icol].set_title("Water")
+        axes[irow, icol].grid(True)
+        icol += 1
+        if icol == 2:
+            icol = 0
+            irow += 1
+
+    # Cloud
+    if "cloud" in bands:
+        valid_cMap = ListedColormap([(0.0, 0.0, 0.0, 0.0), (0.5, 0.5, 0.5, 1.0)])
+        arr.cloud.plot(ax=axes[irow, icol], cmap=valid_cMap, add_colorbar=False)
+        axes[irow, icol].set_title("Cloud")
+        axes[irow, icol].grid(True)
+        icol += 1
+        if icol == 2:
+            icol = 0
+            irow += 1
+    # QA
+    if "qa" in bands:
+        valid_cMap = ListedColormap([(0.0, 0.0, 0.0, 0.0)])
+        if arr.qa.sum() == 0:
+            valid_cMap = ListedColormap([(1.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 0.0)])
+        arr.qa.plot(ax=axes[irow, icol], cmap=valid_cMap, add_colorbar=False)
+        axes[irow, icol].set_title("QA")
+        axes[irow, icol].grid(True)
+        icol += 1
+        if icol == 2:
+            icol = 0
+            irow += 1
+
     # NDVI
     if "ndvi" in bands:
         arr.ndvi.plot(
@@ -145,6 +193,20 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
             vmax=arr.rsd.quantile(0.99),
         )
         axes[irow, icol].set_title("Downwelling shortwave radiation")
+        axes[irow, icol].grid(True)
+        icol += 1
+        if icol == 2:
+            icol = 0
+            irow += 1
+
+    # Diffuse fraction
+    if "fdiff" in bands:
+        arr.fdiff.plot(
+            ax=axes[irow, icol],
+            vmin=arr.fdiff.quantile(0.01),
+            vmax=arr.fdiff.quantile(0.99),
+        )
+        axes[irow, icol].set_title("Diffuse fraction")
         axes[irow, icol].grid(True)
         icol += 1
         if icol == 2:

@@ -69,14 +69,14 @@ class ProductReader:
         return renamed
 
     @abstractmethod
-    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         Read VIS bands
         """
         pass
 
     @abstractmethod
-    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -98,10 +98,16 @@ class LandsatReader(ProductReader):
         "SR_B5": "nir",
         "SR_B6": "swir1",
         "SR_B7": "swir2",
+        "cloud": "cloud",
+        "water": "water",
+        "qa": "qa",
     }
     tir_band_mapping = {
         "ST_B10": "lst",
         "ST_EMIS": "emis",
+        "cloud": "cloud",
+        "water": "water",
+        "qa": "qa",
     }
 
     def __post_init__(self):
@@ -148,7 +154,7 @@ class LandsatReader(ProductReader):
             - 0.0018
         )
 
-    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         # Read landsat data
         # Every bands in the product is sampled at 30m
@@ -186,17 +192,24 @@ class LandsatReader(ProductReader):
         # Add tile id
         ls_xr.attrs["tile"] = self.tile
 
-        # Filter QA from ls8
-        if use_mask:
-            clear_pixels_mask = utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6)
-            not_filled_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0)
-            not_water_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7)
-            ls_xr = ls_xr.where(
-                np.logical_and(
-                    np.logical_and(clear_pixels_mask, not_filled_mask), not_water_mask
+        # Retrieve masks
+        # Convention 1 for masked pixels
+        ls_xr = ls_xr.assign(
+            dict(
+                water=(
+                    ls_xr.dims,
+                    utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7).astype(bool),
                 ),
-                np.nan,
-            )
+                cloud=(
+                    ls_xr.dims,
+                    ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6).astype(bool),
+                ),
+                qa=(
+                    ls_xr.dims,
+                    ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0).astype(bool),
+                ),
+            ),
+        )
 
         # Apply name mapping
         ls_xr = self.rename_bands(ls_xr, LandsatReader.vis_band_mapping)
@@ -206,6 +219,7 @@ class LandsatReader(ProductReader):
 
         # Compute NDVI
         ls_xr["ndvi"] = compute_ndvi(ls_xr)
+
         # Compute LAI with exponential relation between NDVI and LAI
         # Cf. https://src.koda.cnrs.fr/activites-ia-cesbio/ds-cb/blob/master/Jordi_PPL/bmci_slides.pdf
         ls_xr["lai"] = compute_lai_from_ndvi(ls_xr, 0.119, 3.457, -0.062)
@@ -215,7 +229,7 @@ class LandsatReader(ProductReader):
 
         return ls_xr
 
-    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         # Read Landsat TIR bands
         # Every bands in the product is sampled at 30m
@@ -246,17 +260,24 @@ class LandsatReader(ProductReader):
         # Add tile id
         ls_xr.attrs["tile"] = self.tile
 
-        # Filter QA from ls8
-        if use_mask:
-            clear_pixels_mask = utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6)
-            not_filled_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0)
-            not_water_mask = ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7)
-            ls_xr = ls_xr.where(
-                np.logical_and(
-                    np.logical_and(clear_pixels_mask, not_filled_mask), not_water_mask
+        # Retrieve masks
+        # Convention 1 for masked pixels
+        ls_xr = ls_xr.assign(
+            dict(
+                water=(
+                    ls_xr.dims,
+                    utils.extract_bitmask(ls_xr.QA_PIXEL.values, 7).astype(bool),
                 ),
-                np.nan,
-            )
+                cloud=(
+                    ls_xr.dims,
+                    ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 6).astype(bool),
+                ),
+                qa=(
+                    ls_xr.dims,
+                    ~utils.extract_bitmask(ls_xr.QA_PIXEL.values, 0).astype(bool),
+                ),
+            ),
+        )
 
         # Apply name mapping
         ls_xr = self.rename_bands(ls_xr, LandsatReader.tir_band_mapping)
@@ -294,6 +315,9 @@ class HLSReader(ProductReader):
                 "B05": "nir",
                 "B06": "swir1",
                 "B07": "swir2",
+                "cloud": "cloud",
+                "water": "water",
+                "qa": "qa",
             },
         }
         HLSSentinel2 = {
@@ -312,6 +336,9 @@ class HLSReader(ProductReader):
                 "B8A": "nir",
                 "B11": "swir1",
                 "B12": "swir2",
+                "cloud": "cloud",
+                "water": "water",
+                "qa": "qa",
             },
         }
 
@@ -354,7 +381,7 @@ class HLSReader(ProductReader):
             - 0.0018
         )
 
-    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         Read VIS bands
         """
@@ -369,27 +396,30 @@ class HLSReader(ProductReader):
         if hls_xr is None:
             raise ValueError(f"No data found ({self.path})")
 
-        # Filter pixels
-        if use_mask:
-            not_water_mask = ~utils.extract_bitmask(
-                hls_xr[hls.HLS.QA.value].values, 5
-            ).astype(
-                bool
-            )  # Bit 5 water
-            clear_pixels_mask = ~utils.extract_bitmask(
-                hls_xr[hls.HLS.QA.value].values, 1
-            ).astype(
-                bool
-            )  # Bit 1 cloud
-            mask = np.logical_and(not_water_mask, clear_pixels_mask)
-            hls_xr = hls_xr.where(mask, np.nan)
-
         # Drop time dimension
         hls_xr = hls_xr.isel(t=0, drop=True)
 
+        # Retrieve mask
+        hls_xr = hls_xr.assign(
+            dict(
+                water=(
+                    hls_xr.dims,
+                    utils.extract_bitmask(hls_xr[hls.HLS.QA.value].values, 5).astype(
+                        bool
+                    ),
+                ),
+                cloud=(
+                    hls_xr.dims,
+                    utils.extract_bitmask(hls_xr[hls.HLS.QA.value].values, 1).astype(
+                        bool
+                    ),
+                ),
+                qa=(hls_xr.dims, np.ones_like(hls_xr[hls.HLS.QA.value])),
+            )
+        )
+
         # Rename bands
         hls_xr = self.rename_bands(hls_xr, self.params.value["mapping"])
-
         # Compute NDVI
         hls_xr["ndvi"] = compute_ndvi(hls_xr)
         # Compute LAI with exponential relation between NDVI and LAI
@@ -412,7 +442,7 @@ class HLSReader(ProductReader):
         hls_xr.attrs["tile"] = self.tile
         return hls_xr
 
-    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -436,6 +466,9 @@ class Sentinel2Reader(ProductReader):
         "B8A": "nir2",
         "B11": "swir1",
         "B12": "swir2",
+        "cloud": "cloud",
+        "water": "water",
+        "qa": "qa",
     }
 
     def __post_init__(self):
@@ -466,7 +499,7 @@ class Sentinel2Reader(ProductReader):
             + 0.0338 * data.swir2
         )
 
-    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         Read VIS bands
         """
@@ -490,17 +523,26 @@ class Sentinel2Reader(ProductReader):
 
         # Filter pixels
         # https://labo.obs-mip.fr/multitemp/sentinel-2/theias-sentinel-2-l2a-product-format/#English
-        if use_mask:
-            not_water_mask = ~utils.extract_bitmask(
-                s2_xr[sentinel2.Sentinel2.MG2.value].values, 0
-            ).astype(
-                bool
-            )  # Bit 0 water
-            clear_pixels_mask = np.where(
-                s2_xr[sentinel2.Sentinel2.CLM.value].values == 0, 1, 0
-            )  # Clear pixels
-            mask = np.logical_and(not_water_mask, clear_pixels_mask)
-            s2_xr = s2_xr.where(mask, np.nan)
+        # Retrieve mask
+        s2_xr = s2_xr.assign(
+            dict(
+                water=(
+                    s2_xr.dims,
+                    utils.extract_bitmask(
+                        s2_xr[sentinel2.Sentinel2.MG2.value].values, 0
+                    ).astype(
+                        bool
+                    ),  # Bit 0 water
+                ),
+                cloud=(
+                    s2_xr.dims,
+                    np.where(
+                        s2_xr[sentinel2.Sentinel2.CLM.value].values == 0, 0, 1
+                    ),  # Cloud pixels
+                ),
+                qa=(s2_xr.dims, np.ones_like(s2_xr[sentinel2.Sentinel2.CLM.value])),
+            )
+        )
 
         # Drop time dimension
         s2_xr = s2_xr.isel(t=0, drop=True)
@@ -532,7 +574,7 @@ class Sentinel2Reader(ProductReader):
         s2_xr.attrs["tile"] = self.tile
         return s2_xr
 
-    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -550,6 +592,9 @@ class EcostressReader(ProductReader):
     tir_band_mapping = {
         "LST": "lst",
         "EmisWB": "emis",
+        "cloud": "cloud",
+        "water": "water",
+        "qa": "qa",
     }
 
     def __post_init__(self):
@@ -565,13 +610,13 @@ class EcostressReader(ProductReader):
         self.date = self.ds.date
         self.time = self.ds.time
 
-    def read_vis_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_vis_bands(self) -> xr.Dataset:
         """
         Read VIS bands
         """
         raise ProductReaderException("No VIS bands for Ecostress product")
 
-    def read_tir_bands(self, use_mask: bool = False) -> xr.Dataset:
+    def read_tir_bands(self) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -586,26 +631,31 @@ class EcostressReader(ProductReader):
         if eco_xr is None:
             raise ValueError(f"No data found ({self.path})")
 
-        # Filter QA from ecostress
+        # Masks from ecostress
         # https://ecostress.jpl.nasa.gov/downloads/userguides/2_ECOSTRESS_L2_UserGuide_06182019.pdf
-        if use_mask:
-            b0_mask = ~utils.extract_bitmask(
-                eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 0
-            ).astype(bool)
-            b1_mask = ~utils.extract_bitmask(
-                eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 1
-            ).astype(bool)
-            qa_mask = np.logical_and(b0_mask, b1_mask)
-            not_cloud_mask = np.where(
-                eco_xr[ecostress_v2.EcostressV2.CLOUDS.value].values, 0, 1
-            )
-            not_water_mask = np.where(
-                eco_xr[ecostress_v2.EcostressV2.WATER.value].values, 0, 1
-            )
-            mask = np.logical_and(
-                np.logical_and(qa_mask, not_cloud_mask), not_water_mask
-            )
-            eco_xr = eco_xr.where(mask, np.nan)
+        b0_mask = ~utils.extract_bitmask(
+            eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 0
+        )
+        b1_mask = ~utils.extract_bitmask(
+            eco_xr[ecostress_v2.EcostressV2.QUALITY.value].values, 1
+        )
+        eco_xr = eco_xr.assign(
+            dict(
+                water=(
+                    eco_xr.dims,
+                    np.where(
+                        eco_xr[ecostress_v2.EcostressV2.WATER.value].values, 1, 0
+                    ).astype(bool),
+                ),
+                cloud=(
+                    eco_xr.dims,
+                    np.where(
+                        eco_xr[ecostress_v2.EcostressV2.CLOUDS.value].values, 1, 0
+                    ).astype(bool),
+                ),
+                qa=(eco_xr.dims, np.logical_and(b0_mask, b1_mask)),
+            ),
+        )
 
         # Drop time dimension
         eco_xr = eco_xr.isel(t=0, drop=True)

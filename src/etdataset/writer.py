@@ -28,16 +28,25 @@ BANDS = [
     "lai",
     "rsd",
     "rld",
+    "fdiff",
 ]
 
 
 def write_dataset(
-    xrds: xr.Dataset, bands: list[str] = BANDS, directory: str = os.getcwd()
+    xrds: xr.Dataset,
+    bands: list[str] = BANDS,
+    directory: str = os.getcwd(),
+    separate=False,
 ):
+    """
+    Write dataset in one file or in separated files
+    """
     row = xrds.sizes["y"]
     col = xrds.sizes["x"]
     if bands is None:
         bands = [i for i in xrds.data_vars]
+    else:
+        bands = [i for i in bands if i in xrds.data_vars]
     if xrds.attrs["vis"] == xrds.attrs["tir"]:
         filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
     else:
@@ -45,23 +54,43 @@ def write_dataset(
             f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
             f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
         )
-    filename += f"_{xrds.attrs['tile']}.tif"
-    with rio.open(
-        os.path.join(directory, filename),
-        mode="w+",
-        driver="GTiff",
-        width=col,
-        height=row,
-        count=len(bands),
-        dtype=rio.dtypes.float32,
-        nodata=np.nan,
-        crs=xrds.attrs["crs"],
-        transform=xrds.attrs["transform"],
-    ) as source_ds:
-        source_ds.colorinterp = [ColorInterp.gray for _ in bands]
-        for id, band in enumerate(bands, start=1):
-            source_ds.write_band(id, xrds[band].data)
-            source_ds.set_band_description(id, band)
+    if not separate:
+        filename += f"_{xrds.attrs['tile']}.tif"
+        with rio.open(
+            os.path.join(directory, filename),
+            mode="w+",
+            driver="GTiff",
+            width=col,
+            height=row,
+            count=len(bands),
+            dtype=rio.dtypes.float32,
+            nodata=np.nan,
+            crs=xrds.attrs["crs"],
+            transform=xrds.attrs["transform"],
+        ) as source_ds:
+            source_ds.colorinterp = [ColorInterp.gray for _ in bands]
+            for id, band in enumerate(bands, start=1):
+                source_ds.write_band(id, xrds[band].data)
+                source_ds.set_band_description(id, band)
+    else:
+        filename += f"_{xrds.attrs['tile']}"
+        os.makedirs(os.path.join(directory, filename), exist_ok=True)
+        for band in bands:
+            with rio.open(
+                os.path.join(directory, filename, filename + f"_{band}.tif"),
+                mode="w+",
+                driver="GTiff",
+                width=col,
+                height=row,
+                count=1,
+                dtype=rio.dtypes.float32,
+                nodata=np.nan,
+                crs=xrds.attrs["crs"],
+                transform=xrds.attrs["transform"],
+            ) as source_ds:
+                source_ds.colorinterp = [ColorInterp.gray]
+                source_ds.write_band(1, xrds[band].data)
+                source_ds.set_band_description(1, band)
 
 
 def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
@@ -100,6 +129,8 @@ def export_matlab(
 ):
     if bands is None:
         bands = [i for i in xrds.data_vars]
+    else:
+        bands = [i for i in bands if i in xrds.data_vars]
     if xrds.attrs["vis"] == xrds.attrs["tir"]:
         suffix = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
     else:

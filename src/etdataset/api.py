@@ -50,7 +50,6 @@ def create_dataset(
     tir_path: str | None = None,
     tile_id: str | None = None,
     radiation: str | None = None,
-    use_mask: bool = False,
 ) -> xr.Dataset:
     """
     Create a dataset
@@ -94,15 +93,32 @@ def create_dataset(
     tir_reader.bb = common_bbox
 
     # Read VIS
-    vis_xr = vis_reader.read_vis_bands(use_mask)
+    vis_xr = vis_reader.read_vis_bands()
     logger.debug(f"Read VIS: {type(vis_xr)}")
 
     # Read TIR
-    tir_xr = tir_reader.read_tir_bands(use_mask)
+    tir_xr = tir_reader.read_tir_bands()
     logger.debug(f"Read TIR: {type(tir_xr)}")
 
     # Merge
-    merged_xr = xr.merge((vis_xr, tir_xr), combine_attrs="no_conflicts")
+    vis_bands = list(vis_xr.data_vars)
+    tir_bands = list(tir_xr.data_vars)
+    common_bands = list(set(vis_bands).intersection(tir_bands))
+    selected_vis_bands = list(set(vis_bands).difference(tir_bands))
+    selected_tir_bands = list(set(tir_bands).difference(vis_bands))
+    merged_xr = xr.merge(
+        (vis_xr[selected_vis_bands], tir_xr[selected_tir_bands]),
+        combine_attrs="no_conflicts",
+    )
+    for band in common_bands:
+        merged_xr = merged_xr.assign(
+            {
+                str(band): (
+                    merged_xr.dims,
+                    np.logical_or(vis_xr[band].data, tir_xr[band].data),
+                )
+            }
+        )
     logger.debug(f"Merged: {merged_xr.attrs}")
 
     # Read flux

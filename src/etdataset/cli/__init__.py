@@ -36,7 +36,6 @@ class CreateArgs(argparse.Namespace):
     tir: str | None
     radiation: str | None
     tile: str | None
-    use_mask: bool
     output: str
     matlab: bool
 
@@ -102,7 +101,6 @@ def cli_create(args: CreateArgs) -> None:
         tir_path=args.tir,
         tile_id=args.tile,
         radiation=args.radiation,
-        use_mask=args.use_mask,
     )
 
     # Write dataset
@@ -286,12 +284,6 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser_create.add_argument(
         "-t", "--tile", type=str, help="Tile ID (Only for Landsat)"
-    )
-    parser_create.add_argument(
-        "--use_mask",
-        dest="use_mask",
-        action="store_true",
-        help="Filter data with masks (Quality, Cloud, Water)",
     )
     parser_create.add_argument(
         "--output",

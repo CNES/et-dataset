@@ -183,13 +183,12 @@ Albedo = 0.356 * band_B2 + 0.130 * band_B4 + 0.373 * band_5 + 0.085 * band_B6 + 
 ```math
 Albedo = 0.2266 * band_B2 + 0.1236 * band_B3 + 0.1573 * band_B4 + 0.3417 * band_B8 + 0.1170 * band_B11 +  0.0338 * band_B12
 ```
-With the option `use_mask`, the quality mask, cloud mask and water mask of each product can be taken into account in order to invalidate pixels. 
 
 #### Command line
 
 ```bash
 -> et-dataset create -h
-usage: et-dataset create [-h] [-v] --vis VIS [--tir TIR] [-t TILE] [--use_mask] [--output OUTPUT] [-m]
+usage: et-dataset create [-h] [-v] --vis VIS [--tir TIR] [-t TILE] [--output OUTPUT] [-m]
 
 Create dataset from Landsat/Ecostress/Sentinel2 products. The dataset is resampling at 60m resolution and corresponds to a MGRS tile.
 
@@ -199,7 +198,6 @@ options:
   --vis VIS             Path to VIS product (optical bands)
   --tir TIR             Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.
   -t TILE, --tile TILE  Tile ID (Only for Landsat)
-  --use_mask            Filter data with masks (Quality, Cloud, Water)
   --output OUTPUT       Output dataset directory path (default: current directory)
   -m, --matlab_export   Write the dataset in Matlab format
 
