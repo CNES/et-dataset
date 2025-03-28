@@ -18,3 +18,7 @@ download/
 !notebooks/products.csv
 *.mat
 *.nc
+
+# pixi environments
+.pixi
+*.egg-info
