@@ -8,8 +8,12 @@ Vegetation indices
 Albedo
 """
 
+import os
 import numpy as np
 import xarray as xr
+from json import load
+from fnmatch import fnmatch
+from pyBVNET.pyBVNET import apply_NNT
 
 
 def compute_ndvi(data: xr.Dataset) -> xr.DataArray:
@@ -50,3 +54,44 @@ def compute_lai_from_ndvi(
     else:
         ndvi = data["ndvi"]
     return xr.apply_ufunc(ndvi_to_lai, ndvi, a, b, c, vectorize=True)
+
+
+def compute_lai(data: xr.Dataset, image_path: str, satellite: str) -> xr.DataArray:
+    
+    # Create a new "band" dimension from the variables representing spectral bands
+    band_list = ['green', 'red', 'nir', 'swir1', 'swir2', 'swir2', 'swir2', 'swir2']
+    stacked_inputs = xr.concat([data[var] for var in band_list], dim = 'band')
+
+    # Assign band names or indices as a coordinate for the new dimension
+    stacked_inputs = stacked_inputs.assign_coords(band = band_list)
+
+    # Convert to a dataset with one variable
+    stacked_inputs = stacked_inputs.to_dataset(name = 'band_data')
+
+    # Name band coordinates
+    stacked_inputs['band'] = ['green', 'red', 'nir', 'swir1', 'swir2', 'cos(View_Zenith)', 'cos(Sun_Zenith)', 'cos(Rel_Azimuth)']
+
+    # Open metadata
+    for root, _, files in os.walk(image_path):
+            for name in files:
+                if fnmatch(name, '*_MTL.json'):
+                    meta_data_file = os.path.join(root, name)
+    metadata = load(open(meta_data_file))['LANDSAT_METADATA_FILE']['IMAGE_ATTRIBUTES']
+
+    # Add angles
+    stacked_inputs.loc[{'band': 'cos(View_Zenith)'}] = np.float32(1)
+    stacked_inputs.loc[{'band': 'cos(Sun_Zenith)'}] = np.cos(np.deg2rad(90 - float(metadata['SUN_ELEVATION'])), dtype = np.float32)
+    stacked_inputs.loc[{'band': 'cos(Rel_Azimuth)'}] = np.cos(np.deg2rad(90 - float(metadata['SUN_AZIMUTH'])), dtype = np.float32)
+
+    # Define dimensions and arrays for output data
+    dims = data[band_list[0]].dims
+    output_data = np.empty(shape = data[band_list[0]].shape, dtype = np.float32)
+    output_flag_data = np.zeros(shape = data[band_list[0]].shape, dtype = np.int8)
+
+    # Create output dataset
+    datavars = {}
+    datavars['LAI'] = (dims, output_data)
+    datavars['LAI_flag'] = (dims, output_flag_data)
+    output = xr.Dataset(data_vars = datavars, coords = {'y': data.coords['y'], 'x': data.coords['x']})
+    
+    return apply_NNT(stacked_inputs, output, ['LAI'], satellite)['LAI']

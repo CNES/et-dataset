@@ -13,7 +13,10 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import Enum
-from typing import Any, List, Tuple
+from typing import Any
+import json  # to open and read json files
+import requests  # to send url requests
+from tqdm import tqdm  # to print progress bars
 
 import earthaccess
 import geopandas as gpd
@@ -21,8 +24,6 @@ import pandas as pd
 import rasterio as rio
 from earthaccess.auth import Auth as EarthDataAuth
 from earthaccess.results import DataGranule
-from landsatxplore.api import API
-from landsatxplore.earthexplorer import EarthExplorer
 from sensorsio import mgrs
 from sensorsio.sentinel2 import find_tile_orbit_pairs
 from shapely.geometry import Point, Polygon
@@ -45,6 +46,11 @@ class ProviderException(Exception):
 def AuthenticationException(Exception):
     """
     Exception for authentication
+    """
+
+def RequestException(Exception) -> None:
+    """
+    Exception for requests
     """
 
 
@@ -239,7 +245,7 @@ class TheiaProvider(Provider):
         )
         # Convert to GeoDataFrame
         url_pattern = re.compile("(.*?/download/)")
-        data: List[Tuple[str, date, str, str, str, str, str, str, str]] = []
+        data: list[tuple[str, date, str, str, str, str, str, str, str]] = []
         geometry = []
         if len(results) > 0:
             for result in results:
@@ -608,52 +614,84 @@ class HLSLProvider(HLSProvider):
 @dataclass
 class LandsatProvider(Provider):
     """
-    Provider for Landsat via EarthExplorer
+    Provider for Landsat via USGS' m2m api
     """
 
-    name: str = "EarthExplorer"
-    catalog: API = field(init=False)
+    name: str = "USGS"
     dataset: str = "landsat_ot_c2_l2"
     collection: str = "LANDSAT"
-    auth: EarthExplorer = field(init=False)
+    url: str = "https://m2m.cr.usgs.gov/api/api/json/stable/"
+    auth: str = None
 
     def __post_init__(self):
         """
         Initialize dataset
         """
         self.login()
+    
+    def sendRequest(self, service: str, data: dict) -> str:  
+        """
+        Send http request
+
+        Arguments
+        =========
+        
+        1. service: ``str``
+            usgs service (login-token, scene-search, download-options, download-request, download-retrieve)
+        2. data: ``dict``
+            payload for request
+
+        Returns
+        =======
+        
+        1. output['data']: ``str``
+            result of the http request
+        """
+
+        # Format data with json
+        json_data = json.dumps(data)
+        
+        if self.auth == None:
+            response = requests.post(self.url + service, json_data)
+        else:
+            headers = {'X-Auth-Token': self.auth}              
+            response = requests.post(self.url + service, json_data, headers = headers)
+        
+        # Try request
+        try:
+            httpStatusCode = response.status_code 
+            if response == None:
+                print("No output from service")
+            output = json.loads(response.text)
+            if output['errorCode'] != None:
+                raise RequestException(output['errorCode'] + " - " + output['errorMessage'])
+            if  httpStatusCode == 404:
+                raise RequestException("404 Not Found")
+            elif httpStatusCode == 401: 
+                raise RequestException("401 Unauthorized")
+            elif httpStatusCode == 400:
+                raise RequestException("Error Code " + httpStatusCode)
+        except Exception as e:
+            raise RequestException(e)
+        response.close()
+        
+        return output['data']
 
     def login(self) -> None:
         """
-        Login to EarthExplorer catalog
+        Login to USGS catalog
         """
         # Authentication
         try:
-            username = os.environ["LANDSATXPLORE_USERNAME"]
-            password = os.environ["LANDSATXPLORE_PASSWORD"]
+            username = os.environ["USGS_USERNAME"]
+            password = os.environ["USGS_PASSWORD"]
         except KeyError:
             raise AuthenticationException(
-                "Variables LANDSATXPLORE_USERNAME and LANDSATXPLORE_PASSWORD must be set"
+                "Variables USGS_USERNAME and USGS_PASSWORD must be set"
             )
 
         # Initialize a new API instance and get an access key
-        self.catalog = API(username, password)
-        self.auth = EarthExplorer(username, password)
-
-    def _get_geometry(self, result) -> Polygon:
-        """
-        Extract geometry from result
-        """
-        return create_polygon(
-            result["corner_upper_left_latitude"],
-            result["corner_upper_left_longitude"],
-            result["corner_upper_right_latitude"],
-            result["corner_upper_right_longitude"],
-            result["corner_lower_left_latitude"],
-            result["corner_lower_left_longitude"],
-            result["corner_lower_right_latitude"],
-            result["corner_lower_right_longitude"],
-        )
+        self.auth = self.sendRequest('login-token', {'username' : username, 'token' : password})
 
     def search(
         self,
@@ -670,40 +708,98 @@ class LandsatProvider(Provider):
             f"Search on EarthExplorer catalog: min_date={min_date}, max_date = {max_date}, "
             f"tile_id = {tile_id}, bbox = {latlon_bbox}, max_cloud_cover = {max_cloud_cover}"
         )
+        
+        # Authentication
+        try:
+            username = os.environ["USGS_USERNAME"]
+            password = os.environ["USGS_PASSWORD"]
+        except KeyError:
+            raise AuthenticationException(
+                "Variables USGS_USERNAME and USGS_PASSWORD must be set"
+            )
+        
         bbox = None
         if tile_id is not None:
             # Extract ROI
             bbox = tuple(mgrs.get_bbox_mgrs_tile(tile_id))
         if latlon_bbox is not None:
             bbox = tuple(latlon_bbox)
-        # Request
-        results = self.catalog.search(
-            dataset=self.dataset,
-            bbox=bbox,
-            start_date=min_date,
-            end_date=max_date,
-            max_cloud_cover=max_cloud_cover,
-        )
-        logger.debug(f"Number of products found on EarthExplorer: {len(results)}")
+        
+        # Build payload
+        spatialFilter =  {'filterType' : "mbr",
+                    'lowerLeft' : {'latitude' : bbox[1], 'longitude' : bbox[0]},
+                    'upperRight' : { 'latitude' : bbox[3], 'longitude' : bbox[2]}}
+        temporalFilter = {'start' : min_date, 'end' : max_date}
+        
+        payload = {'datasetName' : self.dataset,
+                    'maxResults' : 200,
+                    'startingNumber' : 1, 
+                    'sceneFilter' : {
+                            'spatialFilter' : spatialFilter,
+                            'acquisitionFilter' : temporalFilter},
+                    'username' : username, 
+                    'password' : password}
+        
+        # Search scenes
+        results = self.sendRequest("scene-search", payload)
+        
+        # Aggregate a list of scene ids
+        sceneIds = []
+        geometry = []
+        cloudCover = []
+        dates = []
+        product_names = []
+        for result in results['results']:
+            # Add this scene to the list I would like to download
+            sceneIds.append(result['entityId'])
+            product_names.append(result['displayId'])
+            geometry.append(Polygon(result['spatialCoverage']['coordinates'][0]))
+            cloudCover.append(result['cloudCover'])
+            dates.append(datetime.strptime(result['temporalCoverage']['startDate'], '%Y-%m-%d %H:%M:%S').date())
+        
+        payload = {'datasetName' : self.dataset, 'entityIds' : sceneIds}
+            
+        downloadOptions = self.sendRequest("download-options", payload)
+        
+        # Aggregate a list of available products
+        downloads = []
+        for product in downloadOptions:
+                # Make sure the product is available for this scene
+                if product['available'] == True:
+                    downloads.append({'entityId' : product['entityId'],
+                                        'productId' : product['id']})
+
+        logger.debug(f"Number of products found on EarthData after cloud cover filtering: {len(downloads)}")
+        
+        # set a label for the download request
+        label = "download-sample"
+        payload = {'downloads' : downloads, 'label' : label}
+        # Call the download to get the direct download urls
+        requestResults = self.sendRequest("download-request", payload)
+        
+        # Get download urls
+        requestedDownloadsCount = len(requestResults['availableDownloads'])
+        urls = []
+        for download in requestResults['availableDownloads']:
+            urls.append(download['url'])
+        
         # Convert to GeoDataFrame
         data = []
-        geometry = []
-        if len(results) > 0:
+        if requestedDownloadsCount > 0:
             data = [
                 [
-                    result["display_id"],
-                    result["acquisition_date"].date(),
-                    self.name,
-                    self.collection,
+                    product_names[i],
+                    dates[i],
+                    "USGS",
+                    "LANDSAT",
                     None,
-                    result["cloud_cover"],
+                    cloudCover[i],
                     None,
-                    result["landsat_product_id"],
+                    urls[i],
                     None,
                 ]
-                for result in results
+                for i in range(requestedDownloadsCount)
             ]
-            geometry = [self._get_geometry(result) for result in results]
         gdf = gpd.GeoDataFrame(
             data=data,
             columns=[
@@ -717,7 +813,7 @@ class LandsatProvider(Provider):
                 "URL",
                 "Checksum",
             ],
-            geometry=geometry,
+            geometry = geometry,
             crs=4326,
         )
         # Filter on cloud cover if the information exists
@@ -726,6 +822,51 @@ class LandsatProvider(Provider):
             f"Number of products found on EarthData after cloud cover filtering: {len(gdf)}"
         )
         return gdf
+    
+    def download_archive(self, product: str, local_path: str = os.getcwd()) -> None:
+        """
+        Download product from url
+
+        Arguments
+        =========
+
+        product: ``str``
+            product dataframe
+        local_path: ``str`` ``default = os.getcwd()``
+            path to write files
+        """
+        
+        # Get file name and path
+        if product.URL.count("gen-bundle?"):
+            file_name = product.URL.split('=')[1].split('&')[0] + '.tar'
+        else:
+            file_name = product.URL.split('/')[-1]
+        file_path = os.path.join(local_path, file_name)
+        
+        # Check if file exists
+        if os.path.exists(file_path):
+            logger.info(
+                    f"Product directory for {product.Product_name} exists already. Skip product..."
+                )
+            return None
+
+        # Prepare download
+        resp = requests.get(product.URL, stream = True)
+        total = int(resp.headers.get('content-length', 0))
+
+        # Download file
+        with open(file_path, 'wb') as file, tqdm(
+            desc = file_name,
+            total = total,
+            unit = 'iB',
+            unit_scale = True,
+            unit_divisor = 1024,
+        ) as bar:
+            for data in resp.iter_content(chunk_size = 20480):
+                size = file.write(data)
+                bar.update(size)
+        
+        return None
 
     def download(self, products: pd.DataFrame, local_path: str = os.getcwd()) -> None:
         """
@@ -733,13 +874,7 @@ class LandsatProvider(Provider):
         """
         logger.debug(f"List of products to download: {products['Product_name'].values}")
         for _, product in products.iterrows():
-            if os.path.isfile(os.path.join(local_path, product.URL + ".tar")):
-                logger.info(
-                    f"Product directory for {product.Product_name} exists already. Skip product..."
-                )
-                continue
-            self.auth.download(product.URL, output_dir=local_path)
-
+            self.download_archive(product, local_path)
 
 class Collection(Enum):
     ECOSTRESS = EcostressProvider

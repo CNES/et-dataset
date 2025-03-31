@@ -20,7 +20,7 @@ import xarray as xr
 from sensorsio import ecostress_v2, hls, landsat, mgrs, sentinel2, utils
 
 from etdataset.logging import LoggerManager
-from etdataset.vegetation_indices import compute_lai_from_ndvi, compute_ndvi
+from etdataset.vegetation_indices import compute_lai_from_ndvi, compute_ndvi, compute_lai
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -222,7 +222,7 @@ class LandsatReader(ProductReader):
 
         # Compute LAI with exponential relation between NDVI and LAI
         # Cf. https://src.koda.cnrs.fr/activites-ia-cesbio/ds-cb/blob/master/Jordi_PPL/bmci_slides.pdf
-        ls_xr["lai"] = compute_lai_from_ndvi(ls_xr, 0.119, 3.457, -0.062)
+        ls_xr['lai'] = compute_lai(ls_xr, self.path, satellite = 'landsat8')
 
         # Compute albedo
         ls_xr["albedo"] = self.compute_albedo(ls_xr)

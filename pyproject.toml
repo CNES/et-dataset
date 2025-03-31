@@ -32,12 +32,13 @@ dependencies = [
   "pyproj",
   "rasterio",
   "shapely",
+  "fiona",
   "tqdm",
   "xarray",
   "earthaccess",
   "sensorsio",
   "theia-picker",
-  "landsatxplore @ git+https://github.com/esarrazin/landsatxplore.git",
+  "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git",
 ]
 
 [project.optional-dependencies]
