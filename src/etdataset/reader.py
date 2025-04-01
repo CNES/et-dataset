@@ -221,7 +221,7 @@ class LandsatReader(ProductReader):
         ls_xr["ndvi"] = compute_ndvi(ls_xr)
 
         # Compute LAI with exponential relation between NDVI and LAI
-        # Cf. https://src.koda.cnrs.fr/activites-ia-cesbio/ds-cb/blob/master/Jordi_PPL/bmci_slides.pdf
+        # Cf. https://forge.ird.fr/cesbio/modelisation/pybvnet/-/tree/main?ref_type=heads
         ls_xr['lai'] = compute_lai(ls_xr, self.path, satellite = 'landsat8')
 
         # Compute albedo

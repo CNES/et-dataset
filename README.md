@@ -20,7 +20,7 @@ Python package to prepare datasets for evapotranspiration processing:
 ## Pre-requistes
 
 To search and download products, you need accounts and set environment variables corresponding to login and password for each catalog: 
-* [Earth Explorer](https://earthexplorer.usgs.gov/): required to define `LANDSATXPLORE_USERNAME` and `LANDSATXPLORE_PASSWORD`
+* [USGS machine to machine](https://m2m.cr.usgs.gov/): required to define `USGS_USERNAME` and `USGS_PASSWORD` (the api key is used as a password here)
 * [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
 
@@ -51,7 +51,7 @@ pip install .[notebook]
 ### Search products
 
 The command enables to search products in catalogs:
-* For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
+* For Landsat [USGS machine to machine](https://m2m.cr.usgs.gov/)
 * For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
 * For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
@@ -85,7 +85,7 @@ options:
 ### Download products
 
 The command enables to download products from a product list from catalogs:
-* For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
+* For Landsat [USGS machine to machine](https://m2m.cr.usgs.gov/)
 * For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
 * For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
@@ -168,10 +168,7 @@ Compatible TIR products are:
 * Landsat L2A
 * ECOSTRESS collectin V2 only 
 
-LAI is calculated from NDVI with the following formula:
-```math 
-LAI = 0.119 * exp(3.457 * NDVI) - 0.062
-```
+LAI is calculated from the spectral reflectances with the [pyBVNET](https://forge.ird.fr/cesbio/modelisation/pybvnet) package, using the BVNET neural networks.
 
 Albedo is computed with these following formula:
 
