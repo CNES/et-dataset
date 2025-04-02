@@ -46,6 +46,7 @@ dev = [
   "hatch",
   "pytest",
   "pip-review",
+  "pre-commit",
 ]
 notebook = [
   "matplotlib",
