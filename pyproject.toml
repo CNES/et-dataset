@@ -70,7 +70,8 @@ packages = ["src/etdataset"]
 path = "src/etdataset/__about__.py"
 
 [tool.hatch.envs.hatch-static-analysis]
-config-path = "ruff_defaults.toml"
+config-path = "none"
+dependencies = ["ruff==0.11.1"]
 
 [tool.hatch.envs.default]
 dependencies = [

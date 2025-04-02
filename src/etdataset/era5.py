@@ -1,6 +1,6 @@
-#!/usr/bin/env python
 #
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales / Université Paul Sabatier (UT3)
+# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
 #
 """
 Module for reading ERA5 and ERA5-land
@@ -25,7 +25,7 @@ from pyproj import CRS
 from rasterio.warp import reproject, transform_bounds
 from sensorsio.utils import bb_transform
 
-from .logging import LoggerManager
+from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -112,7 +112,8 @@ class ERA5Data:
     ) -> None:
         """
         Init method: Get metadata from ERA5 file
-        It is assumed that the resolution is identical in longitude and latitude.
+        It is assumed that the resolution is identical
+        in longitude and latitude.
         """
         self.filename = filename
         # Data in WGS 84
@@ -126,7 +127,10 @@ class ERA5Data:
         ) as ds:
             for var in ds.data_vars:
                 self.__available_variables.append(ERA5Var.from_key(var))
-            self.__available_dates = [date.strftime("%Y-%m-%d %H:%M:%S") for date in ds.indexes["valid_time"]]
+            self.__available_dates = [
+                date.strftime("%Y-%m-%d %H:%M:%S")
+                for date in ds.indexes["valid_time"]
+            ]
             lon: np.ndarray = self._trunc(ds.longitude.data, 6)
             lat: np.ndarray = self._trunc(ds.latitude.data, 6)
             self.resolution = float(self._trunc(lon[1] - lon[0], 6))
@@ -136,8 +140,12 @@ class ERA5Data:
                 np.max(lon) + self.resolution / 2,
                 np.max(lat) + self.resolution / 2,
             )
-            self.transform = rio.transform.from_origin(float(west), float(north), self.resolution, self.resolution)
-            self.bounds = rio.coords.BoundingBox(float(west), float(south), float(east), float(north))
+            self.transform = rio.transform.from_origin(
+                float(west), float(north), self.resolution, self.resolution
+            )
+            self.bounds = rio.coords.BoundingBox(
+                float(west), float(south), float(east), float(north)
+            )
 
     def __repr__(self):
         return f"ERA5 data file={self.filename}"
@@ -176,7 +184,8 @@ class ERA5Data:
 
         :param variables: The list of variables to read
         :param dates: The list of dates to read
-        :return: The image pixels as a np.ndarray of shape [variables, width, height],
+        :return: The image pixels as a np.ndarray of
+                    shape [variables, width, height],
                  The time coords as a np.array of shape [dates],
                  The x coords as a np.ndarray of shape [width],
                  the y coords as a np.ndarray of shape [height],
@@ -185,11 +194,13 @@ class ERA5Data:
         # Safeguard
         if variables is None:
             variables = self.__available_variables
-        assert len(variables) > 0
+        # TODO: remove assert
+        assert len(variables) > 0  # noqa
         for var in variables:
             if var.key not in self.get_available_variables():
                 raise ValueError(
-                    f"Error variable {var.key} not found in the product ({self.get_available_variables()})"
+                    f"Error variable {var.key} not found in the "
+                    f"product ({self.get_available_variables()})"
                 )
 
         datasets = []
@@ -205,16 +216,28 @@ class ERA5Data:
             if dates is not None:
                 for date in dates:
                     try:
-                        time = np.append(time, ds.sel(valid_time=date).valid_time.data)
+                        time = np.append(
+                            time, ds.sel(valid_time=date).valid_time.data
+                        )
                     except KeyError as exc:
-                        raise KeyError(f"Date {date} not found in the dataset") from exc
+                        raise KeyError(
+                            f"Date {date} not found in the dataset"
+                        ) from exc
             else:
                 time = ds.valid_time.data
 
             # Safeguard to compute if there is enough memory available
-            available_memory = psutil.virtual_memory().available / 1024 / 1024 / 1024  # in Gb
+            available_memory = (
+                psutil.virtual_memory().available / 1024 / 1024 / 1024
+            )  # in Gb
             requested_memory = (
-                (sys.getsizeof(np.float32) * len(variables) * len(time) * ds.sizes["longitude"] * ds.sizes["latitude"])
+                (
+                    sys.getsizeof(np.float32)
+                    * len(variables)
+                    * len(time)
+                    * ds.sizes["longitude"]
+                    * ds.sizes["latitude"]
+                )
                 / 1024
                 / 1024
                 / 1024
@@ -236,9 +259,13 @@ class ERA5Data:
                         if sub_data.ndim == 2:
                             sub_data = np.expand_dims(sub_data, axis=0)
                         sub_datasets.append(sub_data)
-                    datasets.append(np.concatenate([data for data in sub_datasets], axis=0))
+                    # TODO: To correct
+                    datasets.append(
+                        np.concatenate([data for data in sub_datasets], axis=0)  # noqa
+                    )
 
-        np_stack: np.ndarray = np.stack([data for data in datasets], axis=0)
+        # TODO: To correct
+        np_stack: np.ndarray = np.stack([data for data in datasets], axis=0)  # noqa
 
         xcoords: np.ndarray = ds.coords["longitude"].data
 
@@ -261,7 +288,9 @@ class ERA5Data:
         if variables is None:
             variables = self.__available_variables
 
-        np_arr, time, xcoords, ycoords, crs = self.read_as_numpy(variables, dates)
+        np_arr, time, xcoords, ycoords, crs = self.read_as_numpy(
+            variables, dates
+        )
 
         data = {}
         for i, var in enumerate(variables):
@@ -301,7 +330,9 @@ class ERA5Data:
         return xarr
 
 
-def interpolate_time(data: xr.Dataset, vars: list[ERA5Var], date: datetime) -> xr.Dataset:
+def interpolate_time(
+    data: xr.Dataset, variables: list[ERA5Var], date: datetime
+) -> xr.Dataset:
     """
     Interpolate data for a variable at the date
 
@@ -312,7 +343,7 @@ def interpolate_time(data: xr.Dataset, vars: list[ERA5Var], date: datetime) -> x
     """
     # Check variable
     vars_str: list[str] = []
-    for var in vars:
+    for var in variables:
         if var.key not in list(data.data_vars):
             raise KeyError(f"Variable {var} not found")
         vars_str.append(var.key)
@@ -342,7 +373,7 @@ def interpolate(
     resolution: float | None = None,
     bounds: rio.coords.BoundingBox | None = None,
     algorithm: rio.enums.Resampling = rio.enums.Resampling.cubic,
-    dtype: np.dtype = np.dtype("float32"),
+    dtype: np.dtype = np.dtype("float32"),  # noqa
 ) -> xr.Dataset | xr.DataArray:
     """
     Method for spatial interpolation
@@ -357,7 +388,8 @@ def interpolate(
     """
     # Init
     need_to_reproject = False
-    assert (data.dims) != 2
+    # TODO: remove assert
+    assert (data.dims) != 2  # noqa
     try:
         src_crs = data.crs
         src_transform = data.transform
@@ -384,7 +416,9 @@ def interpolate(
             dst_bounds = rio.coords.BoundingBox(*src_bounds)
 
         # If we change resolution
-        if resolution is not None and (src_resolutionx != resolution or src_resolutiony != resolution):
+        if resolution is not None and (
+            src_resolutionx != resolution or src_resolutiony != resolution
+        ):
             need_to_reproject = True
             dst_resolutionx = resolution
             dst_resolutiony = resolution
@@ -400,7 +434,9 @@ def interpolate(
             dst_bounds = bb_transform(src_crs, dst_crs, src_bounds)
 
         if resolution is None:
-            dst_transform = rio.transform.from_bounds(*dst_bounds, data.sizes["x"], data.sizes["y"])
+            dst_transform = rio.transform.from_bounds(
+                *dst_bounds, data.sizes["x"], data.sizes["y"]
+            )
             dst_resolutionx = abs(dst_transform[0])
             dst_resolutiony = abs(dst_transform[4])
         else:
@@ -416,8 +452,15 @@ def interpolate(
     dst_transform = rio.transform.from_bounds(*dst_bounds, dst_sizex, dst_sizey)
 
     # Safeguard to compute if there is enough memory available
-    available_memory = psutil.virtual_memory().available / 1024 / 1024 / 1024  # in Gb
-    requested_memory = (sys.getsizeof(dtype) * nb_vars * dst_sizex * dst_sizey) / 1024 / 1024 / 1024
+    available_memory = (
+        psutil.virtual_memory().available / 1024 / 1024 / 1024
+    )  # in Gb
+    requested_memory = (
+        (sys.getsizeof(dtype) * nb_vars * dst_sizex * dst_sizey)
+        / 1024
+        / 1024
+        / 1024
+    )
     if requested_memory > available_memory:
         raise MemoryError(
             "Not enough memory to process the "
@@ -482,7 +525,10 @@ def interpolate(
                 )
                 values[str(var)] = (["y", "x"], dst_data)
         else:
-            values = {str(var): (["y", "x"], data[var].to_numpy()) for var in data.data_vars}
+            values = {
+                str(var): (["y", "x"], data[var].to_numpy())
+                for var in data.data_vars
+            }
 
         return xr.Dataset(
             values,
@@ -494,14 +540,16 @@ def interpolate(
                 "resolution": {"x": dst_resolutionx, "y": dst_resolutiony},
             },
         )
-    raise ERA5Exception("Interpolation can only be performed on Dataset or DataArray")
+    raise ERA5Exception(
+        "Interpolation can only be performed on Dataset or DataArray"
+    )
 
 
 def interpolate_on_grid(
     data: xr.Dataset | xr.DataArray,
     grid: xr.DataArray,
     algorithm: rio.enums.Resampling = rio.enums.Resampling.bilinear,
-    dtype: np.dtype = np.dtype("float32"),
+    dtype: np.dtype = np.dtype("float32"),  # noqa
 ) -> xr.Dataset | xr.DataArray:
     """
     Method for spatial interpolation on a grid
@@ -569,7 +617,9 @@ def interpolate_on_grid(
                 "resolution": grid.resolution,
             },
         )
-    raise ERA5Exception("Interpolation can only be performed on Dataset or DataArray")
+    raise ERA5Exception(
+        "Interpolation can only be performed on Dataset or DataArray"
+    )
 
 
 def interpolate_temperature(
@@ -691,11 +741,19 @@ def _download(dataset: str, request: dict, target: str) -> None:
         elif reply["state"] in ("failed",):
             result.error(f"Message: {reply['error'].get('message')}")
             result.error(f"Reason:  {reply['error'].get('reason')}")
-            for n in reply.get("error", {}).get("context", {}).get("traceback", "").split("\n"):
+            for n in (
+                reply.get("error", {})
+                .get("context", {})
+                .get("traceback", "")
+                .split("\n")
+            ):
                 if n.strip() == "":
                     break
                 result.error(f"  {n}")
-            raise ERA5Exception(f"{reply['error'].get('message')}  {reply['error'].get('reason')}")
+            raise ERA5Exception(
+                f"{reply['error'].get('message')}  "
+                f"{reply['error'].get('reason')}"
+            )
     result.download(target)
 
 

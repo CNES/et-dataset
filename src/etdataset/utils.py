@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales / Université Paul Sabatier (UT3)
+# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
 #
 """
 Common function
@@ -9,7 +7,6 @@ Common function
 
 import re
 from datetime import datetime
-from typing import Tuple
 
 import geopandas as gpd
 import pandas as pd
@@ -34,7 +31,7 @@ def check_mgrs_format(tile: str) -> None:
         raise ValueError(f"Wrong format for MGRS tile ID (got: {tile})")
 
 
-def BBoxException(Exception):
+def BBoxException(Exception):  # noqa
     """
     Exception for bounding box
     """
@@ -55,7 +52,7 @@ def create_polygon(
     ll = Point(ll_long, ll_lat)
     lr = Point(lr_long, lr_lat)
     points = [ul, ur, lr, ll]
-    return Polygon([i for i in points])
+    return Polygon(list(points))
 
 
 def bbox_to_polygon(bounds: list[float] | rio.coords.BoundingBox) -> Polygon:
@@ -70,7 +67,7 @@ def bbox_to_polygon(bounds: list[float] | rio.coords.BoundingBox) -> Polygon:
     )
 
 
-def get_bbox_from_roi(roi_path: str) -> Tuple[rio.coords.BoundingBox, CRS]:
+def get_bbox_from_roi(roi_path: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a ROI shapefile
@@ -78,12 +75,14 @@ def get_bbox_from_roi(roi_path: str) -> Tuple[rio.coords.BoundingBox, CRS]:
     # Roi shapefile
     try:
         roi_gdf = gpd.read_file(roi_path)
-        return rio.coords.BoundingBox(*roi_gdf.bounds.iloc[0].values), roi_gdf.crs
+        return rio.coords.BoundingBox(
+            *roi_gdf.bounds.iloc[0].values
+        ), roi_gdf.crs
     except DriverError as e:
         raise BBoxException(f"Unable to read shapefile {roi_path}: {e}")
 
 
-def get_bbox_from_mgrs_tile(tile: str) -> Tuple[rio.coords.BoundingBox, CRS]:
+def get_bbox_from_mgrs_tile(tile: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a MGRS_tile
@@ -130,8 +129,6 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
     # Remove unnecessary column
     if "Unnamed: 0" in df.columns:
         df = df.drop(columns="Unnamed: 0")
-        # Parse date
-        df
 
     # Convert geometry
     def convert_polygon(poly: str) -> Polygon:
@@ -148,5 +145,7 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
 
     geometry = df["geometry"].apply(lambda row: convert_polygon(row))
     return gpd.GeoDataFrame(
-        data=df[df.columns.difference(["b"], sort=False)], geometry=geometry, crs=crs
+        data=df[df.columns.difference(["b"], sort=False)],
+        geometry=geometry,
+        crs=crs,
     )

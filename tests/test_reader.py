@@ -1,19 +1,19 @@
-#!/usr/bin/env python
-# coding: utf8
-
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 
 """
 Test API
 """
+
 import os
-import pytest
 from dataclasses import dataclass
 
+import pytest
+
 from etdataset.reader import (
-    LandsatReader,
     EcostressReader,
     HLSReader,
+    LandsatReader,
+    ProductReaderException,
     Sentinel2Reader,
     get_product_reader,
 )
@@ -151,5 +151,5 @@ def test_get_product_reader_error():
     """
     Test get_product_reader method
     """
-    with pytest.raises(Exception):
+    with pytest.raises(ProductReaderException):
         get_product_reader("not found")

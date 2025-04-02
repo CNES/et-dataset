@@ -1,12 +1,9 @@
-#!/usr/bin/env python
-# coding: utf8
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 """
 Module for DEM management
 """
 
 import os
-from typing import Dict, List, Tuple
 
 import numpy as np
 import rasterio as rio
@@ -42,7 +39,8 @@ def get_dem_from_tile(
     xarr: xarray.Dataset
     """
     file_name = os.path.join(base_dir, f"COP-DEM_GLO-30-DGED_{tile_id}.tif")
-    assert os.path.isfile(file_name)
+    # TODO: Remove assert
+    assert os.path.isfile(file_name)  # noqa
     elevation, xcoords, ycoords, crs = read_as_numpy(
         [file_name],
         resolution=resolution,
@@ -53,7 +51,9 @@ def get_dem_from_tile(
     x, y = np.gradient(elevation.astype(np.float32))
     slope = np.degrees(np.arctan(np.sqrt(x * x + y * y) / resolution))
     # Aspect unfolding rules from
-    # https://github.com/r-barnes/richdem/blob/603cd9d16164393e49ba8e37322fe82653ed5046/include/richdem/methods/terrain_attributes.hpp#L236
+    # https://github.com/r-barnes/richdem/blob/ \
+    # 603cd9d16164393e49ba8e37322fe82653ed5046/include/ \
+    # richdem/methods/terrain_attributes.hpp#L236
     aspect = np.rad2deg(np.arctan2(x, -y))
     lt_0 = aspect < 0
     gt_90 = aspect > 90
@@ -67,12 +67,12 @@ def get_dem_from_tile(
     bounds = tuple(
         [float(x) for x in array_bounds(len(ycoords), len(xcoords), transform)]
     )
-    vars: Dict[str, Tuple[List[str], np.ndarray]] = {}
-    vars["height"] = (["y", "x"], elevation)
-    vars["slope"] = (["y", "x"], slope)
-    vars["aspect"] = (["y", "x"], aspect)
+    var: dict[str, tuple[list[str], np.ndarray]] = {}
+    var["height"] = (["y", "x"], elevation)
+    var["slope"] = (["y", "x"], slope)
+    var["aspect"] = (["y", "x"], aspect)
     xarr = xr.Dataset(
-        vars,
+        var,
         coords={"x": xcoords, "y": ycoords},
         attrs={
             "crs": crs,
@@ -85,9 +85,9 @@ def get_dem_from_tile(
 
 
 def get_dem_from_tiles(
-    tile_ids: List[str],
+    tile_ids: list[str],
     resolution: float = 60,
-    base_dir=os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),
+    base_dir=os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),  # noqa
 ) -> xr.Dataset:
     """
     Read several tiles for DEM Copernicus
@@ -109,7 +109,8 @@ def get_dem_from_tiles(
     -------
     xarr: xarray.Dataset
     """
-    assert len(tile_ids) > 0
+    # TODO: remove assert
+    assert len(tile_ids) > 0  # noqa
     # Get CRS from first tile
     crs = f"EPSG:{mgrs.get_crs_mgrs_tile(tile_ids[0]).to_epsg()}"
     # Get file paths
@@ -140,7 +141,9 @@ def get_dem_from_tiles(
     x, y = np.gradient(elevation.astype(np.float32))
     slope = np.degrees(np.arctan(np.sqrt(x * x + y * y) / resolution))
     # Aspect unfolding rules from
-    # https://github.com/r-barnes/richdem/blob/603cd9d16164393e49ba8e37322fe82653ed5046/include/richdem/methods/terrain_attributes.hpp#L236
+    # https://github.com/r-barnes/richdem/blob/ \
+    # 603cd9d16164393e49ba8e37322fe82653ed5046/include/ \
+    # richdem/methods/terrain_attributes.hpp#L236
     aspect = np.rad2deg(np.arctan2(x, -y))
     lt_0 = aspect < 0
     gt_90 = aspect > 90
@@ -154,12 +157,12 @@ def get_dem_from_tiles(
     bounds = tuple(
         [float(x) for x in array_bounds(len(ycoords), len(xcoords), transform)]
     )
-    vars: Dict[str, Tuple[List[str], np.ndarray]] = {}
-    vars["height"] = (["y", "x"], elevation)
-    vars["slope"] = (["y", "x"], slope)
-    vars["aspect"] = (["y", "x"], aspect)
+    var: dict[str, tuple[list[str], np.ndarray]] = {}
+    var["height"] = (["y", "x"], elevation)
+    var["slope"] = (["y", "x"], slope)
+    var["aspect"] = (["y", "x"], aspect)
     xarr = xr.Dataset(
-        vars,
+        var,
         coords={"x": xcoords, "y": ycoords},
         attrs={
             "crs": crs,
@@ -194,7 +197,8 @@ def get_elevation_from_tile(
     xarr: xarray.Dataset
     """
     file_name = os.path.join(base_dir, f"COP-DEM_GLO-30-DGED_{tile_id}.tif")
-    assert os.path.isfile(file_name)
+    # TODO: Remove assert
+    assert os.path.isfile(file_name)  # noqa
     elevation, xcoords, ycoords, crs = read_as_numpy(
         [file_name],
         resolution=resolution,

@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# coding: utf8
-
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import argparse
 import logging
@@ -19,12 +16,17 @@ from etdataset.utils import (
     get_bbox_from_roi,
     read_product_list,
 )
-from etdataset.writer import export_matlab, write_dataset, write_matches, write_results
+from etdataset.writer import (
+    export_matlab,
+    write_dataset,
+    write_matches,
+    write_results,
+)
 
 logger = LoggerManager.get_logger(__name__)
 
 
-def CLIException(Exception):
+class CLIException(Exception):
     """
     Exception related to CLI arguments
     """
@@ -122,13 +124,15 @@ def cli_select(args: SelectArgs) -> None:
         min_date = datetime.strptime(args.min_date, "%Y-%m-%d")
     except ValueError:
         raise CLIException(
-            "Error: The format for minimum acqsuisition date must be Year-Month-Day"
+            "Error: The format for minimum acqsuisition "
+            "date must be Year-Month-Day"
         )
     try:
         max_date = datetime.strptime(args.max_date, "%Y-%m-%d")
     except ValueError:
         raise CLIException(
-            "Error: The format for maximum acquisition date must be Year-Month-Day"
+            "Error: The format for maximum acquisition "
+            "date must be Year-Month-Day"
         )
     if max_date < min_date:
         raise CLIException(
@@ -138,19 +142,23 @@ def cli_select(args: SelectArgs) -> None:
         _ = pd.Timedelta(args.delta)
     except ValueError:
         raise CLIException(
-            "Error: The format for delta acquisition time is not recognized (ex: 1 day)"
+            "Error: The format for delta acquisition time is "
+            "not recognized (ex: 1 day)"
         )
     if args.max_cloud_cover < 0 or args.max_cloud_cover > 100:
         raise CLIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {args.max_cloud_cover})"
+            "Cloud cover criteria must be between 0 and 100 "
+            f"(got : {args.max_cloud_cover})"
         )
     if args.min_roi_overlap < 0 or args.min_roi_overlap > 100:
         raise CLIException(
-            f"Min ROI overlap criteria must be between 0 and 100 (got : {args.min_roi_overlap})"
+            "Min ROI overlap criteria must be between 0 and 100 "
+            f"(got : {args.min_roi_overlap})"
         )
     if args.min_product_overlap < 0 or args.min_product_overlap > 100:
         raise CLIException(
-            f"Min product overlap criteria must be between 0 and 100 (got : {args.min_product_overlap})"
+            "Min product overlap criteria must be between 0 and 100 "
+            f"(got : {args.min_product_overlap})"
         )
     # Check output path
     if not os.path.isdir(args.output):
@@ -182,8 +190,12 @@ def cli_select(args: SelectArgs) -> None:
     logger.info(f"Number of products in {args.coll1} = {len(products1)}")
     logger.info(f"Number of products in {args.coll2} = {len(products2)}")
     write_matches(matches, os.path.join(args.output, "matches.csv"))
-    write_results(products1, os.path.join(args.output, f"products_{args.coll1}.csv"))
-    write_results(products2, os.path.join(args.output, f"products_{args.coll2}.csv"))
+    write_results(
+        products1, os.path.join(args.output, f"products_{args.coll1}.csv")
+    )
+    write_results(
+        products2, os.path.join(args.output, f"products_{args.coll2}.csv")
+    )
 
 
 def cli_search(args: SearchArgs) -> None:
@@ -197,13 +209,15 @@ def cli_search(args: SearchArgs) -> None:
         min_date = datetime.strptime(args.min_date, "%Y-%m-%d")
     except ValueError:
         raise CLIException(
-            "Error: The format for minimum acqsuisition date must be Year-Month-Day"
+            "Error: The format for minimum acqsuisition "
+            "date must be Year-Month-Day"
         )
     try:
         max_date = datetime.strptime(args.max_date, "%Y-%m-%d")
     except ValueError:
         raise CLIException(
-            "Error: The format for maximum acquisition date must be Year-Month-Day"
+            "Error: The format for maximum acquisition "
+            "date must be Year-Month-Day"
         )
     if max_date < min_date:
         raise CLIException(
@@ -218,7 +232,8 @@ def cli_search(args: SearchArgs) -> None:
         roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
     if args.max_cloud_cover < 0 or args.max_cloud_cover > 100:
         raise CLIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {args.max_cloud_cover})"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {args.max_cloud_cover})"
         )
 
     # Search
@@ -247,7 +262,8 @@ def cli_download(args: DownloadArgs) -> None:
 
     try:
         products = read_product_list(args.list, 4326)
-    except Exception as e:
+    # TODO: Correct catch blid exception
+    except Exception as e:  # noqa
         raise CLIException(f"Error while reading product list: {e}")
 
     # Download
@@ -265,19 +281,32 @@ def get_parser() -> argparse.ArgumentParser:
     # create the parser for the "create" command
     parser_create = subparsers.add_parser(
         "create",
-        help="Create dataset from Landsat/Ecostress/Sentinel2/HLS products. "
-        "The dataset is resampling at 60m resolution and corresponds to a MGRS tile.",
+        help=(
+            "Create dataset from Landsat/Ecostress/Sentinel2/HLS products. "
+            "The dataset is resampling at 60m resolution "
+            "and corresponds to a MGRS tile."
+        ),
     )
     parser_create.add_argument(
-        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Verbose mode",
     )
     parser_create.add_argument(
-        "--vis", type=str, required=True, help="Path to VIS product (optical bands)"
+        "--vis",
+        type=str,
+        required=True,
+        help="Path to VIS product (optical bands)",
     )
     parser_create.add_argument(
         "--tir",
         type=str,
-        help="Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.",
+        help=(
+            "Path to TIR product (thermal bands), "
+            "if not provided the VIS product is used for thermal bands."
+        ),
     )
     parser_create.add_argument(
         "--radiation", type=str, required=True, help="Path to radiation product"
@@ -303,10 +332,17 @@ def get_parser() -> argparse.ArgumentParser:
     # create the parser for the "select" command
     parser_select = subparsers.add_parser(
         "select",
-        help="Select product matches between 2 collections that satisfy required criteria",
+        help=(
+            "Select product matches between 2 collections "
+            "that satisfy required criteria"
+        ),
     )
     parser_select.add_argument(
-        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Verbose mode",
     )
     parser_select.add_argument(
         "--coll1",
@@ -344,7 +380,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--delta",
         type=str,
         default="3 days",
-        help="Maximum time delta allowed between acquisitions (default: 3 days)",
+        help="Maximum time delta allowed between acquisitions (default: 3d)",
     )
     group = parser_select.add_mutually_exclusive_group(required=True)
     group.add_argument("-t", "--tile", type=str, help="Tile ID")
@@ -376,10 +412,15 @@ def get_parser() -> argparse.ArgumentParser:
 
     # create the parser for the "search" command
     parser_search = subparsers.add_parser(
-        "search", help="Search products in a collection that satisfy required criteria"
+        "search",
+        help="Search products in a collection that satisfy required criteria",
     )
     parser_search.add_argument(
-        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Verbose mode",
     )
     parser_search.add_argument(
         "-c",
@@ -429,7 +470,11 @@ def get_parser() -> argparse.ArgumentParser:
         "download", help="Download products from a list in CSV format"
     )
     parser_download.add_argument(
-        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Verbose mode",
     )
     parser_download.add_argument(
         "-l",
@@ -457,14 +502,6 @@ def etdataset() -> None:
     # Parser arguments
     parser = get_parser()
     args = parser.parse_args()
-
-    # Check environment variables
-    if not os.environ.get("METADATA_PATH") and args.metatada is None:
-        raise Exception(
-            "You must provide the path to the directory containing the metadata csv files. "
-            "You can use either the environment variable METADATA_PATH or "
-            "the option --metadata in the command line"
-        )
 
     # Configure logging
     log_level = logging.INFO

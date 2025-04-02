@@ -1,9 +1,6 @@
-#!/usr/bin/env python
-# coding: utf8
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import os
 from datetime import datetime
-from typing import Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -14,12 +11,12 @@ from dateutil.parser import parse as parse_dateutil
 from pyproj import CRS
 from sensorsio import utils
 
-from .logging import LoggerManager
-from .provider import Collection, get_provider
-from .reader import get_product_reader
-from .selection import filter_with_roi, select_products
-from .utils import check_mgrs_format, get_bbox_from_mgrs_tile
-from .era5 import ERA5Data, ERA5Var, interpolate_on_grid
+from etdataset.era5 import ERA5Data, ERA5Var, interpolate_on_grid
+from etdataset.logging import LoggerManager
+from etdataset.provider import Collection, get_provider
+from etdataset.reader import get_product_reader
+from etdataset.selection import filter_with_roi, select_products
+from etdataset.utils import check_mgrs_format, get_bbox_from_mgrs_tile
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -40,7 +37,8 @@ def parse_date(date_str: str) -> datetime:
         date = datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError as exc:
         raise APIException(
-            f"Error: The expected format for date must be Year-Month-Day (got: {date_str})"
+            "Error: The expected format for date must "
+            f"be Year-Month-Day (got: {date_str})"
         ) from exc
     return date
 
@@ -124,24 +122,32 @@ def create_dataset(
     # Read flux
     if radiation is not None:
         logger.debug(f"Read radiation data in {radiation}")
-        acquisition_datetime = datetime.combine(merged_xr.tir_date, merged_xr.tir_time)
+        acquisition_datetime = datetime.combine(
+            merged_xr.tir_date, merged_xr.tir_time
+        )
         radiation_ds = ERA5Data(radiation)
         if "ssrdc" not in radiation_ds.get_available_variables():
             raise ValueError(f"Variable 'ssrdc' is missing in {radiation}")
         if "strdc" not in radiation_ds.get_available_variables():
             raise ValueError(f"Variable 'strdc' is missing in {radiation}")
         if merged_xr.tir_date not in list(
-            set(
-                [parse_dateutil(dt).date() for dt in radiation_ds.get_available_dates()]
+            set(  # noqa
+                [
+                    parse_dateutil(dt).date()
+                    for dt in radiation_ds.get_available_dates()
+                ]
             )
         ):
-            raise ValueError(f"Date {merged_xr.tir_date} is missing in {radiation}")
+            raise ValueError(
+                f"Date {merged_xr.tir_date} is missing in {radiation}"
+            )
         # Get data interplate for the acquisition time
         rsd = radiation_ds.get(
             ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD, date=acquisition_datetime
         )
         rld = radiation_ds.get(
-            ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD, date=acquisition_datetime
+            ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD,
+            date=acquisition_datetime,
         )
         # Transform radiation in W.m-2 TODO: Put the factor in ERA5
         rsd /= 3600
@@ -181,14 +187,17 @@ def search(
     _ = parse_date(min_date)
     _ = parse_date(max_date)
     if tile_id is None and roi_bbox is None:
-        raise APIException("You must provide either a ROI bounding box or MGRS tile ID")
+        raise APIException(
+            "You must provide either a ROI bounding box or MGRS tile ID"
+        )
     if roi_crs is None and roi_bbox is not None:
         raise APIException("You must provide a ROI bounding box with a CRS")
     if tile_id is not None:
         check_mgrs_format(tile_id)
     if max_cloud_cover < 0 or max_cloud_cover > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
 
     latlon_bbox = None
@@ -203,17 +212,24 @@ def search(
     logger.debug(f"Provider: {provider}")
 
     # Search
-    results = provider.search(min_date, max_date, tile_id, latlon_bbox, max_cloud_cover)
-    logger.info(f"Products found for {collection.name} in catalog: {len(results)}")
+    results = provider.search(
+        min_date, max_date, tile_id, latlon_bbox, max_cloud_cover
+    )
+    logger.info(
+        f"Products found for {collection.name} in catalog: {len(results)}"
+    )
 
     # Get bounding box from tile
     if tile_id is not None:
         roi_bbox, roi_crs = get_bbox_from_mgrs_tile(tile_id)
 
     # Filter with additional criteria for collection 1
-    results = filter_with_roi(results, roi_bbox, roi_crs, min_overlap=min_roi_overlap)
+    results = filter_with_roi(
+        results, roi_bbox, roi_crs, min_overlap=min_roi_overlap
+    )
     logger.info(
-        f"Products found for {collection.name} " f"after ROI filtering: {len(results)}"
+        f"Products found for {collection.name} "
+        f"after ROI filtering: {len(results)}"
     )
 
     return results
@@ -261,8 +277,8 @@ def select(
     max_cloud_cover: float = 20,
     min_roi_overlap: float = 40,
     min_product_overlap: float = 40,
-    only_best_match: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    only_best_match: bool = False,  # noqa
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Select products
     """
@@ -277,25 +293,31 @@ def select(
         delta_time = pd.Timedelta(delta)
     except ValueError:
         raise APIException(
-            "Error: The format for delta acquisition time is not recognized (ex: 1 day)"
+            "Error: The format for delta acquisition "
+            "time is not recognized (ex: 1 day)"
         )
     if tile_id is None and roi_bbox is None:
-        raise APIException("You must provide either a ROI bounding box or MGRS tile ID")
+        raise APIException(
+            "You must provide either a ROI bounding box or MGRS tile ID"
+        )
     if roi_crs is None and roi_bbox is not None:
         raise APIException("You must provide a ROI bounding box with a CRS")
     if tile_id is not None:
         check_mgrs_format(tile_id)
     if max_cloud_cover < 0 or max_cloud_cover > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
     if min_roi_overlap < 0 or min_roi_overlap > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
     if min_product_overlap < 0 or min_product_overlap > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
 
     # Search into collection 1
