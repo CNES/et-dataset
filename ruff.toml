@@ -14,7 +14,7 @@ exclude = [
     "site-packages",
 ]
 
-line-length = 120
+line-length = 80
 
 [format]
 docstring-code-format = true
@@ -64,7 +64,7 @@ select = [
   "B033",
   "B034",
   "B035",
-  "B904",
+  #"B904", # raise-without-from-inside-except to check
   "B905",
   "BLE001",
   "C400",
@@ -90,9 +90,9 @@ select = [
   "DTZ002",
   "DTZ003",
   "DTZ004",
-  "DTZ005",
+  #"DTZ005", datime not use with zone
   "DTZ006",
-  "DTZ007",
+  #"DTZ007", datetime not use with zone 
   "DTZ011",
   "DTZ012",
   "E101",
@@ -113,10 +113,10 @@ select = [
   "E742",
   "E743",
   "E902",
-  #"EM101",
-  "EM102",
+  #"EM101", #raw-string-in-exception
+  #"EM102", # F-string-in-exception
   "EM103",
-  #"EXE001",
+  "EXE001",
   "EXE002",
   "EXE003",
   "EXE004",
@@ -167,12 +167,12 @@ select = [
   "FA100",
   "FA102",
   "FBT001",
-  "FBT002",
+  #"FBT002", boolean-default-value-positional-argument
   "FLY002",
   "G001",
   "G002",
   "G003",
-  "G004",
+  #"G004", f-string in logging
   "G010",
   "G101",
   "G201",
@@ -188,11 +188,11 @@ select = [
   "INT003",
   "ISC003",
   "N801",
-  "N802",
+  #"N802", to correct
   "N803",
   "N804",
   "N805",
-  "N806",
+  #"N806", to correct
   "N807",
   "N811",
   "N812",
@@ -201,7 +201,7 @@ select = [
   "N815",
   "N816",
   "N817",
-  "N818",
+  #"N818", Exception naming
   "N999",
   "PERF101",
   "PERF102",
@@ -254,7 +254,7 @@ select = [
   "PLR1711",
   "PLR1714",
   "PLR1722",
-  "PLR2004",
+  #"PLR2004", Constant to check
   "PLR5501",
   "PLW0120",
   "PLW0127",
@@ -342,7 +342,7 @@ select = [
   "PYI055",
   "PYI056",
   "RET503",
-  "RET504",
+  #"RET504", unecessary assignement before return
   "RET505",
   "RET506",
   "RET507",
@@ -373,7 +373,7 @@ select = [
   "S108",
   "S110",
   "S112",
-  "S113",
+  #"S113", requests without timeout
   "S301",
   "S302",
   "S303",
@@ -392,7 +392,6 @@ select = [
   "S317",
   "S318",
   "S319",
-  "S320",
   "S321",
   "S323",
   "S324",
@@ -415,12 +414,12 @@ select = [
   "SIM103",
   "SIM105",
   "SIM107",
-  "SIM108",
+  #"SIM108", Ternary-operator
   "SIM109",
   "SIM110",
   "SIM112",
   "SIM114",
-  "SIM115",
+  #"SIM115",
   "SIM116",
   "SIM117",
   "SIM118",
@@ -444,7 +443,7 @@ select = [
   "T201",
   "T203",
   "TC001",
-  "TC002",
+  #"TC002",
   "TC003",
   "TC004",
   "TC005",
@@ -456,11 +455,11 @@ select = [
   "TID252",
   "TID253",
   "TRY002",
-  #"TRY003",
+  #"TRY003", long exception message
   "TRY004",
   "TRY201",
   "TRY300",
-  "TRY301",
+  #"TRY301", raise-within-try to check
   "TRY400",
   "TRY401",
   "UP001",
@@ -497,7 +496,6 @@ select = [
   "UP035",
   "UP036",
   "UP037",
-  "UP038",
   "UP039",
   "UP040",
   "W291",
@@ -528,9 +526,11 @@ select = [
   "PLR6301",
   "S",
   "TID252",
+  "PT011", #pytest raises ValueError to correct
+  "PT009", #assert to correct
 ]
 
-"**/notebooks/*.ipynb" = ["T201","T203","SLF001","PLR2004"]
+"**/notebooks/*.ipynb" = ["T201","T203","SLF001","PLR2004","DTZ001","E501","TRY002"]
 
 [lint.flake8-tidy-imports]
 ban-relative-imports = "all"

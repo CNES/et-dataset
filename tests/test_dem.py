@@ -1,21 +1,24 @@
-#!/usr/bin/env python
-# coding: utf8
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 
 import os
+from unittest import TestCase
 
 import numpy as np
 
-from unittest import TestCase
-
-from etdataset.dem import get_dem_from_tile, get_dem_from_tiles, get_elevation_from_tile
+from etdataset.dem import (
+    get_dem_from_tile,
+    get_dem_from_tiles,
+    get_elevation_from_tile,
+)
 
 
 def get_test_data_path() -> str:
     """
     Get test data path for DEM tiles
     """
-    return os.path.join(os.environ["ETDATASET_TEST_DATA_PATH"], "DEM_Copercinus_30m")
+    return os.path.join(
+        os.environ["ETDATASET_TEST_DATA_PATH"], "DEM_Copercinus_30m"
+    )
 
 
 def test_get_dem_from_tile() -> None:
@@ -29,7 +32,7 @@ def test_get_dem_from_tile() -> None:
     assert dem.crs == "EPSG:32632"
     TestCase().assertDictEqual({"x": 60, "y": 60}, dem.resolution)
     np.testing.assert_array_equal(
-        sorted([v for v in dem.data_vars]), ["aspect", "height", "slope"]
+        sorted(dem.data_vars), ["aspect", "height", "slope"]
     )
     for v in dem.data_vars:
         assert not np.isnan(np.sum(dem[v].data))
@@ -58,7 +61,7 @@ def test_get_dem_from_tiles() -> None:
     assert dem.crs == "EPSG:32632"
     TestCase().assertDictEqual({"x": 60, "y": 60}, dem.resolution)
     np.testing.assert_array_equal(
-        sorted([v for v in dem.data_vars]), ["aspect", "height", "slope"]
+        sorted(dem.data_vars), ["aspect", "height", "slope"]
     )
     for v in dem.data_vars:
         assert not np.isnan(np.sum(dem[v].data))
@@ -70,7 +73,7 @@ def test_get_dem_from_tiles() -> None:
     assert dem.crs == "EPSG:32632"
     TestCase().assertDictEqual({"x": 60, "y": 60}, dem.resolution)
     np.testing.assert_array_equal(
-        sorted([v for v in dem.data_vars]), ["aspect", "height", "slope"]
+        sorted(dem.data_vars), ["aspect", "height", "slope"]
     )
     for v in dem.data_vars:
         assert not np.isnan(np.sum(dem[v].data))

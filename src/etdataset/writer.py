@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales / Université Paul Sabatier (UT3)
+# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
 #
 """
 Common function
@@ -47,7 +45,7 @@ def write_dataset(
     row = xrds.sizes["y"]
     col = xrds.sizes["x"]
     if bands is None:
-        bands = [i for i in xrds.data_vars]
+        bands = list(xrds.data_vars)
     else:
         bands = [i for i in bands if i in xrds.data_vars]
     if xrds.attrs["vis"] == xrds.attrs["tir"]:
@@ -72,9 +70,9 @@ def write_dataset(
             transform=xrds.attrs["transform"],
         ) as source_ds:
             source_ds.colorinterp = [ColorInterp.gray for _ in bands]
-            for id, band in enumerate(bands, start=1):
-                source_ds.write_band(id, xrds[band].data)
-                source_ds.set_band_description(id, band)
+            for i, band in enumerate(bands, start=1):
+                source_ds.write_band(i, xrds[band].data)
+                source_ds.set_band_description(i, band)
     else:
         filename += f"_{xrds.attrs['tile']}"
         os.makedirs(os.path.join(directory, filename), exist_ok=True)
@@ -110,7 +108,7 @@ def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
     try:
         dtype = xrds[band].dtype
     except KeyError:
-        raise Exception(f"Band {band} not in dataset")
+        raise ValueError(f"Band {band} not in dataset")
     with rio.open(
         os.path.join(directory, filename),
         mode="w+",
@@ -131,7 +129,7 @@ def export_matlab(
     xrds: xr.Dataset, bands: list[str] = BANDS, directory: str = os.getcwd()
 ):
     if bands is None:
-        bands = [i for i in xrds.data_vars]
+        bands = list(xrds.data_vars)
     else:
         bands = [i for i in bands if i in xrds.data_vars]
     if xrds.attrs["vis"] == xrds.attrs["tir"]:

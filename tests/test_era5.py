@@ -1,13 +1,11 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 #
 """
 This module contains tests for ERA5 and ERA5-land data driver
 """
+
 import os
 from dataclasses import dataclass
-from typing import List
 
 import affine  # type: ignore
 import numpy as np
@@ -175,8 +173,8 @@ class ERA5ReadParams:
     Class to store read parameters
     """
 
-    variables: List[era5.ERA5Var] | None = None
-    dates: List[str] | None = None
+    variables: list[era5.ERA5Var] | None = None
+    dates: list[str] | None = None
 
 
 @pytest.mark.requires_test_data
