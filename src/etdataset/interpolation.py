@@ -264,10 +264,10 @@ def create_grid(
         stop,
         height,
     )
+    bounds = rio.coords.BoundingBox(bounds.left, bottom, right, bounds.top)
     transform = rio.transform.from_bounds(
         bounds.right, bounds.bottom, bounds.left, bounds.right, width, height
     )
-    bounds = rio.coords.BoundingBox(bounds.left, bottom, right, bounds.top)
     return xr.DataArray(
         data=np.ones((height, width)).astype(int),
         dims=["y", "x"],
