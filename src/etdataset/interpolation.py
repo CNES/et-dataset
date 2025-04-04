@@ -238,25 +238,38 @@ def create_grid(
     bounds: rio.coords.BoundingBox,
     crs: CRS,
     resolution: float,
-    transform: rio.Affine,
-    shape: tuple[int, int],
 ) -> xr.DataArray:
     """
     Create a grid
     """
-    data = np.ones(shape)
+    # X coords
+    width = int(np.ceil((bounds.right - bounds.left) / resolution))
+    start = bounds.left + 0.5 * resolution
+    # Calculate the stop value
+    stop = start + resolution * (width - 1) + resolution
+    right = stop + 0.5 * resolution
     xcoords: np.ndarray = np.linspace(
-        bounds.left + 0.5 * resolution,
-        bounds.right - 0.5 * resolution,
-        shape[1],
+        start,
+        stop,
+        width,
     )
+    # Y coords
+    height = int(np.ceil((bounds.top - bounds.bottom) / resolution))
+    start = bounds.top - 0.5 * resolution
+    # Calculate the stop value
+    stop = start + resolution * (height - 1) + resolution
+    bottom = stop - 0.5 * resolution
     ycoords: np.ndarray = np.linspace(
-        bounds.top - 0.5 * resolution,
-        bounds.bottom + 0.5 * resolution,
-        shape[0],
+        start,
+        stop,
+        height,
     )
+    transform = rio.transform.from_bounds(
+        bounds.right, bounds.bottom, bounds.left, bounds.right, width, height
+    )
+    bounds = rio.coords.BoundingBox(bounds.left, bottom, right, bounds.top)
     return xr.DataArray(
-        data=data,
+        data=np.ones((height, width)).astype(int),
         dims=["y", "x"],
         coords={"x": xcoords, "y": ycoords},
         attrs={
