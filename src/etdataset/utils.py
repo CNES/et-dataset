@@ -9,6 +9,8 @@ import re
 from datetime import datetime
 
 import geopandas as gpd
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import rasterio as rio
 from fiona.errors import DriverError
@@ -115,10 +117,12 @@ def check_theia_tiles(tile_ids: list[str]) -> list[str]:
     return list(set(tile_ids) & set(theia_tiles.index))
 
 
-def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
+def read_product_list(
+    path: str, crs: CRS | int, geometry: str = "geometry"
+) -> gpd.GeoDataFrame:
     """
     Read a product list in CSV format and convert it to
-    GeoDataFrame
+    GeoDataFrame.
     """
     # Read to DataFrame
     df = pd.read_csv(path)
@@ -129,6 +133,9 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
     # Remove unnecessary column
     if "Unnamed: 0" in df.columns:
         df = df.drop(columns="Unnamed: 0")
+
+    # Rename geometry columns if it already exists
+    df = df.rename(columns={"geometry": "old_geometry"})
 
     # Convert geometry
     def convert_polygon(poly: str) -> Polygon:
@@ -143,9 +150,30 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
         )
         return Polygon(coords)
 
-    geometry = df["geometry"].apply(lambda row: convert_polygon(row))
+    try:
+        # Convert the WKT column to geometry
+        geometry = gpd.GeoSeries.from_wkt(df[geometry])
+    except Exception:  # noqa
+        geometry = df["geometry"].apply(lambda row: convert_polygon(row))
+
     return gpd.GeoDataFrame(
         data=df[df.columns.difference(["b"], sort=False)],
         geometry=geometry,
         crs=crs,
     )
+
+
+def mask_bits(arr: npt.ArrayLike, pos: int, mask: str = "1") -> npt.NDArray:
+    """
+    Search for a binary code at a specific position in bytes array and
+    return a mask array
+    """
+    if pos < 0:
+        raise ValueError("Position fo bits extraction must be positive")
+    array = np.array(arr)
+    res = np.zeros_like(array)
+    res[~np.isnan(array)] = np.isin(
+        (array[~np.isnan(array)].astype(int) >> pos) & int("1" * len(mask), 2),
+        int(mask, 2),
+    )
+    return res.astype(bool)
