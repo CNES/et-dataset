@@ -12,6 +12,7 @@ from datetime import datetime
 import numpy as np
 import psutil  # type: ignore
 import rasterio as rio
+import rioxarray  # noqa # Use to activate rioxarray accessors
 import xarray as xr
 from pyproj import CRS
 from rasterio.warp import reproject
@@ -234,7 +235,7 @@ def interpolate(
     )
 
 
-def create_grid(
+def create_grid_array(
     bounds: rio.coords.BoundingBox,
     crs: CRS,
     resolution: float,
@@ -246,8 +247,7 @@ def create_grid(
     width = int(np.ceil((bounds.right - bounds.left) / resolution))
     start = bounds.left + 0.5 * resolution
     # Calculate the stop value
-    stop = start + resolution * (width - 1) + resolution
-    right = stop + 0.5 * resolution
+    stop = start + resolution * (width - 1)
     xcoords: np.ndarray = np.linspace(
         start,
         stop,
@@ -255,30 +255,55 @@ def create_grid(
     )
     # Y coords
     height = int(np.ceil((bounds.top - bounds.bottom) / resolution))
-    start = bounds.top - 0.5 * resolution
+    start = bounds.bottom + 0.5 * resolution
     # Calculate the stop value
-    stop = start + resolution * (height - 1) + resolution
-    bottom = stop - 0.5 * resolution
+    stop = start + resolution * (height - 1)
     ycoords: np.ndarray = np.linspace(
         start,
         stop,
         height,
     )
-    bounds = rio.coords.BoundingBox(bounds.left, bottom, right, bounds.top)
-    transform = rio.transform.from_bounds(
-        bounds.right, bounds.bottom, bounds.left, bounds.right, width, height
-    )
-    return xr.DataArray(
+    grid = xr.DataArray(
         data=np.ones((height, width)).astype(int),
         dims=["y", "x"],
         coords={"x": xcoords, "y": ycoords},
-        attrs={
-            "bounds": bounds,
-            "resolution": resolution,
-            "transform": transform,
-            "crs": crs,
-        },
     )
+    return grid.rio.write_crs(crs)
+
+
+def create_grid_dataset(
+    bounds: rio.coords.BoundingBox,
+    crs: CRS,
+    resolution: float,
+) -> xr.Dataset:
+    """
+    Create a grid
+    """
+    # X coords
+    width = int(np.ceil((bounds.right - bounds.left) / resolution))
+    start = bounds.left + 0.5 * resolution
+    # Calculate the stop value
+    stop = start + resolution * (width - 1)
+    xcoords: np.ndarray = np.linspace(
+        start,
+        stop,
+        width,
+    )
+    # Y coords
+    height = int(np.ceil((bounds.top - bounds.bottom) / resolution))
+    start = bounds.bottom + 0.5 * resolution
+    # Calculate the stop value
+    stop = start + resolution * (height - 1)
+    ycoords: np.ndarray = np.linspace(
+        start,
+        stop,
+        height,
+    )
+    grid = xr.Dataset(
+        data_vars={"grid": (("y", "x"), np.ones((height, width)).astype(int))},
+        coords={"x": xcoords, "y": ycoords},
+    )
+    return grid.rio.write_crs(crs)
 
 
 def interpolate_on_grid(
