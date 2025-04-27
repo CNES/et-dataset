@@ -84,6 +84,30 @@ def get_bbox_from_roi(roi_path: str) -> tuple[rio.coords.BoundingBox, CRS]:
         raise BBoxException(f"Unable to read shapefile {roi_path}: {e}")
 
 
+def get_utm_bbox_from_roi(roi_path: str) -> tuple[rio.coords.BoundingBox, CRS]:
+    """
+    Get bounding box information (bbox and CRS) in UTM coordinates
+    from a ROI shapefile
+    """
+    # Roi shapefile
+    try:
+        roi_gdf = gpd.read_file(roi_path)
+        epsg_code = roi_gdf.crs
+        if epsg_code == 4326:
+            # Auto-detect UTM zone based on centroid
+            centroid = roi_gdf.geometry[0].centroid
+            utm_zone = int((centroid.x + 180) / 6) + 1
+            epsg_code = 32600 + utm_zone  # 32600 for northern hemisphere
+            if centroid.y < 0:
+                epsg_code = 32700 + utm_zone  # use 32700 for southern
+            roi_gdf = roi_gdf.to_crs(epsg=epsg_code)
+        return rio.coords.BoundingBox(
+            *roi_gdf.bounds.iloc[0].values
+        ), roi_gdf.crs
+    except DriverError as e:
+        raise BBoxException(f"Unable to read shapefile {roi_path}: {e}")
+
+
 def get_bbox_from_mgrs_tile(tile: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
