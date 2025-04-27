@@ -7,11 +7,9 @@ import numpy as np
 import pandas as pd
 import rasterio as rio
 import xarray as xr
-from dateutil.parser import parse as parse_dateutil
 from pyproj import CRS
 from sensorsio import utils
 
-from etdataset.era5 import ERA5Data, ERA5Var, interpolate_on_grid
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection, get_provider
 from etdataset.reader import get_product_reader
@@ -46,8 +44,10 @@ def parse_date(date_str: str) -> datetime:
 def create_dataset(
     vis_path: str,
     tir_path: str | None = None,
-    tile_id: str | None = None,
-    radiation: str | None = None,
+    roi_bbox: rio.coords.BoundingBox | None = None,
+    roi_crs: CRS | None = None,
+    resolution: float = RESOLUTION,
+    resampling: rio.enums.Resampling = rio.enums.Resampling.average,
 ) -> xr.Dataset:
     """
     Create a dataset
@@ -55,47 +55,31 @@ def create_dataset(
     if tir_path is None:
         tir_path = vis_path
     # Get reader
-    vis_reader = get_product_reader(vis_path, resolution=RESOLUTION)
-    tir_reader = get_product_reader(tir_path, resolution=RESOLUTION)
-
-    # Check tile
-    if vis_reader.tile is None and tir_reader.tile is None:
-        if tile_id is None:
-            logger.error("None of the products have MGRS tile information")
-            raise APIException("You must provide the MGRS tile ID")
-        vis_reader.tile = tile_id
-        tir_reader.tile = tile_id
-    elif vis_reader.tile is None and tir_reader.tile is not None:
-        logger.info("Use MGRS tile from TIR product")
-        vis_reader.tile = tir_reader.tile
-    elif vis_reader.tile is not None and tir_reader.tile is None:
-        logger.info("Use MGRS tile from VIS product")
-        tir_reader.tile = vis_reader.tile
-    elif vis_reader.tile != tir_reader.tile:
-        logger.error(
-            f"The products are not on the same MGRS tile : "
-            f"VIS tile = {vis_reader.tile} and TIR tile = {tir_reader.tile}"
-        )
-        raise APIException("The products are not on the same MGRS tile")
+    vis_reader = get_product_reader(
+        vis_path, roi_bbox=roi_bbox, roi_crs=roi_crs, resolution=resolution
+    )
+    tir_reader = get_product_reader(
+        tir_path, roi_bbox=roi_bbox, roi_crs=roi_crs, resolution=resolution
+    )
 
     # Force the same bounding box
     common_bbox, common_crs = utils.bb_common(
         bounds=[vis_reader.bb, tir_reader.bb],
-        src_crs=[vis_reader.crs, tir_reader.crs],
+        src_crs=[str(vis_reader.crs), str(tir_reader.crs)],
         snap=RESOLUTION,
-        target_crs=vis_reader.crs,
+        target_crs=str(vis_reader.crs),
     )
-    vis_reader.crs = common_crs
+    vis_reader.crs = CRS(common_crs)
     vis_reader.bb = common_bbox
-    tir_reader.crs = common_crs
+    tir_reader.crs = CRS(common_crs)
     tir_reader.bb = common_bbox
 
     # Read VIS
-    vis_xr = vis_reader.read_vis_bands()
+    vis_xr = vis_reader.read_vis_bands(resampling=resampling)
     logger.debug(f"Read VIS: {type(vis_xr)}")
 
     # Read TIR
-    tir_xr = tir_reader.read_tir_bands()
+    tir_xr = tir_reader.read_tir_bands(resampling=resampling)
     logger.debug(f"Read TIR: {type(tir_xr)}")
 
     # Merge
@@ -118,54 +102,6 @@ def create_dataset(
             }
         )
     logger.debug(f"Merged: {merged_xr.attrs}")
-
-    # Read flux
-    if radiation is not None:
-        logger.debug(f"Read radiation data in {radiation}")
-        acquisition_datetime = datetime.combine(
-            merged_xr.tir_date, merged_xr.tir_time
-        )
-        radiation_ds = ERA5Data(radiation)
-        if "ssrdc" not in radiation_ds.get_available_variables():
-            raise ValueError(f"Variable 'ssrdc' is missing in {radiation}")
-        if "strdc" not in radiation_ds.get_available_variables():
-            raise ValueError(f"Variable 'strdc' is missing in {radiation}")
-        if merged_xr.tir_date not in list(
-            set(  # noqa
-                [
-                    parse_dateutil(dt).date()
-                    for dt in radiation_ds.get_available_dates()
-                ]
-            )
-        ):
-            raise ValueError(
-                f"Date {merged_xr.tir_date} is missing in {radiation}"
-            )
-        # Get data interplate for the acquisition time
-        rsd = radiation_ds.get(
-            ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD, date=acquisition_datetime
-        )
-        rld = radiation_ds.get(
-            ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD,
-            date=acquisition_datetime,
-        )
-        # Transform radiation in W.m-2 TODO: Put the factor in ERA5
-        rsd /= 3600
-        rld /= 3600
-        # Spatial interpolation
-        grid = merged_xr["red"]
-        # TODO: Improve API for interpolate on grid
-        grid.attrs = {
-            "crs": merged_xr.crs,
-            "bounds": None,
-            "transform": merged_xr.transform,
-            "resolution": None,
-        }
-        rsd = interpolate_on_grid(rsd, grid)  # type: ignore
-        rld = interpolate_on_grid(rld, grid)  # type: ignore
-        merged_xr["rsd"] = rsd
-        merged_xr["rld"] = rld
-        # xr.merge((merged_xr, rsd, rld), combine_attrs="no_conflicts")
 
     return merged_xr
 

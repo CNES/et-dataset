@@ -36,8 +36,9 @@ class CLIException(Exception):
 class CreateArgs(argparse.Namespace):
     vis: str
     tir: str | None
-    radiation: str | None
+    roi: str | None
     tile: str | None
+    resolution: float
     output: str
     matlab: bool
 
@@ -97,12 +98,21 @@ def cli_create(args: CreateArgs) -> None:
         logger.debug(f"Create output path: {args.output}")
         os.makedirs(args.output, exist_ok=True)
 
+    # Get ROI bounding box and CRS from tile or shapefile
+    roi_bbox = None
+    roi_crs = None
+    if args.tile is not None:
+        roi_bbox, roi_crs = get_bbox_from_mgrs_tile(args.tile)
+    elif args.roi is not None:
+        roi_bbox, roi_crs = get_bbox_from_roi(args.roi)
+
     # Create dataset
     data = create_dataset(
         vis_path=args.vis,
         tir_path=args.tir,
-        tile_id=args.tile,
-        radiation=args.radiation,
+        roi_bbox=roi_bbox,
+        roi_crs=roi_crs,
+        resolution=args.resolution,
     )
 
     # Write dataset

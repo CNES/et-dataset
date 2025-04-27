@@ -15,7 +15,8 @@ import affine
 import numpy as np
 import rasterio as rio
 import xarray as xr
-from sensorsio import ecostress_v2, hls, landsat, mgrs, sentinel2, utils
+from pyproj import CRS
+from sensorsio import ecostress_v2, hls, landsat, sentinel2, utils
 
 from etdataset.logging import LoggerManager
 from etdataset.vegetation_indices import (
@@ -25,6 +26,8 @@ from etdataset.vegetation_indices import (
 )
 
 logger = LoggerManager.get_logger(__name__)
+
+RESOLUTION = 60.0
 
 
 class ProductReaderException(Exception):
@@ -40,23 +43,11 @@ class ProductReader:
     """
 
     path: str
-    bb: rio.coords.BoundingBox = field(init=False)
-    crs: str = field(init=False)
-    _tile: str = field(init=False)
+    bb: rio.coords.BoundingBox
+    crs: CRS
     date: datetime.date = field(init=False)
     time: datetime.time = field(init=False)
-    resolution: int = field(default=60)
-
-    @property
-    def tile(self):
-        return self._tile
-
-    @tile.setter
-    def tile(self, tile_id: str):
-        """
-        Set MGRS tile
-        """
-        self._tile = tile_id
+    resolution: float = field(default=RESOLUTION)
 
     def rename_bands(self, data: xr.Dataset, name_mapping: dict) -> xr.Dataset:
         """
@@ -71,13 +62,19 @@ class ProductReader:
         return renamed
 
     @abstractmethod
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,
+    ) -> xr.Dataset:
         """
         Read VIS bands
         """
 
     @abstractmethod
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,
+    ) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -120,28 +117,14 @@ class LandsatReader(ProductReader):
         """
         # Create an instance of Landsat8 from the product path
         self.ds = landsat.Landsat(self.path)
-        self._tile = None
+        if self.bb is None:
+            self.bb = self.ds.bounds
+        if self.crs is None:
+            self.crs = self.ds.crs
         self.date = self.ds.date
         self.time = self.ds.time
-
-    @property
-    def tile(self):
-        return self._tile
-
-    @tile.setter
-    def tile(self, tile_id: str):
-        """
-        Set MGRS tile
-        """
-        self._tile = tile_id
-        # Get bounding box for MRGS tile
-        bb = mgrs.get_bbox_mgrs_tile(tile_id, False)
-        self.bb = utils.bb_transform(
-            mgrs.get_crs_mgrs_tile(tile_id).to_string(), self.ds.crs, bb
-        )
         # Snap bbox
-        self.bb = utils.bb_snap(bb, align=self.resolution)
-        self.crs = self.ds.crs
+        self.bb = utils.bb_snap(self.bb, align=self.resolution)
 
     def compute_albedo(self, data: xr.Dataset) -> xr.DataArray:
         """
@@ -159,7 +142,10 @@ class LandsatReader(ProductReader):
             - 0.0018
         )
 
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,
+    ) -> xr.Dataset:
         """
         # Read landsat data
         # Every bands in the product is sampled at 30m
@@ -178,9 +164,9 @@ class LandsatReader(ProductReader):
                 landsat.Landsat.B7,
             ],
             resolution=self.resolution,
-            crs=self.crs,
+            crs=str(self.crs),
             bounds=self.bb,
-            algorithm=rio.enums.Resampling.average,
+            algorithm=resampling,
         )
         if ls_xr is None:
             raise ValueError(f"No data found ({self.path})")
@@ -199,8 +185,6 @@ class LandsatReader(ProductReader):
         # Add acquisition date
         ls_xr.attrs["vis_date"] = self.ds.date
         ls_xr.attrs["vis_time"] = self.ds.time
-        # Add tile id
-        ls_xr.attrs["tile"] = self.tile
 
         # Retrieve masks
         # Convention 1 for masked pixels
@@ -245,7 +229,10 @@ class LandsatReader(ProductReader):
 
         return ls_xr
 
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,
+    ) -> xr.Dataset:
         """
         # Read Landsat TIR bands
         # Every bands in the product is sampled at 30m
@@ -257,9 +244,9 @@ class LandsatReader(ProductReader):
                 landsat.Landsat.ST_EMIS,
             ],
             resolution=self.resolution,
-            crs=self.crs,
+            crs=str(self.crs),
             bounds=self.bb,
-            algorithm=rio.enums.Resampling.average,
+            algorithm=resampling,
         )
         if ls_xr is None:
             raise ValueError(f"No data found ({self.path})")
@@ -278,8 +265,6 @@ class LandsatReader(ProductReader):
         # Add acquisition date
         ls_xr.attrs["tir_date"] = self.ds.date
         ls_xr.attrs["tir_time"] = self.ds.time
-        # Add tile id
-        ls_xr.attrs["tile"] = self.tile
 
         # Retrieve masks
         # Convention 1 for masked pixels
@@ -391,8 +376,11 @@ class HLSReader(ProductReader):
         else:
             self.ds = hls.HLSSentinel2(self.path)
         # Metadata
-        self.tile = self.ds.tile
-        self.bb = utils.bb_snap(self.ds.bounds, align=self.resolution)
+        if self.bb is None:
+            self.bb = self.ds.bounds
+        if self.crs is None:
+            self.crs = self.ds.crs
+        self.bb = utils.bb_snap(self.bb, align=self.resolution)
         self.crs = self.ds.crs
         self.date = self.ds.date
         self.time = self.ds.time
@@ -413,7 +401,10 @@ class HLSReader(ProductReader):
             - 0.0018
         )
 
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,
+    ) -> xr.Dataset:
         """
         Read VIS bands
         """
@@ -421,9 +412,9 @@ class HLSReader(ProductReader):
         hls_xr = self.ds.read_as_xarray(
             self.params.value["bands"],
             resolution=self.resolution,
-            crs=self.crs,
+            crs=str(self.crs),
             bounds=self.bb,
-            algorithm=rio.enums.Resampling.average,
+            algorithm=resampling,
         )
         if hls_xr is None:
             raise ValueError(f"No data found ({self.path})")
@@ -475,11 +466,12 @@ class HLSReader(ProductReader):
         # Add acquisition date
         hls_xr.attrs["vis_date"] = self.ds.date
         hls_xr.attrs["vis_time"] = self.ds.time
-        # Add tile id
-        hls_xr.attrs["tile"] = self.tile
         return hls_xr
 
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,  # noqa ARG002
+    ) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -516,9 +508,12 @@ class Sentinel2Reader(ProductReader):
         """
         # Create an instance of Sentinel2 from the product path
         self.ds = sentinel2.Sentinel2(self.path)
-        self.tile = self.ds.tile
+        if self.bb is None:
+            self.bb = self.ds.bounds
+        if self.crs is None:
+            self.crs = self.ds.crs
         # Snap bbox
-        self.bb = utils.bb_snap(self.ds.bounds, align=self.resolution)
+        self.bb = utils.bb_snap(self.bb, align=self.resolution)
         self.crs = self.ds.crs
         self.date = self.ds.date
         self.time = self.ds.time
@@ -539,7 +534,10 @@ class Sentinel2Reader(ProductReader):
             + 0.0338 * data.swir2
         )
 
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,
+    ) -> xr.Dataset:
         """
         Read VIS bands
         """
@@ -556,9 +554,9 @@ class Sentinel2Reader(ProductReader):
                 sentinel2.Sentinel2.B12,
             ],
             resolution=self.resolution,
-            crs=self.crs,
+            crs=str(self.crs),
             bounds=self.bb,
-            algorithm=rio.enums.Resampling.average,
+            algorithm=resampling,
         )
 
         # Filter pixels
@@ -618,11 +616,12 @@ class Sentinel2Reader(ProductReader):
         # Add acquisition date
         s2_xr.attrs["vis_date"] = self.date
         s2_xr.attrs["vis_time"] = self.time
-        # Add tile id
-        s2_xr.attrs["tile"] = self.tile
         return s2_xr
 
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,  # noqa ARG002
+    ) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -653,20 +652,29 @@ class EcostressReader(ProductReader):
         """
         # Create an instance of Ecostress from the product path
         self.ds = ecostress_v2.EcostressV2(self.path)
-        self.tile = self.ds.tile
+        if self.bb is None:
+            self.bb = self.ds.bounds
+        if self.crs is None:
+            self.crs = self.ds.crs
         # Snap bbox
-        self.bb = utils.bb_snap(self.ds.bounds, align=self.resolution)
+        self.bb = utils.bb_snap(self.bb, align=self.resolution)
         self.crs = self.ds.crs
         self.date = self.ds.date
         self.time = self.ds.time
 
-    def read_vis_bands(self) -> xr.Dataset:
+    def read_vis_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,  # noqa ARG002
+    ) -> xr.Dataset:
         """
         Read VIS bands
         """
         raise ProductReaderException("No VIS bands for Ecostress product")
 
-    def read_tir_bands(self) -> xr.Dataset:
+    def read_tir_bands(
+        self,
+        resampling: rio.enums.Resampling = rio.enums.Resampling.average,
+    ) -> xr.Dataset:
         """
         Read TIR bands
         """
@@ -674,9 +682,9 @@ class EcostressReader(ProductReader):
         eco_xr = self.ds.read_as_xarray(
             [ecostress_v2.EcostressV2.LST, ecostress_v2.EcostressV2.EMIS],
             resolution=self.resolution,
-            crs=self.crs,
+            crs=str(self.crs),
             bounds=self.bb,
-            algorithm=rio.enums.Resampling.cubic,
+            algorithm=resampling,
         )
         if eco_xr is None:
             raise ValueError(f"No data found ({self.path})")
@@ -733,13 +741,16 @@ class EcostressReader(ProductReader):
         # Add acquisition date
         eco_xr.attrs["tir_date"] = self.date
         eco_xr.attrs["tir_time"] = self.time
-        # Add tile id
-        eco_xr.attrs["tile"] = self.tile
 
         return eco_xr
 
 
-def get_product_reader(product_path: str, resolution=60) -> ProductReader:
+def get_product_reader(
+    product_path: str,
+    roi_bbox: rio.coords.BoundingBox | None = None,
+    roi_crs: CRS | None = None,
+    resolution: float = RESOLUTION,
+) -> ProductReader:
     """
     Get the product reader
     """
@@ -751,7 +762,12 @@ def get_product_reader(product_path: str, resolution=60) -> ProductReader:
     ]
     for product_reader in reader_list:
         try:
-            return product_reader(product_path, resolution=resolution)
+            return product_reader(
+                path=product_path,
+                bb=roi_bbox,  # type: ignore
+                crs=roi_crs,  # type: ignore
+                resolution=resolution,
+            )
         # TODO: Improve exception catching
         except Exception:  # noqa
             continue
