@@ -788,28 +788,27 @@ class LandsatProvider(Provider):
         results = self.sendRequest("scene-search", payload)
 
         # Aggregate a list of scene ids
-        sceneIds = []
-        geometry = []
-        cloudCover = []
-        dates = []
-        product_names = []
-        for result in results["results"]:  # type: ignore
-            # Add this scene to the list I would like to download
-            sceneIds.append(result["entityId"])  # type: ignore
-            product_names.append(result["displayId"])  # type: ignore
-            geometry.append(
-                Polygon(result["spatialCoverage"]["coordinates"][0])  # type: ignore
-            )
-            cloudCover.append(result["cloudCover"])  # type: ignore
-            dates.append(
-                datetime.strptime(
+        # Add this scene to the list I would like to download
+        data = [
+            {
+                "entityId": result["entityId"],  # type: ignore
+                "Product_name": result["displayId"],  # type: ignore
+                "geometry": Polygon(
+                    result["spatialCoverage"]["coordinates"][0]  # type: ignore
+                ),
+                "Cloud_cover": result["cloudCover"],  # type: ignore
+                "Dates": datetime.strptime(
                     result["temporalCoverage"]["startDate"],  # type: ignore
                     "%Y-%m-%d %H:%M:%S",
-                ).date()
-            )
-
-        payload = {"datasetName": self.dataset, "entityIds": sceneIds}
-
+                ).date(),
+            }
+            for result in results["results"]  # type: ignore
+        ]
+        df = pd.DataFrame(data)
+        payload = {
+            "datasetName": self.dataset,
+            "entityIds": list(df["entityId"].values),
+        }
         downloadOptions = self.sendRequest("download-options", payload)
 
         # Aggregate a list of available products
@@ -824,7 +823,6 @@ class LandsatProvider(Provider):
                         "productId": product["id"],  # type: ignore
                     }
                 )
-
         logger.debug(
             "Number of products found on EarthData after cloud cover "
             f"filtering: {len(downloads)}"
@@ -839,43 +837,37 @@ class LandsatProvider(Provider):
         # Get download urls
         requestedDownloadsCount = len(requestResults["availableDownloads"])  # type: ignore
         urls = [
-            download["url"]  # type: ignore
+            {"entityId": download["entityId"], "URL": download["url"]}  # type: ignore
             for download in requestResults["availableDownloads"]  # type: ignore
         ]
+        urls_df = pd.DataFrame(urls)
 
         # Convert to GeoDataFrame
-        data = []
-        if requestedDownloadsCount > 0:
-            data = [
-                [
-                    product_names[i],
-                    dates[i],
-                    "USGS",
-                    "LANDSAT",
-                    None,
-                    cloudCover[i],
-                    None,
-                    urls[i],
-                    None,
+        if requestedDownloadsCount == 0:
+            return gpd.GeoDataFrame(
+                columns=[
+                    "Product_name",
+                    "Date",
+                    "Provider",
+                    "Collection",
+                    "Tile_ID",
+                    "Cloud_cover",
+                    "Relative_orbit",
+                    "URL",
+                    "Checksum",
+                    "geometry",
                 ]
-                for i in range(requestedDownloadsCount)
-            ]
-        gdf = gpd.GeoDataFrame(
-            data=data,
-            columns=[
-                "Product_name",
-                "Date",
-                "Provider",
-                "Collection",
-                "Tile_ID",
-                "Cloud_cover",
-                "Relative_orbit",
-                "URL",
-                "Checksum",
-            ],
-            geometry=geometry,
-            crs=4326,
-        )
+            ).set_crs(epsg=4326)
+        # Merge dataframes
+        df = pd.merge(df, urls_df, on="entityId")
+        df["Provider"] = "USGS"
+        df["Collection"] = "LANDSAT"
+        df["Tile_ID"] = None
+        df["Relative_orbit"] = None
+        df["Checksum"] = None
+        gdf = gpd.GeoDataFrame(df, geometry="geometry")
+        gdf = gdf.set_crs(epsg=4326)  # or whatever CRS your data uses
+
         # Filter on cloud cover if the information exists
         gdf = gdf[gdf["Cloud_cover"] < max_cloud_cover]
         logger.debug(
