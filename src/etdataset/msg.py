@@ -596,7 +596,7 @@ def add_solar_data(
     interp_ds = interp_ds.rio.write_crs(CRS(4326))
     projected = (
         interp_ds.rio.reproject_match(
-            data.grid,
+            data,
             resampling=rio.enums.Resampling.nearest,
             num_threads=nb_threads,
             warp_mem_limit=mem_limit,
