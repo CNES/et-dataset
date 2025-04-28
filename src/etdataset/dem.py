@@ -8,10 +8,16 @@ import os
 import numpy as np
 import rasterio as rio
 import xarray as xr
+from pyproj import CRS
 from rasterio.merge import merge as rio_merge
 from rasterio.transform import array_bounds
 from sensorsio import mgrs
 from sensorsio.regulargrid import read_as_numpy
+
+from etdataset.logging import LoggerManager
+from etdataset.utils import get_mgrs_tile_names_from_roi
+
+logger = LoggerManager.get_logger(__name__)
 
 
 def get_dem_from_tile(
@@ -223,3 +229,56 @@ def get_elevation_from_tile(
             "bounds": bounds,
         },
     )
+
+
+def get_dem_from_roi(
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    resolution: float = 60,
+    base_dir: str = os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),
+) -> xr.Dataset:
+    """
+    Read several tiles for DEM Copernicus based on a ROI.
+    Then, resample them at a specific resolution and
+    compute slope et aspect
+
+    Parameters
+    ----------
+    roi_bbox: roi.coords.BoundingBox
+       ROI bounding box
+    roi_crs: pyproj.CRS
+       ROI CRS
+    resolution: str, deflaut=60
+        DEM spatial resolution
+    base_dir: str
+        Path to the DEM directory
+        Required to set MNT_PATH environment variable
+
+    Returns
+    -------
+    xarr: xarray.Dataset
+    """
+    logger.debug(f"ROI bbox: {roi_bbox}")
+    logger.debug(f"ROI crs: {roi_crs}")
+    # Get DEM tiles
+    tile_ids = get_mgrs_tile_names_from_roi(
+        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
+    )
+    logger.debug(f"Tiles ids form DEM: {tile_ids}")
+    # Get DEM from tiles
+    dem = get_dem_from_tiles(
+        tile_ids=tile_ids, resolution=resolution, base_dir=base_dir
+    )
+    # Transform to rioxarray
+    dem = dem.rio.write_crs(roi_crs)
+    # Crop
+    dem = dem.rio.clip_box(*roi_bbox)
+    crs = dem.rio.crs
+    transform = dem.rio.transform(recalc=True)
+    bounds = rio.coords.BoundingBox(*dem.rio.bounds())
+    # Clean rio attributes
+    dem = dem.drop_vars("spatial_ref", errors="ignore")
+    dem.attrs["crs"] = crs
+    dem.attrs["transform"] = transform
+    dem.attrs["bounds"] = bounds
+    return dem

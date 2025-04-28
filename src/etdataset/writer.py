@@ -164,3 +164,37 @@ def write_matches(res: pd.DataFrame, output: str = "matches.csv") -> None:
 def write_results(res: pd.DataFrame, output: str = "results.csv") -> None:
     if len(res) > 0:
         res.to_csv(output, index=False)
+
+
+def write_to_tif(xrds: xr.Dataset, filename=str):
+    """
+    Write data to tif
+    """
+    row = xrds.sizes["y"]
+    col = xrds.sizes["x"]
+    bands = list(xrds.data_vars)
+    # Get projection
+    if xrds.attrs.get("crs", None) is not None:
+        crs = xrds.attrs["crs"]
+        transform = xrds.attrs["transform"]
+    elif hasattr(xrds, "rio"):
+        crs = xrds.rio.crs
+        transform = xrds.rio.transform()
+    else:
+        raise AttributeError("No CRS is defined")
+    with rio.open(
+        filename,
+        mode="w+",
+        driver="GTiff",
+        width=col,
+        height=row,
+        count=len(bands),
+        dtype=rio.dtypes.float32,
+        nodata=np.nan,
+        crs=crs,
+        transform=transform,
+    ) as source_ds:
+        source_ds.colorinterp = [ColorInterp.gray for _ in bands]
+        for i, band in enumerate(bands, start=1):
+            source_ds.write_band(i, xrds[band].data)
+            source_ds.set_band_description(i, band)
