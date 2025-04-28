@@ -139,11 +139,11 @@ def prepare_landsat(
             date=acquisition_date, latlon_bbox=latlon_bbox, path=output_path
         )
 
-        # Add MSG data
-
+        # Activate rioxarray accessor
         crs = data.attrs["crs"]
         data = data.rio.write_crs(crs)
 
+        # Add MSG data
         updated_data = msg.add(data=data, path=output_path)
 
         # Write data
