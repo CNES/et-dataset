@@ -10,6 +10,7 @@ import os
 import numpy as np
 import pandas as pd
 import rasterio as rio
+import rioxarray  # noqa # Import to activate rio attributes
 import xarray as xr
 from rasterio.enums import ColorInterp
 from scipy.io import savemat
@@ -55,8 +56,18 @@ def write_dataset(
             f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
             f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
         )
+    # Get projection
+    if xrds.attrs.get("crs", None) is not None:
+        crs = xrds.attrs["crs"]
+        transform = xrds.attrs["transform"]
+    elif hasattr(xrds, "rio"):
+        crs = xrds.rio.crs
+        transform = xrds.rio.transform()
+    else:
+        raise AttributeError("No CRS is defined")
     if not separate:
-        filename += f"_{xrds.attrs['tile']}.tif"
+        if xrds.attrs.get("tile", None) is not None:
+            filename += f"_{xrds.attrs['tile']}.tif"
         with rio.open(
             os.path.join(directory, filename),
             mode="w+",
@@ -66,15 +77,16 @@ def write_dataset(
             count=len(bands),
             dtype=rio.dtypes.float32,
             nodata=np.nan,
-            crs=xrds.attrs["crs"],
-            transform=xrds.attrs["transform"],
+            crs=crs,
+            transform=transform,
         ) as source_ds:
             source_ds.colorinterp = [ColorInterp.gray for _ in bands]
             for i, band in enumerate(bands, start=1):
                 source_ds.write_band(i, xrds[band].data)
                 source_ds.set_band_description(i, band)
     else:
-        filename += f"_{xrds.attrs['tile']}"
+        if xrds.attrs.get("tile", None) is not None:
+            filename += f"_{xrds.attrs['tile']}"
         os.makedirs(os.path.join(directory, filename), exist_ok=True)
         for band in bands:
             with rio.open(
@@ -86,8 +98,8 @@ def write_dataset(
                 count=1,
                 dtype=rio.dtypes.float32,
                 nodata=np.nan,
-                crs=xrds.attrs["crs"],
-                transform=xrds.attrs["transform"],
+                crs=crs,
+                transform=transform,
             ) as source_ds:
                 source_ds.colorinterp = [ColorInterp.gray]
                 source_ds.write_band(1, xrds[band].data)
@@ -104,11 +116,21 @@ def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
             f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
             f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
         )
-    filename += f"_{xrds.attrs['tile']}.tif"
+    if xrds.attrs.get("tile", None) is not None:
+        filename += f"_{xrds.attrs['tile']}.tif"
     try:
         dtype = xrds[band].dtype
     except KeyError:
         raise ValueError(f"Band {band} not in dataset")
+    # Get projection
+    if xrds.attrs.get("crs", None) is not None:
+        crs = xrds.attrs["crs"]
+        transform = xrds.attrs["transform"]
+    elif hasattr(xrds, "rio"):
+        crs = xrds.rio.crs
+        transform = xrds.rio.transform()
+    else:
+        raise AttributeError("No CRS is defined")
     with rio.open(
         os.path.join(directory, filename),
         mode="w+",
@@ -118,8 +140,8 @@ def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
         count=1,
         dtype=dtype,
         nodata=np.nan,
-        crs=xrds.attrs["crs"],
-        transform=xrds.attrs["transform"],
+        crs=crs,
+        transform=transform,
     ) as source_ds:
         source_ds.write_band(1, xrds[band].data)
         source_ds.set_band_description(1, band)
@@ -139,7 +161,8 @@ def export_matlab(
             f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
             f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
         )
-    suffix += f"_{xrds.attrs['tile']}"
+    if xrds.attrs.get("tile", None) is not None:
+        suffix += f"_{xrds.attrs['tile']}"
 
     for band in bands:
         file_path = os.path.join(directory, suffix + f"_{band}.mat")
