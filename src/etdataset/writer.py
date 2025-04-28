@@ -15,28 +15,10 @@ import xarray as xr
 from rasterio.enums import ColorInterp
 from scipy.io import savemat
 
-BANDS = [
-    "red",
-    "blue",
-    "green",
-    "nir",
-    "lst",
-    "emis",
-    "ndvi",
-    "albedo",
-    "lai",
-    "rsd",
-    "rld",
-    "fdiff",
-    "qa",
-    "cloud",
-    "water",
-]
-
 
 def write_dataset(
     xrds: xr.Dataset,
-    bands: list[str] = BANDS,
+    bands: list[str] | None = None,
     directory: str = os.getcwd(),
     separate=False,
 ):
@@ -67,7 +49,8 @@ def write_dataset(
         raise AttributeError("No CRS is defined")
     if not separate:
         if xrds.attrs.get("tile", None) is not None:
-            filename += f"_{xrds.attrs['tile']}.tif"
+            filename += f"_{xrds.attrs['tile']}"
+        filename += ".tif"
         with rio.open(
             os.path.join(directory, filename),
             mode="w+",
@@ -117,7 +100,8 @@ def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
             f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
         )
     if xrds.attrs.get("tile", None) is not None:
-        filename += f"_{xrds.attrs['tile']}.tif"
+        filename += f"_{xrds.attrs['tile']}"
+    filename += ".tif"
     try:
         dtype = xrds[band].dtype
     except KeyError:
@@ -148,7 +132,9 @@ def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
 
 
 def export_matlab(
-    xrds: xr.Dataset, bands: list[str] = BANDS, directory: str = os.getcwd()
+    xrds: xr.Dataset,
+    bands: list[str] | None = None,
+    directory: str = os.getcwd(),
 ):
     if bands is None:
         bands = list(xrds.data_vars)
