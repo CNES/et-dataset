@@ -39,13 +39,9 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
             "emis",
             "cloud",
             "water",
-            "qa",
             "albedo",
             "ndvi",
             "lai",
-            "rsd",
-            "rld",
-            "fdiff",
         ]:
             nb_plots += 1
     ncol = 2
@@ -149,20 +145,6 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
         if icol == 2:
             icol = 0
             irow += 1
-    # QA
-    if "qa" in bands:
-        valid_cMap = ListedColormap([(0.0, 0.0, 0.0, 0.0)])
-        if arr.qa.sum() == 0:
-            valid_cMap = ListedColormap(
-                [(1.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 0.0)]
-            )
-        arr.qa.plot(ax=axes[irow, icol], cmap=valid_cMap, add_colorbar=False)
-        axes[irow, icol].set_title("QA")
-        axes[irow, icol].grid(True)
-        icol += 1
-        if icol == 2:
-            icol = 0
-            irow += 1
 
     # NDVI
     if "ndvi" in bands:
@@ -182,52 +164,10 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
     if "lai" in bands:
         arr.lai.plot(
             ax=axes[irow, icol],
-            vmin=arr.lai.quantile(0.01),
-            vmax=arr.lai.quantile(0.99),
+            # vmin=arr.lai.quantile(0.01),
+            # vmax=arr.lai.quantile(0.99),
         )
         axes[irow, icol].set_title("LAI")
-        axes[irow, icol].grid(True)
-        icol += 1
-        if icol == 2:
-            icol = 0
-            irow += 1
-
-    # Downwelling shortwave radiation
-    if "rsd" in bands:
-        arr.rsd.plot(
-            ax=axes[irow, icol],
-            vmin=arr.rsd.quantile(0.01),
-            vmax=arr.rsd.quantile(0.99),
-        )
-        axes[irow, icol].set_title("Downwelling shortwave radiation")
-        axes[irow, icol].grid(True)
-        icol += 1
-        if icol == 2:
-            icol = 0
-            irow += 1
-
-    # Diffuse fraction
-    if "fdiff" in bands:
-        arr.fdiff.plot(
-            ax=axes[irow, icol],
-            vmin=arr.fdiff.quantile(0.01),
-            vmax=arr.fdiff.quantile(0.99),
-        )
-        axes[irow, icol].set_title("Diffuse fraction")
-        axes[irow, icol].grid(True)
-        icol += 1
-        if icol == 2:
-            icol = 0
-            irow += 1
-
-    # Downwelling longwave radiation
-    if "rld" in bands:
-        arr.rld.plot(
-            ax=axes[irow, icol],
-            vmin=arr.rld.quantile(0.01),
-            vmax=arr.rld.quantile(0.99),
-        )
-        axes[irow, icol].set_title("Downwelling longwave radiation")
         axes[irow, icol].grid(True)
         icol += 1
         if icol == 2:
@@ -239,3 +179,67 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
         fig.savefig(outfname, format="png", bbox_inches="tight")
 
     return fig, axes
+
+
+def plot_dataset(
+    data: xr.Dataset,
+):
+    """
+    Plot EF models
+    """
+    # Set figure subplots
+    nb = len(data.data_vars)
+    row = int(np.ceil(nb / 2))
+    col = 2
+    fig = plt.figure(figsize=(4 * col, 3 * row), constrained_layout=True)
+
+    i = 0
+    j = 0
+    # Loop over variables
+    for var in sorted(data.data_vars):
+        ax = plt.subplot2grid((row, col), (i, j))
+        if var in ["water", "cloud", "qa"]:
+            valid_cmap = ListedColormap(
+                [(1.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 1.0)]
+            )
+            data[var].plot(ax=ax, cmap=valid_cmap, add_colorbar=False)  # type: ignore
+        elif var in ["red", "blue", "green", "nir", "swir1", "swir2", "albedo"]:
+            data[var].plot(  # type: ignore
+                ax=ax,
+                vmin=data[var].quantile(0.01),
+                vmax=data[var].quantile(0.99),
+                cmap="viridis",
+            )
+        else:
+            data[var].plot(ax=ax, cmap="viridis")  # type: ignore
+        ax.set_title(str(var))
+        j += 1
+        if j == 2:
+            j = 0
+            i += 1
+    # title
+    fig.suptitle("Dataset", fontsize=12)
+
+    plt.show()
+
+
+def plot_dem(xrds_dem: xr.Dataset):
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
+    xrds_dem["height"].plot(  # type: ignore
+        ax=axes[0],
+        vmin=xrds_dem["height"].min(),
+        vmax=xrds_dem["height"].max(),
+        cmap="RdYlGn_r",
+    )
+    xrds_dem["slope"].plot(  # type: ignore
+        ax=axes[1],
+        vmin=xrds_dem["slope"].min(),
+        vmax=xrds_dem["slope"].max(),
+        cmap="Reds",
+    )
+    xrds_dem["aspect"].plot(  # type: ignore
+        ax=axes[2],
+        vmin=xrds_dem["aspect"].min(),
+        vmax=xrds_dem["aspect"].max(),
+        cmap="twilight_shifted",
+    )
