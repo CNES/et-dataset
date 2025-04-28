@@ -2,6 +2,7 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import argparse
 import logging
+import os
 
 from etdataset.dem import get_dem_from_roi
 from etdataset.logging import LoggerManager
@@ -32,6 +33,12 @@ def get_parser() -> argparse.ArgumentParser:
         help="Path of the region of interest in Shapefile format",
         required=True,
     )
+    parser.add_argument(
+        "--mnt_path",
+        type=str,
+        help="Path to the DEM directory",
+        required=True,
+    )
 
     return parser
 
@@ -51,11 +58,19 @@ def get_dem() -> None:
 
     LoggerManager.set_level(log_level)
 
+    # Check
+    if not os.path.isfile(args.roi):
+        raise FileNotFoundError(f"File not found {args.roi}")
+    if not os.path.isdir(args.mnt_path):
+        raise FileNotFoundError(f"File not found {args.mnt_path}")
+
     # Get bbox and crs
     roi_bbox, roi_crs = get_utm_bbox_from_roi(args.roi)
 
     # Get DEM
-    dem = get_dem_from_roi(roi_bbox=roi_bbox, roi_crs=roi_crs)
+    dem = get_dem_from_roi(
+        roi_bbox=roi_bbox, roi_crs=roi_crs, base_dir=args.mnt_path
+    )
 
     # Write
     write_to_tif(dem, "dem.tif")
