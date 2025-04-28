@@ -744,7 +744,7 @@ def add(
     product_path = os.path.join(
         path, "MSG_data", f"{satellite.key}_{date.strftime('%Y-%m-%d')}"
     )
-    logger.debug("Product path: {product_path}")
+    logger.debug(f"Product path: {product_path}")
     if not os.path.isdir(product_path):
         raise OSError(f"Data path not found: {product_path}")
     # File list
@@ -756,7 +756,7 @@ def add(
         fmt=MSGFormat.NETCDF,
     )
     daily_product = os.path.join(product_path, filename)
-    logger.debug("Daily product path: {daily_product}")
+    logger.debug(f"Daily product path: {daily_product}")
     if not os.path.isfile(daily_product):
         raise OSError(f"File not found: {daily_product}")
     solar_product = []
@@ -779,7 +779,7 @@ def add(
                 ),
             )
         )
-    logger.debug("Solar product path: {solar_product}")
+    logger.debug(f"Solar product paths: {solar_product}")
     for p in solar_product:
         if not os.path.isfile(p):
             raise OSError(f"File not found: {p}")
@@ -803,7 +803,7 @@ def add(
                 ),
             )
         )
-    logger.debug("Thermal product path: {thermal_product}")
+    logger.debug(f"Thermal product paths: {thermal_product}")
     for p in thermal_product:
         if not os.path.isfile(p):
             raise OSError(f"File not found: {p}")
