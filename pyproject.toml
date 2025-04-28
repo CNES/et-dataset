@@ -5,10 +5,10 @@ build-backend = "hatchling.build"
 [project]
 name = "et-dataset"
 dynamic = ["version"]
-description = ''
+description = 'Data preparation for ET dataset'
 readme = "README.md"
 requires-python = ">=3.10"
-license = ""
+license = "LicenseRef-Public-Domain"
 keywords = []
 authors = [
   { name = "Emmanuelle Sarrazin", email = "emmanuelle.sarrazin@cnes.fr" },
@@ -32,17 +32,22 @@ dependencies = [
   "pyproj",
   "rasterio",
   "shapely",
+  "psutil",
+  "fiona",
   "tqdm",
   "xarray",
   "earthaccess",
   "sensorsio",
   "theia-picker",
-  "landsatxplore @ git+https://github.com/esarrazin/landsatxplore.git",
+  "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git",
 ]
 
 [project.optional-dependencies]
 dev = [
   "hatch",
+  "pytest",
+  "pip-review",
+  "pre-commit",
 ]
 notebook = [
   "matplotlib",
@@ -67,7 +72,8 @@ packages = ["src/etdataset"]
 path = "src/etdataset/__about__.py"
 
 [tool.hatch.envs.hatch-static-analysis]
-config-path = "ruff_defaults.toml"
+config-path = "none"
+dependencies = ["ruff==0.11.1"]
 
 [tool.hatch.envs.default]
 dependencies = [
@@ -75,16 +81,10 @@ dependencies = [
   "pytest",
 ]
 [tool.hatch.envs.default.scripts]
-test = "pytest {args:tests}"
-test-cov = "coverage run -m pytest {args:tests}"
-cov-report = [
-  "- coverage combine",
-  "coverage report",
-]
-cov = [
-  "test-cov",
-  "cov-report",
-]
+run = "pytest{env:HATCH_TEST_ARGS:} {args}"
+run-cov = "coverage run -m pytest{env:HATCH_TEST_ARGS:} {args}"
+cov-combine = "coverage combine"
+cov-report = "coverage report"
 
 [tool.pytest.ini_options]
 filterwarnings = [
@@ -121,30 +121,12 @@ exclude_lines = [
   "if TYPE_CHECKING:",
 ]
 
-[tool.hatch.envs.style]
-detached = true
-dependencies = [
-  "black",
-  "black[jupyter]",
-  "flake8",
-  "isort",
-]
-
-[tool.hatch.envs.style.scripts]
-check = [
-  "black --check --diff .",
-  "isort --check-only --diff .",
-]
-fmt = [
-  "isort .",
-  "black .",
-  "flake8 --max-line-length 120 --exclude=.ipynb_checkpoints .",
-]
-
 [tool.mypy]
 exclude = [
     "plot.py",
         ]
+plugins = ["numpy.typing.mypy_plugin"]
+disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -163,3 +145,26 @@ module = [
     "pytest",
         ]
 ignore_missing_imports = true
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64","win-64"]
+
+[tool.pixi.pypi-dependencies]
+et-dataset = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+notebook = { features = ["notebook"], solve-group = "default" }
+
+[tool.pixi.tasks]
+
+[tool.pixi.dependencies]
+python = "3.12.*"
+pip = ">=25.0.1,<26"
+gdal = ">=3.10.2,<4"
+hdf4 = ">=4.2.15,<5"
+hdf5 = ">=1.14.4,<2"
+netcdf4 = ">=1.7.2,<2"
+h5netcdf = ">=1.6.1,<2"

@@ -1,25 +1,20 @@
-#!/usr/bin/env python
-# coding: utf8
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import os
 from datetime import datetime
-from typing import Tuple
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio as rio
 import xarray as xr
-from dateutil.parser import parse as parse_dateutil
 from pyproj import CRS
 from sensorsio import utils
 
-from .logging import LoggerManager
-from .provider import Collection, get_provider
-from .reader import get_product_reader
-from .selection import filter_with_roi, select_products
-from .utils import check_mgrs_format, get_bbox_from_mgrs_tile
-from .era5 import ERA5Data, ERA5Var, interpolate_on_grid
+from etdataset.logging import LoggerManager
+from etdataset.provider import Collection, get_provider
+from etdataset.reader import get_product_reader
+from etdataset.selection import filter_with_roi, select_products
+from etdataset.utils import check_mgrs_format, get_bbox_from_mgrs_tile
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -40,7 +35,8 @@ def parse_date(date_str: str) -> datetime:
         date = datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError as exc:
         raise APIException(
-            f"Error: The expected format for date must be Year-Month-Day (got: {date_str})"
+            "Error: The expected format for date must "
+            f"be Year-Month-Day (got: {date_str})"
         ) from exc
     return date
 
@@ -48,8 +44,10 @@ def parse_date(date_str: str) -> datetime:
 def create_dataset(
     vis_path: str,
     tir_path: str | None = None,
-    tile_id: str | None = None,
-    radiation: str | None = None,
+    roi_bbox: rio.coords.BoundingBox | None = None,
+    roi_crs: CRS | None = None,
+    resolution: float = RESOLUTION,
+    resampling: rio.enums.Resampling = rio.enums.Resampling.average,
 ) -> xr.Dataset:
     """
     Create a dataset
@@ -57,47 +55,31 @@ def create_dataset(
     if tir_path is None:
         tir_path = vis_path
     # Get reader
-    vis_reader = get_product_reader(vis_path, resolution=RESOLUTION)
-    tir_reader = get_product_reader(tir_path, resolution=RESOLUTION)
-
-    # Check tile
-    if vis_reader.tile is None and tir_reader.tile is None:
-        if tile_id is None:
-            logger.error("None of the products have MGRS tile information")
-            raise APIException("You must provide the MGRS tile ID")
-        vis_reader.tile = tile_id
-        tir_reader.tile = tile_id
-    elif vis_reader.tile is None and tir_reader.tile is not None:
-        logger.info("Use MGRS tile from TIR product")
-        vis_reader.tile = tir_reader.tile
-    elif vis_reader.tile is not None and tir_reader.tile is None:
-        logger.info("Use MGRS tile from VIS product")
-        tir_reader.tile = vis_reader.tile
-    elif vis_reader.tile != tir_reader.tile:
-        logger.error(
-            f"The products are not on the same MGRS tile : "
-            f"VIS tile = {vis_reader.tile} and TIR tile = {tir_reader.tile}"
-        )
-        raise APIException("The products are not on the same MGRS tile")
+    vis_reader = get_product_reader(
+        vis_path, roi_bbox=roi_bbox, roi_crs=roi_crs, resolution=resolution
+    )
+    tir_reader = get_product_reader(
+        tir_path, roi_bbox=roi_bbox, roi_crs=roi_crs, resolution=resolution
+    )
 
     # Force the same bounding box
     common_bbox, common_crs = utils.bb_common(
         bounds=[vis_reader.bb, tir_reader.bb],
-        src_crs=[vis_reader.crs, tir_reader.crs],
+        src_crs=[str(vis_reader.crs), str(tir_reader.crs)],
         snap=RESOLUTION,
-        target_crs=vis_reader.crs,
+        target_crs=str(vis_reader.crs),
     )
-    vis_reader.crs = common_crs
+    vis_reader.crs = CRS(common_crs)
     vis_reader.bb = common_bbox
-    tir_reader.crs = common_crs
+    tir_reader.crs = CRS(common_crs)
     tir_reader.bb = common_bbox
 
     # Read VIS
-    vis_xr = vis_reader.read_vis_bands()
+    vis_xr = vis_reader.read_vis_bands(resampling=resampling)
     logger.debug(f"Read VIS: {type(vis_xr)}")
 
     # Read TIR
-    tir_xr = tir_reader.read_tir_bands()
+    tir_xr = tir_reader.read_tir_bands(resampling=resampling)
     logger.debug(f"Read TIR: {type(tir_xr)}")
 
     # Merge
@@ -121,46 +103,6 @@ def create_dataset(
         )
     logger.debug(f"Merged: {merged_xr.attrs}")
 
-    # Read flux
-    if radiation is not None:
-        logger.debug(f"Read radiation data in {radiation}")
-        acquisition_datetime = datetime.combine(merged_xr.tir_date, merged_xr.tir_time)
-        radiation_ds = ERA5Data(radiation)
-        if "ssrdc" not in radiation_ds.get_available_variables():
-            raise ValueError(f"Variable 'ssrdc' is missing in {radiation}")
-        if "strdc" not in radiation_ds.get_available_variables():
-            raise ValueError(f"Variable 'strdc' is missing in {radiation}")
-        if merged_xr.tir_date not in list(
-            set(
-                [parse_dateutil(dt).date() for dt in radiation_ds.get_available_dates()]
-            )
-        ):
-            raise ValueError(f"Date {merged_xr.tir_date} is missing in {radiation}")
-        # Get data interplate for the acquisition time
-        rsd = radiation_ds.get(
-            ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD, date=acquisition_datetime
-        )
-        rld = radiation_ds.get(
-            ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD, date=acquisition_datetime
-        )
-        # Transform radiation in W.m-2 TODO: Put the factor in ERA5
-        rsd /= 3600
-        rld /= 3600
-        # Spatial interpolation
-        grid = merged_xr["red"]
-        # TODO: Improve API for interpolate on grid
-        grid.attrs = {
-            "crs": merged_xr.crs,
-            "bounds": None,
-            "transform": merged_xr.transform,
-            "resolution": None,
-        }
-        rsd = interpolate_on_grid(rsd, grid)  # type: ignore
-        rld = interpolate_on_grid(rld, grid)  # type: ignore
-        merged_xr["rsd"] = rsd
-        merged_xr["rld"] = rld
-        # xr.merge((merged_xr, rsd, rld), combine_attrs="no_conflicts")
-
     return merged_xr
 
 
@@ -181,14 +123,17 @@ def search(
     _ = parse_date(min_date)
     _ = parse_date(max_date)
     if tile_id is None and roi_bbox is None:
-        raise APIException("You must provide either a ROI bounding box or MGRS tile ID")
+        raise APIException(
+            "You must provide either a ROI bounding box or MGRS tile ID"
+        )
     if roi_crs is None and roi_bbox is not None:
         raise APIException("You must provide a ROI bounding box with a CRS")
     if tile_id is not None:
         check_mgrs_format(tile_id)
     if max_cloud_cover < 0 or max_cloud_cover > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
 
     latlon_bbox = None
@@ -203,17 +148,24 @@ def search(
     logger.debug(f"Provider: {provider}")
 
     # Search
-    results = provider.search(min_date, max_date, tile_id, latlon_bbox, max_cloud_cover)
-    logger.info(f"Products found for {collection.name} in catalog: {len(results)}")
+    results = provider.search(
+        min_date, max_date, tile_id, latlon_bbox, max_cloud_cover
+    )
+    logger.info(
+        f"Products found for {collection.name} in catalog: {len(results)}"
+    )
 
     # Get bounding box from tile
     if tile_id is not None:
         roi_bbox, roi_crs = get_bbox_from_mgrs_tile(tile_id)
 
     # Filter with additional criteria for collection 1
-    results = filter_with_roi(results, roi_bbox, roi_crs, min_overlap=min_roi_overlap)
+    results = filter_with_roi(
+        results, roi_bbox, roi_crs, min_overlap=min_roi_overlap
+    )
     logger.info(
-        f"Products found for {collection.name} " f"after ROI filtering: {len(results)}"
+        f"Products found for {collection.name} "
+        f"after ROI filtering: {len(results)}"
     )
 
     return results
@@ -261,8 +213,8 @@ def select(
     max_cloud_cover: float = 20,
     min_roi_overlap: float = 40,
     min_product_overlap: float = 40,
-    only_best_match: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    only_best_match: bool = False,  # noqa
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Select products
     """
@@ -277,25 +229,31 @@ def select(
         delta_time = pd.Timedelta(delta)
     except ValueError:
         raise APIException(
-            "Error: The format for delta acquisition time is not recognized (ex: 1 day)"
+            "Error: The format for delta acquisition "
+            "time is not recognized (ex: 1 day)"
         )
     if tile_id is None and roi_bbox is None:
-        raise APIException("You must provide either a ROI bounding box or MGRS tile ID")
+        raise APIException(
+            "You must provide either a ROI bounding box or MGRS tile ID"
+        )
     if roi_crs is None and roi_bbox is not None:
         raise APIException("You must provide a ROI bounding box with a CRS")
     if tile_id is not None:
         check_mgrs_format(tile_id)
     if max_cloud_cover < 0 or max_cloud_cover > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
     if min_roi_overlap < 0 or min_roi_overlap > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
     if min_product_overlap < 0 or min_product_overlap > 100:
         raise APIException(
-            f"Cloud cover criteria must be between 0 and 100 (got : {max_cloud_cover}"
+            "Cloud cover criteria must be "
+            f"between 0 and 100 (got : {max_cloud_cover}"
         )
 
     # Search into collection 1

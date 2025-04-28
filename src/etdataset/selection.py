@@ -1,7 +1,6 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
-# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales / Université Paul Sabatier (UT3)
+# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
 #
 """
 Select product
@@ -43,7 +42,9 @@ def filter_with_roi(
             [bounds[2], bounds[1]],
         ]
     )
-    aoi = gpd.GeoDataFrame(data={"id": [1], "geometry": [aoi_poly]}, crs=gdf.crs)
+    aoi = gpd.GeoDataFrame(
+        data={"id": [1], "geometry": [aoi_poly]}, crs=gdf.crs
+    )
     aoi_area = aoi_poly.area
     try:
         filtered = gpd.GeoDataFrame(
@@ -63,7 +64,9 @@ def filter_with_roi(
             )
         )
         filtered["overlap_percentage"] = filtered.apply(
-            lambda x: 100 * x.overlap_geometry.area / min(aoi_area, x.geometry.area),
+            lambda x: 100
+            * x.overlap_geometry.area
+            / min(aoi_area, x.geometry.area),
             axis=1,
         )
         if min_overlap is not None:
@@ -86,7 +89,8 @@ def select_products(
     """
     For each product in the first list gdf1,
     search for a product in the second list gdf2,
-    whose acquisition date is within delta days of the date of the first product.
+    whose acquisition date is within delta days of
+    the date of the first product.
     If best_match is set to True, only the best match is returned.
     The best match has the closest day and then the best overlap.
     """
@@ -97,7 +101,9 @@ def select_products(
         # Select products in gdf1 corresponding to date d
         gdf1_selection = gdf1[gdf1["Date"] == d]
         # Select products in gdf2 corresponding to date +/- delta
-        gdf2_selection = gdf2[(gdf2["Date"] >= d - delta) & (gdf2["Date"] <= d + delta)]
+        gdf2_selection = gdf2[
+            (gdf2["Date"] >= d - delta) & (gdf2["Date"] <= d + delta)
+        ]
 
         # If a combination exists
         if len(gdf2_selection) > 0:
@@ -148,19 +154,24 @@ def select_products(
                     date_2 = row.Date_2
                     product_name_2 = row.Product_name_2
                     overlap = row.overlap
-                    if abs((date_1 - best_date).days) > abs((date_2 - date_1).days):
-                        best_date = date_2
-                        best_overlap = overlap
-                        best_product = product_name_2
-                    elif (
-                        abs((date_1 - best_date).days) == abs((date_2 - date_1).days)
+                    if abs((date_1 - best_date).days) > abs(
+                        (date_2 - date_1).days
+                    ) or (
+                        abs((date_1 - best_date).days)
+                        == abs((date_2 - date_1).days)
                         and overlap > best_overlap
                     ):
                         best_date = date_2
                         best_overlap = overlap
                         best_product = product_name_2
                 best_matches.append(
-                    [product_name_1, date_1, best_product, best_date, best_overlap]
+                    [
+                        product_name_1,
+                        date_1,
+                        best_product,
+                        best_date,
+                        best_overlap,
+                    ]
                 )
             matches = pd.DataFrame(
                 data=best_matches,

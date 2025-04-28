@@ -1,7 +1,6 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales / Université Paul Sabatier (UT3)
+# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
 #
 """
 Module for reading ERA5 and ERA5-land
@@ -15,7 +14,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from time import sleep
-from typing import Any, List, Optional, Tuple, cast, Dict
+from typing import Any, cast
 
 import cdsapi
 import numpy as np
@@ -23,11 +22,10 @@ import psutil  # type: ignore
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
-from rasterio.warp import transform_bounds, reproject
+from rasterio.warp import reproject, transform_bounds
 from sensorsio.utils import bb_transform
 
-from .logging import LoggerManager
-
+from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -91,7 +89,7 @@ class ERA5Var(ERA5DataInfo, Enum):
         """
         for value in cls:
             if value.key == key:
-                return cls((value.key, value.label, value.unit))
+                return value
         raise ValueError(f"No variable found with key {key}")
 
     @classmethod
@@ -114,7 +112,8 @@ class ERA5Data:
     ) -> None:
         """
         Init method: Get metadata from ERA5 file
-        It is assumed that the resolution is identical in longitude and latitude.
+        It is assumed that the resolution is identical
+        in longitude and latitude.
         """
         self.filename = filename
         # Data in WGS 84
@@ -129,7 +128,8 @@ class ERA5Data:
             for var in ds.data_vars:
                 self.__available_variables.append(ERA5Var.from_key(var))
             self.__available_dates = [
-                date.strftime("%Y-%m-%d %H:%M:%S") for date in ds.indexes["valid_time"]
+                date.strftime("%Y-%m-%d %H:%M:%S")
+                for date in ds.indexes["valid_time"]
             ]
             lon: np.ndarray = self._trunc(ds.longitude.data, 6)
             lat: np.ndarray = self._trunc(ds.latitude.data, 6)
@@ -156,13 +156,13 @@ class ERA5Data:
         """
         return cast(np.ndarray, np.trunc(values * 10**decs) / (10**decs))
 
-    def get_available_variables(self) -> List[ERA5Var]:
+    def get_available_variables(self) -> list[ERA5Var]:
         """
         Return the variables avalaible in the product
         """
         return [var.key for var in self.__available_variables]
 
-    def get_available_dates(self) -> List[str]:
+    def get_available_dates(self) -> list[str]:
         """
         Return the date avalaible in the product
         """
@@ -170,9 +170,9 @@ class ERA5Data:
 
     def read_as_numpy(
         self,
-        variables: Optional[List[ERA5Var]] = None,
-        dates: Optional[List[str]] = None,
-    ) -> Tuple[
+        variables: list[ERA5Var] | None = None,
+        dates: list[str] | None = None,
+    ) -> tuple[
         np.ndarray[Any, Any],
         np.ndarray[Any, Any],
         np.ndarray[Any, Any],
@@ -184,7 +184,8 @@ class ERA5Data:
 
         :param variables: The list of variables to read
         :param dates: The list of dates to read
-        :return: The image pixels as a np.ndarray of shape [variables, width, height],
+        :return: The image pixels as a np.ndarray of
+                    shape [variables, width, height],
                  The time coords as a np.array of shape [dates],
                  The x coords as a np.ndarray of shape [width],
                  the y coords as a np.ndarray of shape [height],
@@ -193,12 +194,13 @@ class ERA5Data:
         # Safeguard
         if variables is None:
             variables = self.__available_variables
-        assert len(variables) > 0
+        # TODO: remove assert
+        assert len(variables) > 0  # noqa
         for var in variables:
             if var.key not in self.get_available_variables():
                 raise ValueError(
-                    f"Error variable {var.key} not found "
-                    f"in the product ({self.get_available_variables()})"
+                    f"Error variable {var.key} not found in the "
+                    f"product ({self.get_available_variables()})"
                 )
 
         datasets = []
@@ -210,14 +212,17 @@ class ERA5Data:
             if zipfile.is_zipfile(self.filename)
             else xr.open_dataset(self.filename)
         ) as ds:
-
             time: np.ndarray = np.array([], dtype=np.datetime64)
             if dates is not None:
                 for date in dates:
                     try:
-                        time = np.append(time, ds.sel(valid_time=date).valid_time.data)
+                        time = np.append(
+                            time, ds.sel(valid_time=date).valid_time.data
+                        )
                     except KeyError as exc:
-                        raise KeyError(f"Date {date} not found in the dataset") from exc
+                        raise KeyError(
+                            f"Date {date} not found in the dataset"
+                        ) from exc
             else:
                 time = ds.valid_time.data
 
@@ -254,11 +259,13 @@ class ERA5Data:
                         if sub_data.ndim == 2:
                             sub_data = np.expand_dims(sub_data, axis=0)
                         sub_datasets.append(sub_data)
+                    # TODO: To correct
                     datasets.append(
-                        np.concatenate([data for data in sub_datasets], axis=0)
+                        np.concatenate([data for data in sub_datasets], axis=0)  # noqa
                     )
 
-        np_stack: np.ndarray = np.stack([data for data in datasets], axis=0)
+        # TODO: To correct
+        np_stack: np.ndarray = np.stack([data for data in datasets], axis=0)  # noqa
 
         xcoords: np.ndarray = ds.coords["longitude"].data
 
@@ -268,8 +275,8 @@ class ERA5Data:
 
     def read(
         self,
-        variables: Optional[List[ERA5Var]] = None,
-        dates: Optional[List[str]] = None,
+        variables: list[ERA5Var] | None = None,
+        dates: list[str] | None = None,
     ) -> xr.Dataset:
         """
         Read data from ERA5 products as xarray dataset.
@@ -281,7 +288,9 @@ class ERA5Data:
         if variables is None:
             variables = self.__available_variables
 
-        np_arr, time, xcoords, ycoords, crs = self.read_as_numpy(variables, dates)
+        np_arr, time, xcoords, ycoords, crs = self.read_as_numpy(
+            variables, dates
+        )
 
         data = {}
         for i, var in enumerate(variables):
@@ -322,7 +331,7 @@ class ERA5Data:
 
 
 def interpolate_time(
-    data: xr.Dataset, vars: List[ERA5Var], date: datetime
+    data: xr.Dataset, variables: list[ERA5Var], date: datetime
 ) -> xr.Dataset:
     """
     Interpolate data for a variable at the date
@@ -333,8 +342,8 @@ def interpolate_time(
     :return: xr.Dataset
     """
     # Check variable
-    vars_str: List[str] = []
-    for var in vars:
+    vars_str: list[str] = []
+    for var in variables:
         if var.key not in list(data.data_vars):
             raise KeyError(f"Variable {var} not found")
         vars_str.append(var.key)
@@ -355,17 +364,16 @@ def interpolate_time(
     if selected.sizes["t"] == 1:
         logger.warning("No interpolation, only one timestamp available")
         return selected.isel(t=0, drop=True)
-    else:
-        return selected.interp(t=date_str, method="linear")
+    return selected.interp(t=date_str, method="linear")
 
 
 def interpolate(
     data: xr.Dataset | xr.DataArray,
-    crs: Optional[str] = None,
-    resolution: Optional[float] = None,
-    bounds: Optional[rio.coords.BoundingBox] = None,
+    crs: str | None = None,
+    resolution: float | None = None,
+    bounds: rio.coords.BoundingBox | None = None,
     algorithm: rio.enums.Resampling = rio.enums.Resampling.cubic,
-    dtype: np.dtype = np.dtype("float32"),
+    dtype: np.dtype = np.dtype("float32"),  # noqa
 ) -> xr.Dataset | xr.DataArray:
     """
     Method for spatial interpolation
@@ -380,7 +388,8 @@ def interpolate(
     """
     # Init
     need_to_reproject = False
-    assert (data.dims) != 2
+    # TODO: remove assert
+    assert (data.dims) != 2  # noqa
     try:
         src_crs = data.crs
         src_transform = data.transform
@@ -443,9 +452,14 @@ def interpolate(
     dst_transform = rio.transform.from_bounds(*dst_bounds, dst_sizex, dst_sizey)
 
     # Safeguard to compute if there is enough memory available
-    available_memory = psutil.virtual_memory().available / 1024 / 1024 / 1024  # in Gb
+    available_memory = (
+        psutil.virtual_memory().available / 1024 / 1024 / 1024
+    )  # in Gb
     requested_memory = (
-        (sys.getsizeof(dtype) * nb_vars * dst_sizex * dst_sizey) / 1024 / 1024 / 1024
+        (sys.getsizeof(dtype) * nb_vars * dst_sizex * dst_sizey)
+        / 1024
+        / 1024
+        / 1024
     )
     if requested_memory > available_memory:
         raise MemoryError(
@@ -494,9 +508,9 @@ def interpolate(
                 "resolution": {"x": dst_resolutionx, "y": dst_resolutiony},
             },
         )
-    elif isinstance(data, xr.Dataset):
+    if isinstance(data, xr.Dataset):
         if need_to_reproject:
-            values: Dict[str, Tuple[List[str], np.ndarray]] = {}
+            values: dict[str, tuple[list[str], np.ndarray]] = {}
             for var in data.data_vars:
                 src_data = data[var].to_numpy()
                 dst_data = np.zeros((dst_sizey, dst_sizex), dtype)
@@ -512,7 +526,8 @@ def interpolate(
                 values[str(var)] = (["y", "x"], dst_data)
         else:
             values = {
-                str(var): (["y", "x"], data[var].to_numpy()) for var in data.data_vars
+                str(var): (["y", "x"], data[var].to_numpy())
+                for var in data.data_vars
             }
 
         return xr.Dataset(
@@ -525,17 +540,16 @@ def interpolate(
                 "resolution": {"x": dst_resolutionx, "y": dst_resolutiony},
             },
         )
-    else:
-        raise ERA5Exception(
-            "Interpolation can only be performed on Dataset or DataArray"
-        )
+    raise ERA5Exception(
+        "Interpolation can only be performed on Dataset or DataArray"
+    )
 
 
 def interpolate_on_grid(
     data: xr.Dataset | xr.DataArray,
     grid: xr.DataArray,
     algorithm: rio.enums.Resampling = rio.enums.Resampling.bilinear,
-    dtype: np.dtype = np.dtype("float32"),
+    dtype: np.dtype = np.dtype("float32"),  # noqa
 ) -> xr.Dataset | xr.DataArray:
     """
     Method for spatial interpolation on a grid
@@ -577,8 +591,8 @@ def interpolate_on_grid(
                 "resolution": grid.resolution,
             },
         )
-    elif isinstance(data, xr.Dataset):
-        values: Dict[str, Tuple[List[str], np.ndarray]] = {}
+    if isinstance(data, xr.Dataset):
+        values: dict[str, tuple[list[str], np.ndarray]] = {}
         for var in data.data_vars:
             src_data = data[var].to_numpy()
             dst_data = np.zeros((dst_sizey, dst_sizex), dtype)
@@ -603,12 +617,9 @@ def interpolate_on_grid(
                 "resolution": grid.resolution,
             },
         )
-    else:
-        raise ERA5Exception(
-            "Interpolation can only be performed on Dataset or DataArray"
-        )
-
-    return data
+    raise ERA5Exception(
+        "Interpolation can only be performed on Dataset or DataArray"
+    )
 
 
 def interpolate_temperature(
@@ -725,11 +736,11 @@ def _download(dataset: str, request: dict, target: str) -> None:
 
         if reply["state"] == "completed":
             break
-        elif reply["state"] in ("queued", "running"):
+        if reply["state"] in ("queued", "running"):
             sleep(delta_sleep)
         elif reply["state"] in ("failed",):
-            result.error(f'Message: {reply["error"].get("message")}')
-            result.error(f'Reason:  {reply["error"].get("reason")}')
+            result.error(f"Message: {reply['error'].get('message')}")
+            result.error(f"Reason:  {reply['error'].get('reason')}")
             for n in (
                 reply.get("error", {})
                 .get("context", {})
@@ -740,7 +751,8 @@ def _download(dataset: str, request: dict, target: str) -> None:
                     break
                 result.error(f"  {n}")
             raise ERA5Exception(
-                f'{reply["error"].get("message")}  {reply["error"].get("reason")}'
+                f"{reply['error'].get('message')}  "
+                f"{reply['error'].get('reason')}"
             )
     result.download(target)
 
@@ -768,8 +780,7 @@ def download_era5(
     # Filename
     filename = os.path.join(
         path,
-        f'download_era5_{date.date().strftime("%Y-%m-%d")}_'
-        f"{north:.2f}_{west:.2f}_{south:.2f}_{east:.2f}.nc",
+        f"download_era5_{date.date().strftime('%Y-%m-%d')}_{north:.2f}_{west:.2f}_{south:.2f}_{east:.2f}.nc",
     )
     # Dataset ERA5
     dataset = "reanalysis-era5-single-levels"
@@ -851,8 +862,7 @@ def download_era5land(
     # Filename
     filename = os.path.join(
         path,
-        f'download_era5land_{date.date().strftime("%Y-%m-%d")}_'
-        f"{north:.2f}_{west:.2f}_{south:.2f}_{east:.2f}.nc",
+        f"download_era5land_{date.date().strftime('%Y-%m-%d')}_{north:.2f}_{west:.2f}_{south:.2f}_{east:.2f}.nc",
     )
     # Dataset
     dataset = "reanalysis-era5-land"

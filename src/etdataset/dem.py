@@ -1,20 +1,23 @@
-#!/usr/bin/env python
-# coding: utf8
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 """
 Module for DEM management
 """
 
 import os
-from typing import Dict, List, Tuple
 
 import numpy as np
 import rasterio as rio
 import xarray as xr
+from pyproj import CRS
 from rasterio.merge import merge as rio_merge
 from rasterio.transform import array_bounds
 from sensorsio import mgrs
 from sensorsio.regulargrid import read_as_numpy
+
+from etdataset.logging import LoggerManager
+from etdataset.utils import get_mgrs_tile_names_from_roi
+
+logger = LoggerManager.get_logger(__name__)
 
 
 def get_dem_from_tile(
@@ -42,7 +45,8 @@ def get_dem_from_tile(
     xarr: xarray.Dataset
     """
     file_name = os.path.join(base_dir, f"COP-DEM_GLO-30-DGED_{tile_id}.tif")
-    assert os.path.isfile(file_name)
+    # TODO: Remove assert
+    assert os.path.isfile(file_name)  # noqa
     elevation, xcoords, ycoords, crs = read_as_numpy(
         [file_name],
         resolution=resolution,
@@ -53,7 +57,9 @@ def get_dem_from_tile(
     x, y = np.gradient(elevation.astype(np.float32))
     slope = np.degrees(np.arctan(np.sqrt(x * x + y * y) / resolution))
     # Aspect unfolding rules from
-    # https://github.com/r-barnes/richdem/blob/603cd9d16164393e49ba8e37322fe82653ed5046/include/richdem/methods/terrain_attributes.hpp#L236
+    # https://github.com/r-barnes/richdem/blob/ \
+    # 603cd9d16164393e49ba8e37322fe82653ed5046/include/ \
+    # richdem/methods/terrain_attributes.hpp#L236
     aspect = np.rad2deg(np.arctan2(x, -y))
     lt_0 = aspect < 0
     gt_90 = aspect > 90
@@ -67,12 +73,12 @@ def get_dem_from_tile(
     bounds = tuple(
         [float(x) for x in array_bounds(len(ycoords), len(xcoords), transform)]
     )
-    vars: Dict[str, Tuple[List[str], np.ndarray]] = {}
-    vars["height"] = (["y", "x"], elevation)
-    vars["slope"] = (["y", "x"], slope)
-    vars["aspect"] = (["y", "x"], aspect)
+    var: dict[str, tuple[list[str], np.ndarray]] = {}
+    var["height"] = (["y", "x"], elevation)
+    var["slope"] = (["y", "x"], slope)
+    var["aspect"] = (["y", "x"], aspect)
     xarr = xr.Dataset(
-        vars,
+        var,
         coords={"x": xcoords, "y": ycoords},
         attrs={
             "crs": crs,
@@ -85,9 +91,9 @@ def get_dem_from_tile(
 
 
 def get_dem_from_tiles(
-    tile_ids: List[str],
+    tile_ids: list[str],
     resolution: float = 60,
-    base_dir=os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),
+    base_dir=os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),  # noqa
 ) -> xr.Dataset:
     """
     Read several tiles for DEM Copernicus
@@ -109,7 +115,8 @@ def get_dem_from_tiles(
     -------
     xarr: xarray.Dataset
     """
-    assert len(tile_ids) > 0
+    # TODO: remove assert
+    assert len(tile_ids) > 0  # noqa
     # Get CRS from first tile
     crs = f"EPSG:{mgrs.get_crs_mgrs_tile(tile_ids[0]).to_epsg()}"
     # Get file paths
@@ -140,7 +147,9 @@ def get_dem_from_tiles(
     x, y = np.gradient(elevation.astype(np.float32))
     slope = np.degrees(np.arctan(np.sqrt(x * x + y * y) / resolution))
     # Aspect unfolding rules from
-    # https://github.com/r-barnes/richdem/blob/603cd9d16164393e49ba8e37322fe82653ed5046/include/richdem/methods/terrain_attributes.hpp#L236
+    # https://github.com/r-barnes/richdem/blob/ \
+    # 603cd9d16164393e49ba8e37322fe82653ed5046/include/ \
+    # richdem/methods/terrain_attributes.hpp#L236
     aspect = np.rad2deg(np.arctan2(x, -y))
     lt_0 = aspect < 0
     gt_90 = aspect > 90
@@ -154,12 +163,12 @@ def get_dem_from_tiles(
     bounds = tuple(
         [float(x) for x in array_bounds(len(ycoords), len(xcoords), transform)]
     )
-    vars: Dict[str, Tuple[List[str], np.ndarray]] = {}
-    vars["height"] = (["y", "x"], elevation)
-    vars["slope"] = (["y", "x"], slope)
-    vars["aspect"] = (["y", "x"], aspect)
+    var: dict[str, tuple[list[str], np.ndarray]] = {}
+    var["height"] = (["y", "x"], elevation)
+    var["slope"] = (["y", "x"], slope)
+    var["aspect"] = (["y", "x"], aspect)
     xarr = xr.Dataset(
-        vars,
+        var,
         coords={"x": xcoords, "y": ycoords},
         attrs={
             "crs": crs,
@@ -194,7 +203,8 @@ def get_elevation_from_tile(
     xarr: xarray.Dataset
     """
     file_name = os.path.join(base_dir, f"COP-DEM_GLO-30-DGED_{tile_id}.tif")
-    assert os.path.isfile(file_name)
+    # TODO: Remove assert
+    assert os.path.isfile(file_name)  # noqa
     elevation, xcoords, ycoords, crs = read_as_numpy(
         [file_name],
         resolution=resolution,
@@ -219,3 +229,56 @@ def get_elevation_from_tile(
             "bounds": bounds,
         },
     )
+
+
+def get_dem_from_roi(
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    resolution: float = 60,
+    base_dir: str = os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),
+) -> xr.Dataset:
+    """
+    Read several tiles for DEM Copernicus based on a ROI.
+    Then, resample them at a specific resolution and
+    compute slope et aspect
+
+    Parameters
+    ----------
+    roi_bbox: roi.coords.BoundingBox
+       ROI bounding box
+    roi_crs: pyproj.CRS
+       ROI CRS
+    resolution: str, deflaut=60
+        DEM spatial resolution
+    base_dir: str
+        Path to the DEM directory
+        Required to set MNT_PATH environment variable
+
+    Returns
+    -------
+    xarr: xarray.Dataset
+    """
+    logger.debug(f"ROI bbox: {roi_bbox}")
+    logger.debug(f"ROI crs: {roi_crs}")
+    # Get DEM tiles
+    tile_ids = get_mgrs_tile_names_from_roi(
+        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
+    )
+    logger.debug(f"Tiles ids form DEM: {tile_ids}")
+    # Get DEM from tiles
+    dem = get_dem_from_tiles(
+        tile_ids=tile_ids, resolution=resolution, base_dir=base_dir
+    )
+    # Transform to rioxarray
+    dem = dem.rio.write_crs(roi_crs)
+    # Crop
+    dem = dem.rio.clip_box(*roi_bbox)
+    crs = dem.rio.crs
+    transform = dem.rio.transform(recalc=True)
+    bounds = rio.coords.BoundingBox(*dem.rio.bounds())
+    # Clean rio attributes
+    dem = dem.drop_vars("spatial_ref", errors="ignore")
+    dem.attrs["crs"] = crs
+    dem.attrs["transform"] = transform
+    dem.attrs["bounds"] = bounds
+    return dem

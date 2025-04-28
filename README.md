@@ -20,38 +20,53 @@ Python package to prepare datasets for evapotranspiration processing:
 ## Pre-requistes
 
 To search and download products, you need accounts and set environment variables corresponding to login and password for each catalog: 
-* [Earth Explorer](https://earthexplorer.usgs.gov/): required to define `LANDSATXPLORE_USERNAME` and `LANDSATXPLORE_PASSWORD`
+* [USGS machine to machine](https://m2m.cr.usgs.gov/): required to define `USGS_USERNAME` and `USGS_PASSWORD` (the api key is used as a password here)
 * [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
 
 ## Installation
 
-### Create virtual env
+### Clone the repository
 
-```bash
-python -m venv venv-etdataset
-source venv-etdataset/bin/activate
+```console
+git clone https://src.koda.cnrs.fr/trishna/et-dataset.git
+```
+
+### Install prerequisites
+
+The prerequisites are installed by [pixi](https://pixi.sh/).
+```console
+cd et-dataset
+pixi install
+``` 
+
+To activate the environment
+```console
+pixi shell
 ```
 
 ### Install et-dataset
-
-```bash
-git clone https://gitlab.cnes.fr/cesbio/et-dataset.git
-cd et-dataset
+```console
 pip install .
 ```
 
-With notebooks :
-```bash
+To use notebook
+```console
 pip install .[notebook]
 ```
 
+To install in a development mode
+```console
+pip install -e .[notebook]
+```
+
+## Usage
 ## Usage
 
 ### Search products
 
 The command enables to search products in catalogs:
-* For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
+* For Landsat [USGS machine to machine](https://m2m.cr.usgs.gov/)
 * For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
 * For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
@@ -85,7 +100,7 @@ options:
 ### Download products
 
 The command enables to download products from a product list from catalogs:
-* For Landsat [Earth Explorer](https://earthexplorer.usgs.gov/)
+* For Landsat [USGS machine to machine](https://m2m.cr.usgs.gov/)
 * For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
 * For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
@@ -153,8 +168,8 @@ options:
 
 #### Notebooks
 
-* find_ecols8_matches.ipynb: Find matches between ECOSTRESS/Sentinel2
-* find_ecos2_matches.ipynb: Find matches between ECOSTRESS/Landsat 
+* [select_ecols8_matches.ipynb](notebooks/select_ecols8_matches.ipynb): Find matches between ECOSTRESS/Sentinel2
+* [select_ecos2_matches.ipynb](notebooks/select_ecos2_matches.ipynb): Find matches between ECOSTRESS/Landsat 
 
 ### Create command
 
@@ -168,10 +183,7 @@ Compatible TIR products are:
 * Landsat L2A
 * ECOSTRESS collectin V2 only 
 
-LAI is calculated from NDVI with the following formula:
-```math 
-LAI = 0.119 * exp(3.457 * NDVI) - 0.062
-```
+LAI is calculated from the spectral reflectances with the [pyBVNET](https://forge.ird.fr/cesbio/modelisation/pybvnet) package, using the BVNET neural networks.
 
 Albedo is computed with these following formula:
 
@@ -205,7 +217,17 @@ options:
 
 #### Notebooks
 
-* create_ecols8_dataset.ipynb: Create dataset with ECOSTRESS and Landsat 
-* create_ecos2_dataset.ipynb: Create dataset with ECOSTRESS and Sentinel2 
-* create_ls8_dataset.ipynb: Create dataset with Landsat 
+**Warning: Notebooks have to be updated**
+* [create_ecols8_dataset.ipynb](notebooks/create_ecols8_dataset.ipynb): Create dataset with ECOSTRESS and Landsat 
+* [create_ecos2_dataset.ipynb](notebooks/create_ecos2_dataset.ipynb): Create dataset with ECOSTRESS and Sentinel2 
+* [create_ls8_dataset.ipynb](notebooks/create_ls8_dataset.ipynb): Create dataset with Landsat 
 
+## Data preparation
+
+A complete notebook is available to describe landsat data preparation: [prepare_landsat.ipynb](notebooks/prepare_landsat.ipynb).
+
+## Scripts
+
+Several scripts are available:
+* [get_dem.py](scripts/get_dem.py): Extract DEM based on a ROI from the copernicus DEM.
+* [prepare_landsat.py](scripts/prepare_landsat.py): Prepare landsat data

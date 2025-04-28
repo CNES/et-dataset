@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales / Université Paul Sabatier (UT3)
+# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
 #
 """
 Common function
@@ -9,9 +7,10 @@ Common function
 
 import re
 from datetime import datetime
-from typing import Tuple
 
 import geopandas as gpd
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import rasterio as rio
 from fiona.errors import DriverError
@@ -34,7 +33,7 @@ def check_mgrs_format(tile: str) -> None:
         raise ValueError(f"Wrong format for MGRS tile ID (got: {tile})")
 
 
-def BBoxException(Exception):
+def BBoxException(Exception):  # noqa
     """
     Exception for bounding box
     """
@@ -55,7 +54,7 @@ def create_polygon(
     ll = Point(ll_long, ll_lat)
     lr = Point(lr_long, lr_lat)
     points = [ul, ur, lr, ll]
-    return Polygon([i for i in points])
+    return Polygon(list(points))
 
 
 def bbox_to_polygon(bounds: list[float] | rio.coords.BoundingBox) -> Polygon:
@@ -70,7 +69,7 @@ def bbox_to_polygon(bounds: list[float] | rio.coords.BoundingBox) -> Polygon:
     )
 
 
-def get_bbox_from_roi(roi_path: str) -> Tuple[rio.coords.BoundingBox, CRS]:
+def get_bbox_from_roi(roi_path: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a ROI shapefile
@@ -78,12 +77,38 @@ def get_bbox_from_roi(roi_path: str) -> Tuple[rio.coords.BoundingBox, CRS]:
     # Roi shapefile
     try:
         roi_gdf = gpd.read_file(roi_path)
-        return rio.coords.BoundingBox(*roi_gdf.bounds.iloc[0].values), roi_gdf.crs
+        return rio.coords.BoundingBox(
+            *roi_gdf.bounds.iloc[0].values
+        ), roi_gdf.crs
     except DriverError as e:
         raise BBoxException(f"Unable to read shapefile {roi_path}: {e}")
 
 
-def get_bbox_from_mgrs_tile(tile: str) -> Tuple[rio.coords.BoundingBox, CRS]:
+def get_utm_bbox_from_roi(roi_path: str) -> tuple[rio.coords.BoundingBox, CRS]:
+    """
+    Get bounding box information (bbox and CRS) in UTM coordinates
+    from a ROI shapefile
+    """
+    # Roi shapefile
+    try:
+        roi_gdf = gpd.read_file(roi_path)
+        epsg_code = roi_gdf.crs
+        if epsg_code == 4326:
+            # Auto-detect UTM zone based on centroid
+            centroid = roi_gdf.geometry[0].centroid
+            utm_zone = int((centroid.x + 180) / 6) + 1
+            epsg_code = 32600 + utm_zone  # 32600 for northern hemisphere
+            if centroid.y < 0:
+                epsg_code = 32700 + utm_zone  # use 32700 for southern
+            roi_gdf = roi_gdf.to_crs(epsg=epsg_code)
+        return rio.coords.BoundingBox(
+            *roi_gdf.bounds.iloc[0].values
+        ), roi_gdf.crs
+    except DriverError as e:
+        raise BBoxException(f"Unable to read shapefile {roi_path}: {e}")
+
+
+def get_bbox_from_mgrs_tile(tile: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a MGRS_tile
@@ -116,10 +141,12 @@ def check_theia_tiles(tile_ids: list[str]) -> list[str]:
     return list(set(tile_ids) & set(theia_tiles.index))
 
 
-def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
+def read_product_list(
+    path: str, crs: CRS | int, geometry: str = "geometry"
+) -> gpd.GeoDataFrame:
     """
     Read a product list in CSV format and convert it to
-    GeoDataFrame
+    GeoDataFrame.
     """
     # Read to DataFrame
     df = pd.read_csv(path)
@@ -130,8 +157,9 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
     # Remove unnecessary column
     if "Unnamed: 0" in df.columns:
         df = df.drop(columns="Unnamed: 0")
-        # Parse date
-        df
+
+    # Rename geometry columns if it already exists
+    df = df.rename(columns={"geometry": "old_geometry"})
 
     # Convert geometry
     def convert_polygon(poly: str) -> Polygon:
@@ -146,7 +174,30 @@ def read_product_list(path: str, crs: CRS | int) -> gpd.GeoDataFrame:
         )
         return Polygon(coords)
 
-    geometry = df["geometry"].apply(lambda row: convert_polygon(row))
+    try:
+        # Convert the WKT column to geometry
+        geometry = gpd.GeoSeries.from_wkt(df[geometry])
+    except Exception:  # noqa
+        geometry = df["geometry"].apply(lambda row: convert_polygon(row))
+
     return gpd.GeoDataFrame(
-        data=df[df.columns.difference(["b"], sort=False)], geometry=geometry, crs=crs
+        data=df[df.columns.difference(["b"], sort=False)],
+        geometry=geometry,
+        crs=crs,
     )
+
+
+def mask_bits(arr: npt.ArrayLike, pos: int, mask: str = "1") -> npt.NDArray:
+    """
+    Search for a binary code at a specific position in bytes array and
+    return a mask array
+    """
+    if pos < 0:
+        raise ValueError("Position fo bits extraction must be positive")
+    array = np.array(arr)
+    res = np.zeros_like(array)
+    res[~np.isnan(array)] = np.isin(
+        (array[~np.isnan(array)].astype(int) >> pos) & int("1" * len(mask), 2),
+        int(mask, 2),
+    )
+    return res.astype(bool)

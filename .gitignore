@@ -16,5 +16,10 @@ download/
 *.tif
 *.csv
 !notebooks/products.csv
+!notebooks/landsat_products.csv
 *.mat
 *.nc
+
+# pixi environments
+.pixi
+*.egg-info
