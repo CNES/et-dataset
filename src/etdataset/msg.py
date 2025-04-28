@@ -584,7 +584,7 @@ def add_solar_data(
         MSGVar.SURFACE_SOLAR_RADIATION_DOWNWARD.key
     ].where(not_ocean & not_space)
     corrected_ds[MSGVar.FRACTION_DIFFUSE.key] = corrected_ds[
-        MSGVar.SURFACE_SOLAR_RADIATION_DOWNWARD.key
+        MSGVar.FRACTION_DIFFUSE.key
     ].where(not_ocean & not_space)
     corrected_ds = corrected_ds.drop_vars(MSGVar.QA.key)
     # Interpolate
@@ -601,7 +601,7 @@ def add_solar_data(
             num_threads=nb_threads,
             warp_mem_limit=mem_limit,
         )
-        .drop_vars("spatial_ref")
+        .drop_vars("crs")
         .rename(
             {
                 MSGVar.SURFACE_SOLAR_RADIATION_DOWNWARD.key: "rsd_msg",
