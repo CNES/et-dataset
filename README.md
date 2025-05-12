@@ -23,8 +23,13 @@ To search and download products, you need accounts and set environment variables
 * [USGS machine to machine](https://m2m.cr.usgs.gov/): required to define `USGS_USERNAME` and `USGS_PASSWORD` (the api key is used as a password here)
 * [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
+* [LSA SAF Data](https://datalsasaf.lsasvcs.ipma.pt/): required to define `LSASAF_USER` and `LSASAF_PASSWORD`
 
 ## Installation
+
+The installation requires to have:
+* **git**
+* **pixi**. The instructions to install pixi can be found in [https://pixi.sh/](https://pixi.sh/).
 
 ### Clone the repository
 
@@ -32,9 +37,9 @@ To search and download products, you need accounts and set environment variables
 git clone https://src.koda.cnrs.fr/trishna/et-dataset.git
 ```
 
-### Install prerequisites
+### Install dependencies
 
-The prerequisites are installed by [pixi](https://pixi.sh/).
+The dependencies are installed by pixi. 
 ```console
 cd et-dataset
 pixi install
@@ -55,9 +60,26 @@ To use notebook
 pip install .[notebook]
 ```
 
-To install in a development mode
+To install in a developper mode
 ```console
 pip install -e .[notebook]
+```
+
+### Update 
+
+For a classic installation
+```console
+cd et-dataset
+git pull
+pixi shell
+pip install .[notebook]
+```
+
+For a developper installtion
+```console
+cd et-dataset
+git pull
+pixi shell
 ```
 
 ## Usage
