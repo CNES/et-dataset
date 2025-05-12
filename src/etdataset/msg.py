@@ -218,9 +218,18 @@ def _download(
         f"{fmt.label}_LSASAF_{satellite.key}_{product.short}_{satellite.label}"
         f"-Disk_{date.strftime('%Y%m%d%H%M')}{fmt.extension}"
     )
+    # Do not download if the file already exists
+    if os.path.exists(os.path.join(path, filename)):
+        logger.info(
+            f"File {os.path.join(path, filename)} already exists. "
+            "Skip download."
+        )
+        return
+
     url = (
-        f"https://datalsasaf.lsasvcs.ipma.pt/PRODUCTS/{satellite.key}/{product.key}/"
-        f"{fmt.key}/{date.year}/{str(date.month).zfill(2)}/{str(date.day).zfill(2)}/{filename}"
+        f"https://datalsasaf.lsasvcs.ipma.pt/PRODUCTS/{satellite.key}/"
+        f"{product.key}/{fmt.key}/{date.year}/{str(date.month).zfill(2)}/"
+        f"{str(date.day).zfill(2)}/{filename}"
     )
 
     logger.info(f"Download url: {url}")
