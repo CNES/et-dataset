@@ -40,6 +40,7 @@ dependencies = [
   "sensorsio",
   "theia-picker",
   "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git",
+  "scikit-image",
 ]
 
 [project.optional-dependencies]

@@ -13,6 +13,8 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import rasterio as rio
+import skimage.morphology as skm
+import xarray as xr
 from fiona.errors import DriverError
 from pyproj import CRS
 from sensorsio import mgrs
@@ -201,3 +203,16 @@ def mask_bits(arr: npt.ArrayLike, pos: int, mask: str = "1") -> npt.NDArray:
         int(mask, 2),
     )
     return res.astype(bool)
+
+
+def dilate_mask(data: xr.DataArray, dilation: int = 1) -> xr.DataArray:
+    """
+    Dilate a binary mask
+    """
+    # Ensure the data is boolean (binary image)
+    binary_mask = data.values.astype(bool)
+    # Apply binary dilation
+    footprint = skm.footprint_rectangle((2 * dilation + 1, 2 * dilation + 1))
+    binary_mask = skm.binary_dilation(binary_mask, footprint=footprint)
+
+    return xr.DataArray(binary_mask, dims=data.dims, coords=data.coords)

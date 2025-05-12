@@ -24,7 +24,7 @@ from etdataset.api import create_dataset, download, search
 from etdataset.cli import CLIException
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
-from etdataset.utils import get_utm_bbox_from_roi
+from etdataset.utils import dilate_mask, get_utm_bbox_from_roi
 from etdataset.writer import write_dataset
 
 logger = LoggerManager.get_logger(__name__)
@@ -103,7 +103,6 @@ def prepare_landsat(
         logger.info(f"Process product {product}...")
 
         # Create dataset
-
         data = create_dataset(
             vis_path=product,
             roi_bbox=roi_bbox,
@@ -111,12 +110,15 @@ def prepare_landsat(
             resolution=100,
             resampling=rio.enums.Resampling.average,
         )
+        logger.debug("Create dataset: OK")
 
-        # Download MSG data
+        # Apply masks
+        data["lst"] = data["lst"].where(~data["water"])
+        data["lst"] = data["lst"].where(~dilate_mask(data["cloud"], dilation=2))
+        data["lst"] = data["lst"].where(data["qa"])
+        logger.debug("Create dataset: OK")
 
         # Get datetime for a product
-
-        # Read MTL file to get datetime
         product_path = Path(product)
         filename = product_path.name + "_MTL.json"
         with open(product_path / filename) as mtl_file:
@@ -135,13 +137,16 @@ def prepare_landsat(
 
         logger.debug(f"Acquisition datetime: {acquisition_date}")
 
+        # Download MSG data
         msg.download(
             date=acquisition_date, latlon_bbox=latlon_bbox, path=output_path
         )
+        logger.debug("Download MSG data: OK")
 
         # Activate rioxarray accessor
-        crs = data.attrs["crs"]
-        data = data.rio.write_crs(crs)
+        if not hasattr(data, "rio"):
+            crs = data.attrs["crs"]
+            data = data.rio.write_crs(crs)
 
         # Add MSG data
         updated_data = msg.add(data=data, path=output_path)

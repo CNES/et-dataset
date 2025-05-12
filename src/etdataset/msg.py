@@ -839,8 +839,11 @@ def add(
             raise OSError(f"File not found: {p}")
     # Add data
     data = add_daily_data(data, daily_product)
+    logger.debug("Add daily data")
     data = add_solar_data(data, date, solar_product)
+    logger.debug("Add solar data")
     data = add_thermal_data(data, date, thermal_product)
+    logger.debug("Add thermal data")
     # Clean
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
