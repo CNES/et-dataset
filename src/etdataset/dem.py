@@ -22,8 +22,8 @@ logger = LoggerManager.get_logger(__name__)
 
 def get_dem_from_tile(
     tile_id: str,
+    base_dir: str,
     resolution: float = 60,
-    base_dir: str = os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),
 ) -> xr.Dataset:
     """
     Read one tile for DEM Copernicus
@@ -92,8 +92,8 @@ def get_dem_from_tile(
 
 def get_dem_from_tiles(
     tile_ids: list[str],
+    base_dir: str,
     resolution: float = 60,
-    base_dir=os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),  # noqa
 ) -> xr.Dataset:
     """
     Read several tiles for DEM Copernicus
@@ -182,8 +182,8 @@ def get_dem_from_tiles(
 
 def get_elevation_from_tile(
     tile_id: str,
+    base_dir: str,
     resolution: float = 60,
-    base_dir: str = os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),
 ) -> xr.DataArray:
     """
     Read one tile for DEM Copernicus
@@ -234,8 +234,8 @@ def get_elevation_from_tile(
 def get_dem_from_roi(
     roi_bbox: rio.coords.BoundingBox,
     roi_crs: CRS,
+    base_dir: str,
     resolution: float = 60,
-    base_dir: str = os.path.join(os.environ["MNT_PATH"], "DEM_Copercinus_30m/"),
 ) -> xr.Dataset:
     """
     Read several tiles for DEM Copernicus based on a ROI.
