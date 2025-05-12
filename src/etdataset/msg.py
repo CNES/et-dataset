@@ -479,7 +479,14 @@ def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
         )
         * 1.15
     )
-    nb_threads = min([cpu_count(logical=False), len(os.sched_getaffinity(0))])
+    try:
+        nb_threads = min(
+            [cpu_count(logical=True), len(os.sched_getaffinity(0))]
+        )
+    except:  # noqa
+        nb_threads = min(
+            [cpu_count(logical=True)]
+        )  # os.sched_getaffinity won't work on windows
 
     # Reproject
 
@@ -538,7 +545,14 @@ def add_solar_data(
         )
         * 1.15
     )
-    nb_threads = min([cpu_count(logical=False), len(os.sched_getaffinity(0))])
+    try:
+        nb_threads = min(
+            [cpu_count(logical=True), len(os.sched_getaffinity(0))]
+        )
+    except:  # noqa
+        nb_threads = min(
+            [cpu_count(logical=True)]
+        )  # os.sched_getaffinity won't work on windows
     # Open multiple files in a single dataset
     xrds = xr.open_mfdataset(
         products,
@@ -649,7 +663,14 @@ def add_thermal_data(
         )
         * 1.15
     )
-    nb_threads = min([cpu_count(logical=False), len(os.sched_getaffinity(0))])
+    try:
+        nb_threads = min(
+            [cpu_count(logical=True), len(os.sched_getaffinity(0))]
+        )
+    except:  # noqa
+        nb_threads = min(
+            [cpu_count(logical=True)]
+        )  # os.sched_getaffinity won't work on windows
     # Open multiple files in a single dataset
     xrds = xr.open_mfdataset(
         products,
