@@ -750,6 +750,9 @@ def add(
         raise ValueError("Vis time attribute is missing in dataset")
     date = dt.datetime.combine(data.attrs["vis_date"], data.attrs["vis_time"])
     if data.rio.crs is None:
+        if data.attrs.get("crs") is not None:
+            crs = data.attrs["crs"]
+            data = data.rio.write_crs(crs)
         raise ValueError("crs attribute is missing in dataset")
     crs = data.rio.crs
     bounds = rio.coords.BoundingBox(*data.rio.bounds())
