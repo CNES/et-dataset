@@ -107,7 +107,7 @@ def prepare_landsat(
             vis_path=product,
             roi_bbox=roi_bbox,
             roi_crs=roi_crs,
-            resolution=100,
+            resolution=90,
             resampling=rio.enums.Resampling.average,
         )
         logger.debug("Create dataset: OK")
