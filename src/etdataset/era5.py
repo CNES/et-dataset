@@ -638,10 +638,13 @@ def add(
         )
     else:
         dst = next(iter(data.data_vars.values()))
-        data[f"rsd_{dataset.key}"] = interpolate_radiation(
-            data=era5_xrds[ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key],
-            dem=dst.rio.write_crs(crs),  # transfer crs attribute
-        )
+        data[f"rsd_{dataset.key}"] = (
+            interpolate_radiation(
+                data=era5_xrds[ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key],
+                dem=dst.rio.write_crs(crs),  # transfer crs attribute
+            )
+            / 3600.0
+        )  # Flux over 1 hour
         logger.debug("Interpolate solar radiation:OK")
     # Add thermal radiation
     if (
@@ -654,10 +657,13 @@ def add(
         )
     else:
         dst = next(iter(data.data_vars.values()))
-        data[f"rld_{dataset.key}"] = interpolate_radiation(
-            data=era5_xrds[ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key],
-            dem=dst.rio.write_crs(crs),  # transfer crs attribute
-        )
+        data[f"rld_{dataset.key}"] = (
+            interpolate_radiation(
+                data=era5_xrds[ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key],
+                dem=dst.rio.write_crs(crs),  # transfer crs attribute
+            )
+            / 3600.0
+        )  # Flux over 1 hour
         logger.debug("Interpolate thermal radiation:OK")
 
     # Clean
