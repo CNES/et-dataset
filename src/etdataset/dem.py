@@ -6,9 +6,12 @@ Module for DEM management
 import os
 
 import numpy as np
+import numpy.typing as npt
+import pyproj
 import rasterio as rio
+import requests
 import xarray as xr
-from pyproj import CRS
+from pyproj import CRS, Transformer
 from rasterio.merge import merge as rio_merge
 from rasterio.transform import array_bounds
 from sensorsio import mgrs
@@ -238,6 +241,8 @@ def get_dem_from_roi(
     resolution: float = 60,
 ) -> xr.Dataset:
     """
+    Description
+    -----------
     Read several tiles for DEM Copernicus based on a ROI.
     Then, resample them at a specific resolution and
     compute slope et aspect
@@ -282,3 +287,142 @@ def get_dem_from_roi(
     dem.attrs["transform"] = transform
     dem.attrs["bounds"] = bounds
     return dem
+
+
+def download_egm96_height() -> None:
+    """
+    Description
+    -----------
+    Check if the egm96 height exists.
+    If not, download if from github
+
+    https://github.com/OSGeo/PROJ-data/raw/refs/heads/master/us_nga/us_nga_egm08_25.tif
+    """
+    # Check
+    data_dir = pyproj.datadir.get_data_dir()
+    egm96_file = os.path.join(data_dir, "us_nga_egm96_15.tif")
+    if os.path.isfile(egm96_file):
+        logger.debug("EGM96 already downloaded")
+        return
+    egm96_url = (
+        "https://github.com/OSGeo/PROJ-data/raw/refs/"
+        "heads/master/us_nga/us_nga_egm96_15.tif"
+    )
+    with requests.get(egm96_url, stream=True) as r:
+        r.raise_for_status()
+        with open(egm96_file, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+    logger.debug("EGM96 downloaded")
+
+
+def download_egm08_height() -> None:
+    """
+    Description
+    -----------
+    Check if the egm96 height exists.
+    If not, download if from github
+
+    """
+    # Check
+    data_dir = pyproj.datadir.get_data_dir()
+    egm08_file = os.path.join(data_dir, "us_nga_egm08_25.tif")
+    if os.path.isfile(egm08_file):
+        return
+    egm08_url = (
+        "https://github.com/OSGeo/PROJ-data/raw/refs/"
+        "heads/master/us_nga/us_nga_egm08_25.tif"
+    )
+    with requests.get(egm08_url, stream=True) as r:
+        r.raise_for_status()
+        with open(egm08_file, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+
+def get_egm96_height(lat: npt.ArrayLike, lon: npt.ArrayLike) -> npt.NDArray:
+    """
+    Description
+    -----------
+    Get the height above the geoid (EGM96) if the point
+    were exactly on the WGS84 ellipsoid surface at that lat/lon.
+    This allows you to compute the geoid undulation NN,
+    which is the vertical distance between the WGS84
+    ellipsoid and the EGM96 geoid at that location.
+    Considering: ellipsoidal_height = 0
+    The output orthometric_height will be:
+    orthometric_height = 0 - N = -N
+    So the orthometric height will be negative, and:
+    N = -orthometric_height
+    This gives the geoid height N at that latitude/longitude
+    relative to the ellipsoid.
+
+    Parameters
+    ----------
+    lat: float
+       Latitude
+    lon: float
+       Longitude
+
+    Returns
+    -------
+
+    """
+    # EGM96 geoid model
+    transformer = Transformer.from_crs(
+        "epsg:4979",  # WGS84 3D (lat/lon/ellipsoidal height)
+        "epsg:9707",  # WGS84 lat/lon + EGM96 geoid (4326+5773)
+        always_xy=True,
+    )
+    _, _, egm96_height = transformer.transform(
+        np.array(lon), np.array(lat), np.ones_like(lon)
+    )
+    return -egm96_height
+
+
+def compute_egm96_height(data: xr.DataArray | xr.Dataset) -> xr.DataArray:
+    """
+    Description
+    -----------
+    Compute elevation using EGM96
+
+    Parameters
+    ----------
+    data: xr.DataArray
+        Data
+
+    Return
+    ------
+    dem: xr.DataArray
+        EGM96 height
+    """
+    # Extract coordiates
+    x = data["x"].values
+    y = data["y"].values
+    # Create a 2D meshgrid of coordinates
+    x2d, y2d = np.meshgrid(x, y)
+    # Convert coordinates to lat/lon
+    if hasattr(data, "rio"):
+        if data.rio.crs is not None:
+            crs = data.rio.crs
+        else:
+            raise ValueError("No CRS provided")
+    elif data.attrs.get("crs", None) is not None:
+        crs = data.attrs["crs"]
+    else:
+        raise ValueError("No CRS provided")
+    transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+    # Convert to lat/lon using pyproj (easting, northing → lon, lat)
+    lon2d, lat2d = transformer.transform(x2d, y2d)
+    # Vectorize the get_elevation function
+    vectorized_elevation = np.vectorize(get_egm96_height)
+    # Apply it to the meshgrid
+    elevation_data = vectorized_elevation(lat2d, lon2d)
+
+    # Wrap it back into a DataArray
+    return xr.DataArray(
+        data=elevation_data,
+        coords={"x": x, "y": y},
+        dims=("y", "x"),
+        name="elevation",
+    )

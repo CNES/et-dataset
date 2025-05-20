@@ -2341,7 +2341,7 @@ packages:
 - pypi: .
   name: et-dataset
   version: 0.0.1
-  sha256: addbfa365d4b6baf93ff7652ba4ce33a425d5412f3dfdcffa412c6bf2d1770eb
+  sha256: 0b18b4d3a3b297c3f46f2095b37b3230582506d31de54c84faa226da5955bf08
   requires_dist:
   - affine
   - cdsapi
@@ -2355,6 +2355,7 @@ packages:
   - pybvnet @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git
   - pyproj
   - rasterio
+  - requests
   - scikit-image
   - sensorsio
   - shapely

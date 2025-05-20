@@ -41,6 +41,7 @@ dependencies = [
   "theia-picker",
   "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git",
   "scikit-image",
+  "requests",
 ]
 
 [project.optional-dependencies]
