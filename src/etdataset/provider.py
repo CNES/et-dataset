@@ -797,7 +797,7 @@ class LandsatProvider(Provider):
                     result["spatialCoverage"]["coordinates"][0]  # type: ignore
                 ),
                 "Cloud_cover": result["cloudCover"],  # type: ignore
-                "Dates": datetime.strptime(
+                "Date": datetime.strptime(
                     result["temporalCoverage"]["startDate"],  # type: ignore
                     "%Y-%m-%d %H:%M:%S",
                 ).date(),
@@ -859,7 +859,7 @@ class LandsatProvider(Provider):
                 ]
             ).set_crs(epsg=4326)
         # Merge dataframes
-        df = pd.merge(df, urls_df, on="entityId")
+        df = pd.merge(df, urls_df, on="entityId").drop("entityId", axis=1)
         df["Provider"] = "USGS"
         df["Collection"] = "LANDSAT"
         df["Tile_ID"] = None
@@ -867,7 +867,20 @@ class LandsatProvider(Provider):
         df["Checksum"] = None
         gdf = gpd.GeoDataFrame(df, geometry="geometry")
         gdf = gdf.set_crs(epsg=4326)  # or whatever CRS your data uses
-
+        gdf = gdf[
+            [
+                "Product_name",
+                "Date",
+                "Provider",
+                "Collection",
+                "Tile_ID",
+                "Cloud_cover",
+                "Relative_orbit",
+                "URL",
+                "Checksum",
+                "geometry",
+            ]
+        ]
         # Filter on cloud cover if the information exists
         gdf = gdf[gdf["Cloud_cover"] < max_cloud_cover]
         logger.debug(
