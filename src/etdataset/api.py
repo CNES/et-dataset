@@ -190,6 +190,8 @@ def download(
         logger.exception("You must provide the URL to download.")
     # Download
     for collection, group in products.groupby("Collection"):
+        collection_dir = os.path.join(output_dir, str(collection))
+        os.makedirs(collection_dir, exist_ok=True)
         logger.debug(f"Collection: {collection}")
         provider = get_provider(Collection[str(collection)])
         logger.debug(f"Provider: {provider}")
@@ -198,7 +200,7 @@ def download(
             urls["Checksum"] = group["Checksum"].values
         else:
             urls["Checksum"] = np.nan
-        provider.download(urls, output_dir)
+        provider.download(urls, collection_dir)
 
 
 def select(

@@ -519,6 +519,12 @@ class EarthDataProvider(Provider):
             os.makedirs(os.path.join(local_path, product_name), exist_ok=True)
             # Parse URL
             urls = list(product.URL.split(","))
+            if os.path.isdir(product_dir):
+                logger.info(
+                    f"Product directory {product_name} "
+                    "already exists. Skip download."
+                )
+                continue
             results.append(earthaccess.download(urls, product_dir))
         logger.info(f"Download products: {results}")
 
