@@ -137,7 +137,7 @@ class MSGVar(MSGDataInfo, Enum):
 class MSGProduct(ProductInfo, Enum):
     SURFACE_SOLAR_RADIATION_DOWNWARD = ("MDSSFTD", "MDSSFTD", "15min")
     SURFACE_THERMAL_RADIATION_DOWNWARD = ("MDSLF", "DSLF", "30min")
-    DAILY_SURFACE_SOLAR_RADIATION_DOWNWARD = ("MDIDSSF", "DIDSSF", "day")
+    DAILY_SURFACE_SOLAR_RADIATION_DOWNWARD = ("MDIDSSF", "DIDSSF", "1day")
 
 
 def get_url(
@@ -416,16 +416,16 @@ def download(
     )
     # If date argument is a date
     if type(date) is dt.date:
-        time = pd.date_range(
-            date.strftime("%Y-%m-%d"),
-            freq=product.freq,
-            end=(date + pd.Timedelta("1day")).strftime("%Y-%m-%d"),
-        )
-        for t in time:
-            for product in [
-                MSGProduct.SURFACE_SOLAR_RADIATION_DOWNWARD,
-                MSGProduct.SURFACE_THERMAL_RADIATION_DOWNWARD,
-            ]:
+        for product in [
+            MSGProduct.SURFACE_SOLAR_RADIATION_DOWNWARD,
+            MSGProduct.SURFACE_THERMAL_RADIATION_DOWNWARD,
+        ]:
+            time = pd.date_range(
+                date.strftime("%Y-%m-%d"),
+                freq=product.freq,
+                end=(date + pd.Timedelta("1day")).strftime("%Y-%m-%d"),
+            )
+            for t in time:
                 _download(
                     satellite=satellite,
                     product=product,
