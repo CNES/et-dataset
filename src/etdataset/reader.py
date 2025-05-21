@@ -222,7 +222,7 @@ class LandsatReader(ProductReader):
 
         # Compute LAI with BVnet
         # Cf. https://forge.ird.fr/cesbio/modelisation/pybvnet/-/tree/main?ref_type=heads
-        ls_xr["lai"] = compute_lai(ls_xr, self.path, satellite="landsat8")
+        ls_xr[["lai", "fcover"]] = compute_lai(ls_xr, self.path, satellite="landsat8")[["LAI", "FCOVER"]]
 
         # Compute albedo
         ls_xr["albedo"] = self.compute_albedo(ls_xr)
