@@ -117,8 +117,10 @@ def compute_lai(
     # Create output dataset
     datavars = {}
     datavars["LAI"] = (dims, output_data)
+    datavars["FCOVER"] = (dims, output_data)
     # TODO: Check mypy error
     datavars["LAI_flag"] = (dims, output_flag_data)  # type: ignore
+    datavars["FCOVER_flag"] = (dims, output_flag_data)  # type: ignore
     output = xr.Dataset(
         data_vars=datavars,
         coords={"y": data.coords["y"], "x": data.coords["x"]},

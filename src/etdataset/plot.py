@@ -42,6 +42,7 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
             "albedo",
             "ndvi",
             "lai",
+            "fcover",
         ]:
             nb_plots += 1
     ncol = 2
@@ -168,6 +169,20 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
             # vmax=arr.lai.quantile(0.99),
         )
         axes[irow, icol].set_title("LAI")
+        axes[irow, icol].grid(True)
+        icol += 1
+        if icol == 2:
+            icol = 0
+            irow += 1
+
+    # LAI
+    if "fcover" in bands:
+        arr.fcover.plot(
+            ax=axes[irow, icol],
+            # vmin=arr.lai.quantile(0.01),
+            # vmax=arr.lai.quantile(0.99),
+        )
+        axes[irow, icol].set_title("FCOVER")
         axes[irow, icol].grid(True)
         icol += 1
         if icol == 2:
