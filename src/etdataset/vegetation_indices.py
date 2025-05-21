@@ -124,4 +124,4 @@ def compute_lai(
         coords={"y": data.coords["y"], "x": data.coords["x"]},
     )
 
-    return apply_NNT(stacked_inputs, output, ["LAI"], satellite)["LAI"]
+    return apply_NNT(stacked_inputs, output, ["LAI", "FCOVER"], satellite)[["LAI", "FCOVER"]]
