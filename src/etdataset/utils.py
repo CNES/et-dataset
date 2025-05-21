@@ -161,7 +161,8 @@ def read_product_list(
         df = df.drop(columns="Unnamed: 0")
 
     # Rename geometry columns if it already exists
-    df = df.rename(columns={"geometry": "old_geometry"})
+    if geometry != "geometry" and geometry in df.columns:
+        df = df.rename(columns={"geometry": "old_geometry"})
 
     # Convert geometry
     def convert_polygon(poly: str) -> Polygon:
@@ -183,7 +184,7 @@ def read_product_list(
         geometry = df["geometry"].apply(lambda row: convert_polygon(row))
 
     return gpd.GeoDataFrame(
-        data=df[df.columns.difference(["b"], sort=False)],
+        data=df,
         geometry=geometry,
         crs=crs,
     )
