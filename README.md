@@ -14,16 +14,18 @@
 Python package to prepare datasets for evapotranspiration processing:
 * Search on catalogs that satisfy criteria
 * Download products from a product list
+* Download auxiliary data from a product list
 * Select products between 2 collections that satisfy criteria
 * Create ET dataset from products
 
 ## Pre-requistes
 
-To search and download products, you need accounts and set environment variables corresponding to login and password for each catalog: 
+To search and download products and auxiliary data, you need accounts and set environment variables corresponding to login and password for each catalog: 
 * [USGS machine to machine](https://m2m.cr.usgs.gov/): required to define `USGS_USERNAME` and `USGS_PASSWORD` (the api key is used as a password here)
 * [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
 * [LSA SAF Data](https://datalsasaf.lsasvcs.ipma.pt/): required to define `LSASAF_USER` and `LSASAF_PASSWORD`
+* [Climate Data Store](https://cds.climate.copernicus.eu/): required to configure CDS API ([see instructions](https://cds.climate.copernicus.eu/how-to-api))
 
 ## Installation
 
@@ -83,7 +85,6 @@ pixi shell
 ```
 
 ## Usage
-## Usage
 
 ### Search products
 
@@ -117,8 +118,6 @@ options:
 * [search_landsat.ipynb](notebooks/search_landsat.ipynb): Examples of searches for Landsat
 
 
-## Usage
-
 ### Download products
 
 The command enables to download products from a product list from catalogs:
@@ -144,6 +143,30 @@ options:
 #### Notebooks
 
 * [download.ipynb](notebooks/download.ipynb): Examples of download products
+
+### Download auxiliary data
+
+The command enables to download auxiliary data from a product list coming from:
+* [LSA SAF Data](https://datalsasaf.lsasvcs.ipma.pt/)
+* [Climate Data Store](https://cds.climate.copernicus.eu/)
+
+The product list must be provided in a CSV file format.
+The required column is *Date* which must contain the date of the products. 
+
+#### Command line
+```bash
+usage: et-dataset download [-h] [-v] -l LIST [--output OUTPUT]
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose mode
+  -l LIST, --list LIST  List of products (in CSV format)
+  --output OUTPUT       Download directory path (default: download)
+```
+
+#### Notebooks
+
+* [download.ipynb](notebooks/download.ipynb): Examples of download products and auxiliary data
 
 
 ### Select products

@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from etdataset.api import create_dataset, download, search, select
+from etdataset.api import create_dataset, download, download_aux, search, select
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
 from etdataset.utils import (
@@ -71,6 +71,11 @@ class SearchArgs(argparse.Namespace):
 
 @dataclass
 class DownloadArgs(argparse.Namespace):
+    list: str
+    output: str
+
+
+class DownloadAuxArgs(argparse.Namespace):
     list: str
     output: str
 
@@ -278,6 +283,28 @@ def cli_download(args: DownloadArgs) -> None:
 
     # Download
     download(products, args.output)
+
+
+def cli_download_aux(args: DownloadAuxArgs) -> None:
+    """
+    Download auxiliary products
+    """
+    logger.debug(f"Download aux arguments: {args}")
+
+    if not os.path.isfile(args.list):
+        raise CLIException(f"File with product list not found ({args.list})")
+
+    try:
+        products = read_product_list(args.list, 4326)
+    # TODO: Correct catch blid exception
+    except Exception as e:  # noqa
+        raise CLIException(f"Error while reading product list: {e}")
+
+    # Download
+    download_aux(
+        products=products,
+        output_dir=args.output,
+    )
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -501,6 +528,36 @@ def get_parser() -> argparse.ArgumentParser:
         default="download",
     )
     parser_download.set_defaults(func=cli_download)
+
+    # create the parser for the "download_aux" command
+    parser_download_aux = subparsers.add_parser(
+        "download_aux",
+        help=(
+            "Download auxiliary products for a date "
+            "and tile ID or from a list in CSV format"
+        ),
+    )
+    parser_download_aux.add_argument(
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Verbose mode",
+    )
+    parser_download_aux.add_argument(
+        "-l",
+        "--list",
+        help="List of products (in CSV format)",
+        required=True,
+        type=str,
+    )
+    parser_download_aux.add_argument(
+        "--output",
+        type=str,
+        help="Download directory path (default: current directory)",
+        default=os.getcwd(),
+    )
+    parser_download_aux.set_defaults(func=cli_download_aux)
 
     return parser
 

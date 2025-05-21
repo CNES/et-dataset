@@ -10,11 +10,15 @@ import xarray as xr
 from pyproj import CRS
 from sensorsio import utils
 
+from etdataset import era5, msg
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection, get_provider
 from etdataset.reader import get_product_reader
 from etdataset.selection import filter_with_roi, select_products
-from etdataset.utils import check_mgrs_format, get_bbox_from_mgrs_tile
+from etdataset.utils import (
+    check_mgrs_format,
+    get_bbox_from_mgrs_tile,
+)
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -326,3 +330,37 @@ def select(
 
     # Return results
     return selection1, selection2, matches
+
+
+def download_aux(
+    products: pd.DataFrame,
+    output_dir: str | None,
+) -> None:
+    """
+    Download auxiliary product related to a list of product paths.
+    """
+    if output_dir is None:
+        output_dir = os.getcwd()
+    # Create output directory if necessary
+    os.makedirs(output_dir, exist_ok=True)
+    # Download
+    for _, product in products.iterrows():
+        date = product.Date
+        bounds = rio.coords.BoundingBox(*product.geometry.bounds)
+        era5.download(
+            date=date,
+            path=output_dir,
+        )
+        msg.download(
+            date=date,
+            latlon_bbox=bounds,
+            path=output_dir,
+        )
+
+
+def add_aux(data: xr.Dataset, path: str | None) -> xr.Dataset:
+    if not hasattr(data, "rio"):
+        crs = data.attrs["crs"]
+        data = data.rio.write_crs(crs)
+    updated_data = msg.add(data=data, path=path)
+    return era5.add(data=updated_data, path=path)
