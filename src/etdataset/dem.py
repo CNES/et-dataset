@@ -396,10 +396,18 @@ def compute_egm96_height(data: xr.DataArray | xr.Dataset) -> xr.DataArray:
     dem: xr.DataArray
         EGM96 height
     """
-    # Extract coordiates
-    x = data["x"].values
-    y = data["y"].values
-    # Create a 2D meshgrid of coordinates
+    # Save name coordinates
+    coords = data.coords
+    row_names = ["y", "lat", "latitude"]
+    col_names = ["x", "lon", "longitude"]
+    row_name = next((name for name in row_names if name in coords), None)
+    col_name = next((name for name in col_names if name in coords), None)
+    if col_name is None or row_name is None:
+        msg = "Unable to extract coordinates"
+        raise ValueError(msg)
+    # Create meshgrid
+    y = data[row_name].values
+    x = data[col_name].values
     x2d, y2d = np.meshgrid(x, y)
     # Convert coordinates to lat/lon
     if hasattr(data, "rio"):
@@ -411,18 +419,48 @@ def compute_egm96_height(data: xr.DataArray | xr.Dataset) -> xr.DataArray:
         crs = data.attrs["crs"]
     else:
         raise ValueError("No CRS provided")
+    # Convert to lat/lon
     transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-    # Convert to lat/lon using pyproj (easting, northing → lon, lat)
+    # Apply transformation to the grid
     lon2d, lat2d = transformer.transform(x2d, y2d)
-    # Vectorize the get_elevation function
-    vectorized_elevation = np.vectorize(get_egm96_height)
-    # Apply it to the meshgrid
-    elevation_data = vectorized_elevation(lat2d, lon2d)
+    # Generate lat/lon daatarray
+    lat = xr.DataArray(
+        data=lat2d,
+        coords={col_name: x, row_name: y},
+        dims=(row_name, col_name),
+        name="lat",
+    )
+    lon = xr.DataArray(
+        data=lon2d,
+        coords={col_name: x, row_name: y},
+        dims=(row_name, col_name),
+        name="long",
+    )
+    # Conversion
+    egm96transformer = Transformer.from_crs(
+        "epsg:4979",  # WGS84 3D (lat/lon/ellipsoidal height)
+        "epsg:9707",  # WGS84 lat/lon + EGM96 geoid (4326+5773)
+        always_xy=True,
+    )
 
+    def _compute_egm96(latitude, longitude):
+        _, _, egm96_height = egm96transformer.transform(
+            longitude, latitude, 0.0
+        )
+        return -egm96_height
+
+    # Apply the function efficiently using xarray
+    elevation = xr.apply_ufunc(
+        _compute_egm96,
+        lat,
+        lon,
+        vectorize=True,  # Automatically handles array input
+        output_dtypes=[float],  # Specify output dtype
+    )
     # Wrap it back into a DataArray
     return xr.DataArray(
-        data=elevation_data,
-        coords={"x": x, "y": y},
-        dims=("y", "x"),
+        data=elevation,
+        coords={col_name: x, row_name: y},
+        dims=(row_name, col_name),
         name="elevation",
     )
