@@ -168,19 +168,16 @@ def read(product: str) -> xr.Dataset:
         Data
     """
     if zipfile.is_zipfile(product):
-        # Read instant file
-        inst_xrds = xr.open_dataset(
-            zipfile.ZipFile(product).open(
-                "data_stream-oper_stepType-instant.nc"
-            )
-        )
-        # Read accum file
-        accum_xrds = xr.open_dataset(
-            zipfile.ZipFile(product).open("data_stream-oper_stepType-accum.nc")
-        )
+        # Read archive content
+        with zipfile.ZipFile(product, "r") as zip_file:
+            file_list = zip_file.namelist()
+            datasets: list[xr.Dataset] = [
+                xr.open_dataset(zip_file.open(filename))  # type: ignore
+                for filename in file_list
+            ]
         # Merge
         return (
-            xr.merge([inst_xrds, accum_xrds])
+            xr.merge(datasets)
             .rio.write_crs(CRS("4236"))
             .rename({"valid_time": "time"})
             .drop_vars("number")
@@ -537,7 +534,7 @@ def add(
     dataset: ERA5Dataset
         ERA5 Dataset used for download
     path: str
-        Directory where MSG data have been downloaded data
+        Directory where ERA5 data have been downloaded data
     """
     # Check inputs
     if data.attrs.get("vis_date", None) is None:
@@ -596,6 +593,7 @@ def add(
     elif dataset == ERA5Dataset.ERA5LAND:
         # Compute height
         era5_dem = compute_egm96_height(era5_xrds)
+        logger.debug("Compute EGM96 height")
     else:
         era5_dem = None
     # Add temperature
