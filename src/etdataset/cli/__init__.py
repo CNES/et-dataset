@@ -7,7 +7,14 @@ from datetime import datetime
 
 import pandas as pd
 
-from etdataset.api import create_dataset, download, download_aux, search, select
+from etdataset.api import (
+    add_aux,
+    create_dataset,
+    download,
+    download_aux,
+    search,
+    select,
+)
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
 from etdataset.utils import (
@@ -40,6 +47,7 @@ class CreateArgs(argparse.Namespace):
     tile: str | None
     resolution: float
     output: str
+    aux: bool
     matlab: bool
 
 
@@ -119,6 +127,12 @@ def cli_create(args: CreateArgs) -> None:
         roi_crs=roi_crs,
         resolution=args.resolution,
     )
+    logger.debug("Create dataset: OK")
+
+    # Add auxilary data
+    if args.aux:
+        data = add_aux(data=data)
+        logger.debug("Add auxilary data: OK")
 
     # Write dataset
     if data is not None:
@@ -356,6 +370,12 @@ def get_parser() -> argparse.ArgumentParser:
         type=str,
         help="Output dataset directory path (default: current directory)",
         default=os.getcwd(),
+    )
+    parser_create.add_argument(
+        "--aux",
+        dest="aux",
+        action="store_true",
+        help="Add auxiliary data",
     )
     parser_create.add_argument(
         "-m",

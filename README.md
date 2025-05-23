@@ -256,6 +256,7 @@ options:
   --tir TIR             Path to TIR product (thermal bands), if not provided the VIS product is used for thermal bands.
   -t TILE, --tile TILE  Tile ID (Only for Landsat)
   --output OUTPUT       Output dataset directory path (default: current directory)
+  --aux                 Add auxiliary data
   -m, --matlab_export   Write the dataset in Matlab format
 
 ```
