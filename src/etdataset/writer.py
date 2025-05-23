@@ -16,6 +16,29 @@ from rasterio.enums import ColorInterp
 from scipy.io import savemat
 
 
+def get_row_col(xrds: xr.Dataset) -> tuple[int, int]:
+    """
+    Get number of rows and columns from a dataset
+    """
+    if len(xrds.data_vars) == 0:
+        msg = "Datset empty"
+        raise ValueError(msg)
+    # Get col/row
+    da = next(iter(xrds.data_vars.values()))
+    dim_names = da.dims
+    shape = da.shape
+    dim_map = dict(zip(dim_names, shape, strict=False))
+    row_names = ["y", "lat", "latitude"]
+    col_names = ["x", "lon", "longitude"]
+    coords = xrds.coords
+    row = next((dim_map[name] for name in row_names if name in coords), None)
+    col = next((dim_map[name] for name in col_names if name in coords), None)
+    if row is None or col is None:
+        msg = "Unable to get rows and columns from dataset"
+        raise ValueError(msg)
+    return row, col
+
+
 def write_dataset(
     xrds: xr.Dataset,
     bands: list[str] | None = None,
@@ -25,8 +48,7 @@ def write_dataset(
     """
     Write dataset in one file or in separated files
     """
-    row = xrds.sizes["y"]
-    col = xrds.sizes["x"]
+    row, col = get_row_col(xrds)
     if bands is None:
         bands = list(xrds.data_vars)
     else:
@@ -90,8 +112,7 @@ def write_dataset(
 
 
 def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
-    row = xrds.sizes["y"]
-    col = xrds.sizes["x"]
+    row, col = get_row_col(xrds)
     if xrds.attrs["vis"] == xrds.attrs["tir"]:
         filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
     else:
@@ -170,8 +191,7 @@ def write_to_tif(xrds: xr.Dataset, filename=str):
     """
     Write data to tif
     """
-    row = xrds.sizes["y"]
-    col = xrds.sizes["x"]
+    row, col = get_row_col(xrds)
     bands = list(xrds.data_vars)
     # Get projection
     if xrds.attrs.get("crs", None) is not None:
