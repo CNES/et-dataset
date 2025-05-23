@@ -296,7 +296,7 @@ def get_dem_from_roi(
             )
         )
     elevation = merge_arrays(datasets)
-    elevation.name = "elevation"
+    elevation.name = "height"
     dem = elevation.to_dataset().squeeze(dim="band").drop_vars("band")
     slope, aspect = compute_slope_aspect(dem["elevation"], resolution)
     dem["slope"] = (("y", "x"), slope)
