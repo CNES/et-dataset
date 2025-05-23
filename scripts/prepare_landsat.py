@@ -8,7 +8,6 @@
 
 import argparse
 import datetime as dt
-import json
 import logging
 import os
 import sys
@@ -19,8 +18,7 @@ import rasterio as rio
 import rioxarray  # noqa # Use to activate rio attributes
 from sensorsio.utils import bb_transform
 
-from etdataset import msg
-from etdataset.api import create_dataset, download, search
+from etdataset.api import add_aux, create_dataset, download, search
 from etdataset.cli import CLIException
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
@@ -118,41 +116,13 @@ def prepare_landsat(
         data["lst"] = data["lst"].where(data["qa"])
         logger.debug("Create dataset: OK")
 
-        # Get datetime for a product
-        product_path = Path(product)
-        filename = product_path.name + "_MTL.json"
-        with open(product_path / filename) as mtl_file:
-            mtl_cfg = json.load(mtl_file)
-        d = mtl_cfg["LANDSAT_METADATA_FILE"]["IMAGE_ATTRIBUTES"][
-            "DATE_ACQUIRED"
-        ]
-        h = mtl_cfg["LANDSAT_METADATA_FILE"]["IMAGE_ATTRIBUTES"][
-            "SCENE_CENTER_TIME"
-        ]
-        d = dt.datetime.strptime(d, "%Y-%m-%d").date()
-        # Trim to microseconds (6 digits)
-        h = h[:15] + "Z"  # "11:27:30.842007Z"
-        h = dt.datetime.strptime(h, "%H:%M:%S.%fZ").time()
-        acquisition_date = dt.datetime.combine(d, h)
-
-        logger.debug(f"Acquisition datetime: {acquisition_date}")
-
-        # Download MSG data
-        msg.download(
-            date=acquisition_date, latlon_bbox=latlon_bbox, path=output_path
-        )
-        logger.debug("Download MSG data: OK")
-
-        # Activate rioxarray accessor
-        if not hasattr(data, "rio"):
-            crs = data.attrs["crs"]
-            data = data.rio.write_crs(crs)
-
-        # Add MSG data
-        updated_data = msg.add(data=data, path=output_path)
+        # Add auxilary data
+        updated_data = add_aux(data=data, path=output_path)
+        logger.debug("Add auxilary data: OK")
 
         # Write data
         write_dataset(updated_data, directory=etdataset_path)
+        logger.info(f"Process product {product}:OK")
 
 
 def get_parser() -> argparse.ArgumentParser:

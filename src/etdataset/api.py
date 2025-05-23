@@ -1,6 +1,6 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
+import datetime as dt
 import os
-from datetime import datetime
 
 import geopandas as gpd
 import numpy as np
@@ -31,12 +31,12 @@ class APIException(Exception):
     """
 
 
-def parse_date(date_str: str) -> datetime:
+def parse_date(date_str: str) -> dt.datetime:
     """
     Parse date expected format YYYY-MM-DD
     """
     try:
-        date = datetime.strptime(date_str, "%Y-%m-%d")
+        date = dt.datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError as exc:
         raise APIException(
             "Error: The expected format for date must "
@@ -108,6 +108,53 @@ def create_dataset(
     logger.debug(f"Merged: {merged_xr.attrs}")
 
     return merged_xr
+
+
+def add_aux(
+    data: xr.Dataset,
+    path: str | None = None,
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    Add auxiliary data to the dataset
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Data
+    path: str
+        Directory where auxiliary data have been downloaded data
+    """
+    # Check inputs
+    if data.attrs.get("vis_date", None) is None:
+        raise ValueError("Vis date attribute is missing in dataset")
+    if data.attrs.get("vis_time", None) is None:
+        raise ValueError("Vis time attribute is missing in dataset")
+    if len(data.data_vars) == 0:
+        raise ValueError("Dataset is empty")
+    if data.attrs.get("crs", None) is not None:
+        crs = data.attrs["crs"]
+        data = data.rio.write_crs(crs)
+    elif hasattr(data, "rio"):
+        crs = data.rio.crs
+    else:
+        raise AttributeError("No CRS is defined")
+    if path is not None:
+        date = dt.datetime.combine(
+            data.attrs["vis_date"], data.attrs["vis_time"]
+        )
+        bounds = rio.coords.BoundingBox(*data.rio.bounds())
+        latlon_bounds = utils.bb_transform(
+            source_crs=str(crs), target_crs="EPSG:4326", bounding_box=bounds
+        )
+        msg.download(date=date, latlon_bbox=latlon_bounds, path=path)
+        era5.download(date=date, dataset=era5.ERA5Dataset.ERA5LAND, path=path)
+    updated_data = msg.add(data=data, path=path)
+    updated_data = era5.add(
+        data=updated_data, dataset=era5.ERA5Dataset.ERA5LAND, path=path
+    )
+    return updated_data
 
 
 def search(
@@ -349,6 +396,7 @@ def download_aux(
         bounds = rio.coords.BoundingBox(*product.geometry.bounds)
         era5.download(
             date=date,
+            dataset=era5.ERA5Dataset.ERA5LAND,
             path=output_dir,
         )
         msg.download(
@@ -356,11 +404,3 @@ def download_aux(
             latlon_bbox=bounds,
             path=output_dir,
         )
-
-
-def add_aux(data: xr.Dataset, path: str | None) -> xr.Dataset:
-    if not hasattr(data, "rio"):
-        crs = data.attrs["crs"]
-        data = data.rio.write_crs(crs)
-    updated_data = msg.add(data=data, path=path)
-    return era5.add(data=updated_data, path=path)
