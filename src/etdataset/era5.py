@@ -611,7 +611,12 @@ def add(
             dst_dem=data["height"].rio.write_crs(crs),  # transfer crs attribute
             lapse_rate=0.0065,
         )
-        logger.debug("Interpolate temperature:OK")
+        data["ta"].attrs["standard_name"] = "ta"
+        data["ta"].attrs["long_name"] = "2m air temperature"
+        data["ta"].attrs["name"] = "ta"
+        data["ta"].attrs["unit"] = "K"
+        data["ta"].attrs["description"] = "2m air temperature"
+        logger.debug("Add temperature:OK")
     # Add dewpoint temperature temperature
     if ERA5Var.DEWPOINT_TEMPERATURE.key not in era5_xrds.data_vars:
         logger.warning(
@@ -627,7 +632,12 @@ def add(
             dst_dem=data["height"].rio.write_crs(crs),  # transfer crs attribute
             lapse_rate=0.0052,
         )
-        logger.debug("Interpolate dewpoint temperature:OK")
+        data["tdp"].attrs["standard_name"] = "tdp"
+        data["tdp"].attrs["long_name"] = "dewpoint temperature"
+        data["tdp"].attrs["name"] = "tdp"
+        data["tdp"].attrs["unit"] = "K"
+        data["tdp"].attrs["description"] = "dewpoint temperature"
+        logger.debug("Add dewpoint temperature:OK")
     # Add solar radiation
     if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key not in era5_xrds.data_vars:
         logger.warning(
@@ -643,7 +653,16 @@ def add(
             )
             / 3600.0
         )  # Flux over 1 hour
-        logger.debug("Interpolate solar radiation:OK")
+        data[f"rsd_{dataset.key}"].attrs["standard_name"] = "rsd"
+        data[f"rsd_{dataset.key}"].attrs["long_name"] = (
+            "Shortwave downwelling radiation"
+        )
+        data[f"rsd_{dataset.key}"].attrs["name"] = "rsd"
+        data[f"rsd_{dataset.key}"].attrs["unit"] = "W.m-2"
+        data[f"rsd_{dataset.key}"].attrs["description"] = (
+            "Shortwave downwelling radiation"
+        )
+        logger.debug("Add solar radiation:OK")
     # Add thermal radiation
     if (
         ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key
@@ -662,7 +681,16 @@ def add(
             )
             / 3600.0
         )  # Flux over 1 hour
-        logger.debug("Interpolate thermal radiation:OK")
+        data[f"rld_{dataset.key}"].attrs["standard_name"] = "rld"
+        data[f"rld_{dataset.key}"].attrs["long_name"] = (
+            "Longwave downwelling radiation"
+        )
+        data[f"rld_{dataset.key}"].attrs["name"] = "rld"
+        data[f"rld_{dataset.key}"].attrs["unit"] = "W.m-2"
+        data[f"rld_{dataset.key}"].attrs["description"] = (
+            "Longwave downwelling radiation"
+        )
+        logger.debug("Add thermal radiation:OK")
 
     # Clean
     if temp_dir is not None:

@@ -218,3 +218,73 @@ def write_to_tif(xrds: xr.Dataset, filename=str):
         for i, band in enumerate(bands, start=1):
             source_ds.write_band(i, xrds[band].data)
             source_ds.set_band_description(i, band)
+
+
+def write_to_netcdf(xrds: xr.Dataset, filename=str):
+    """
+    Write to NETCDF format
+    """
+    # Create encoding dictionnary
+    for variable in list(xrds.keys()):
+        xrds[variable].encoding.update(
+            {
+                "dtype": "f4",  # float32
+                "_FillValue": np.float32(np.nan),
+                # TODO: check if compression affects reading speed
+                "zlib": True,
+                "complevel": 1,  # level 1 is low compression but fast
+            }
+        )
+
+    # Get projection
+    if xrds.attrs.get("crs", None) is not None:
+        crs = xrds.attrs["crs"]
+    elif hasattr(xrds, "rio"):
+        crs = xrds.rio.crs
+    xrds.attrs.clear()
+    # Write crs
+    xrds = xrds.rio.write_crs(crs)  # write crs if necessary
+    # Save to netCDF4
+    xrds.to_netcdf(filename)
+
+
+def write_dataset_to_netcdf(
+    xrds: xr.Dataset,
+    directory: str = os.getcwd(),
+):
+    """
+    Write to NETCDF format
+    """
+    if xrds.attrs["vis"] == xrds.attrs["tir"]:
+        filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
+    else:
+        filename = (
+            f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
+            f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
+        )
+    # Get projection
+    if xrds.attrs.get("crs", None) is not None:
+        crs = xrds.attrs["crs"]
+    elif hasattr(xrds, "rio"):
+        crs = xrds.rio.crs
+    else:
+        raise AttributeError("No CRS is defined")
+    if xrds.attrs.get("tile", None) is not None:
+        filename += f"_{xrds.attrs['tile']}"
+    filename += ".nc"
+    # Create encoding dictionnary
+    for variable in list(xrds.keys()):
+        xrds[variable].encoding.update(
+            {
+                "dtype": "f4",  # float32
+                "_FillValue": np.float32(np.nan),
+                # TODO: check if compression affects reading speed
+                "zlib": True,
+                "complevel": 1,  # level 1 is low compression but fast
+            }
+        )
+    xrds.attrs.clear()
+    # Write crs
+    xrds = xrds.rio.write_crs(crs)  # write crs if necessary
+    # Save to netCDF4
+    xrds.to_netcdf(os.path.join(directory, filename))

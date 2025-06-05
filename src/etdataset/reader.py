@@ -20,7 +20,7 @@ from sensorsio import ecostress_v2, hls, landsat, sentinel2, utils
 
 from etdataset.logging import LoggerManager
 from etdataset.vegetation_indices import (
-    compute_lai,
+    compute_bvnet,
     compute_lai_from_ndvi,
     compute_ndvi,
 )
@@ -78,6 +78,18 @@ class ProductReader:
         """
         Read TIR bands
         """
+
+    def add_band_attributes(self, band: xr.DataArray, name: str, unit: str):
+        """
+        Add band attributes (for netcdf)
+        """
+        band.attrs.clear()
+        band.attrs["standard_name"] = name
+        band.attrs["long_name"] = name
+        band.attrs["name"] = name
+        band.attrs["unit"] = unit
+        band.attrs["description"] = name
+        return band
 
 
 @dataclass
@@ -214,6 +226,10 @@ class LandsatReader(ProductReader):
         # Apply name mapping
         ls_xr = self.rename_bands(ls_xr, LandsatReader.vis_band_mapping)  # type: ignore
 
+        # Add attributes
+        for band in ls_xr.data_vars:
+            self.add_band_attributes(ls_xr[band], str(band), "-")
+
         # Drop time dimension
         ls_xr = ls_xr.isel(t=0, drop=True)
 
@@ -222,7 +238,9 @@ class LandsatReader(ProductReader):
 
         # Compute LAI with BVnet
         # Cf. https://forge.ird.fr/cesbio/modelisation/pybvnet/-/tree/main?ref_type=heads
-        ls_xr[["lai", "fcover"]] = compute_lai(ls_xr, self.path, satellite="landsat8")[["LAI", "FCOVER"]]
+        ls_xr["lai"], ls_xr["fcover"] = compute_bvnet(
+            ls_xr, self.path, satellite="landsat8"
+        )
 
         # Compute albedo
         ls_xr["albedo"] = self.compute_albedo(ls_xr)
@@ -293,6 +311,11 @@ class LandsatReader(ProductReader):
 
         # Apply name mapping
         ls_xr = self.rename_bands(ls_xr, LandsatReader.tir_band_mapping)  # type: ignore
+
+        # Add attributes
+        for band in ls_xr.data_vars:
+            self.add_band_attributes(ls_xr[band], str(band), "-")
+        self.add_band_attributes(ls_xr["lst"], "lst", "K")
 
         # Drop time dimension
         ls_xr = ls_xr.isel(t=0, drop=True)
@@ -443,6 +466,11 @@ class HLSReader(ProductReader):
 
         # Rename bands
         hls_xr = self.rename_bands(hls_xr, self.params.value["mapping"])
+
+        # Add attributes
+        for band in hls_xr.data_vars:
+            self.add_band_attributes(hls_xr[band], str(band), "-")
+
         # Compute NDVI
         hls_xr["ndvi"] = compute_ndvi(hls_xr)
         # Compute LAI with exponential relation between NDVI and LAI
@@ -451,6 +479,7 @@ class HLSReader(ProductReader):
 
         # Compute albedo
         hls_xr["albedo"] = self.compute_albedo(hls_xr)
+        self.add_band_attributes(hls_xr["albedo"], "albedo", "-")
 
         # Add transform
         hls_xr.attrs["transform"] = affine.Affine(
@@ -590,6 +619,10 @@ class Sentinel2Reader(ProductReader):
         # Rename bands
         s2_xr = self.rename_bands(s2_xr, Sentinel2Reader.vis_band_mapping)  # type: ignore
 
+        # Add attributes
+        for band in s2_xr.data_vars:
+            self.add_band_attributes(s2_xr[band], str(band), "-")
+
         # Compute NDVI
         s2_xr["ndvi"] = compute_ndvi(s2_xr)
         # Compute LAI with exponential relation between NDVI and LAI
@@ -599,6 +632,7 @@ class Sentinel2Reader(ProductReader):
 
         # Compute albedo
         s2_xr["albedo"] = self.compute_albedo(s2_xr)
+        self.add_band_attributes(s2_xr["albedo"], "albedo", "-")
 
         # Add attributes
         del s2_xr.attrs["type"]
@@ -727,6 +761,10 @@ class EcostressReader(ProductReader):
         eco_xr = self.rename_bands(eco_xr, EcostressReader.tir_band_mapping)  # type: ignore
 
         # Add attributes
+        for band in eco_xr.data_vars:
+            self.add_band_attributes(eco_xr[band], str(band), "-")
+        self.add_band_attributes(eco_xr["lst"], "lst", "K")
+
         # Add transform
         eco_xr.attrs["transform"] = affine.Affine(
             self.resolution,
