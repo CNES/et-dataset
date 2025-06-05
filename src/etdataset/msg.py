@@ -513,6 +513,14 @@ def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
         )
     )
     projected["daily_msg"].attrs.update({"long_name": "DAILY DSSF"})
+    # Add attributes
+    projected["daily_msg"].attrs["standard_name"] = "rld"
+    projected["daily_msg"].attrs["long_name"] = "Longwave downwelling radiation"
+    projected["daily_msg"].attrs["name"] = "rld"
+    projected["daily_msg"].attrs["unit"] = "W.m-2"
+    projected["daily_msg"].attrs["description"] = (
+        "Longwave downwelling radiation"
+    )
     return data.merge(projected)
 
 
@@ -632,6 +640,23 @@ def add_solar_data(
             }
         )
     )
+    # Add attributes
+    projected["rsd_msg"].attrs["standard_name"] = "rsd"
+    projected["rsd_msg"].attrs["long_name"] = "Shortwave downwelling radiation"
+    projected["rsd_msg"].attrs["name"] = "rsd"
+    projected["rsd_msg"].attrs["unit"] = "W.m-2"
+    projected["rsd_msg"].attrs["description"] = (
+        "Shortwave downwelling radiation"
+    )
+    projected["fdiff_msg"].attrs["standard_name"] = "fdiff"
+    projected["fdiff_msg"].attrs["long_name"] = (
+        "Difffuse fraction for shortwave downwelling radiation"
+    )
+    projected["fdiff_msg"].attrs["name"] = "fdiff"
+    projected["fdiff_msg"].attrs["unit"] = "-"
+    projected["fdiff_msg"].attrs["description"] = (
+        "Difffuse fraction for shortwave downwelling radiation"
+    )
     return data.merge(projected)
 
 
@@ -724,6 +749,12 @@ def add_thermal_data(
         .drop_vars("crs")
         .rename({MSGVar.SURFACE_THERMAL_RADIATION_DOWNWARD.key: "rld_msg"})
     )
+    # Add attributes
+    projected["rld_msg"].attrs["standard_name"] = "rld"
+    projected["rld_msg"].attrs["long_name"] = "Longwave downwelling radiation"
+    projected["rld_msg"].attrs["name"] = "rld"
+    projected["rld_msg"].attrs["unit"] = "W.m-2"
+    projected["rld_msg"].attrs["description"] = "Longwave downwelling radiation"
     return data.merge(projected)
 
 
@@ -842,11 +873,11 @@ def add(
             raise OSError(f"File not found: {p}")
     # Add data
     data = add_daily_data(data, daily_product)
-    logger.debug("Add daily data")
+    logger.debug("Add daily data: OK")
     data = add_solar_data(data, date, solar_product)
-    logger.debug("Add solar data")
+    logger.debug("Add solar data: OK")
     data = add_thermal_data(data, date, thermal_product)
-    logger.debug("Add thermal data")
+    logger.debug("Add thermal data: OK")
     # Clean
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory

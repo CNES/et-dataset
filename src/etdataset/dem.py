@@ -102,6 +102,22 @@ def get_dem_from_tile(
             "bounds": bounds,
         },
     )
+    # Set variable attributes
+    xarr["height"].attrs["standard_name"] = "height"
+    xarr["height"].attrs["long_name"] = "height"
+    xarr["height"].attrs["name"] = "height"
+    xarr["height"].attrs["unit"] = "m"
+    xarr["height"].attrs["description"] = "Height"
+    xarr["slope"].attrs["standard_name"] = "slope"
+    xarr["slope"].attrs["long_name"] = "slope"
+    xarr["slope"].attrs["name"] = "slope"
+    xarr["slope"].attrs["unit"] = "degree"
+    xarr["slope"].attrs["description"] = "Slope"
+    xarr["aspect"].attrs["standard_name"] = "aspect"
+    xarr["aspect"].attrs["long_name"] = "aspect"
+    xarr["aspect"].attrs["name"] = "aspect"
+    xarr["aspect"].attrs["unit"] = "degree"
+    xarr["aspect"].attrs["description"] = "Aspect"
     return xarr
 
 
@@ -186,6 +202,22 @@ def get_dem_from_tiles(
             "bounds": bounds,
         },
     )
+    # Set variable attributes
+    xarr["height"].attrs["standard_name"] = "height"
+    xarr["height"].attrs["long_name"] = "height"
+    xarr["height"].attrs["name"] = "height"
+    xarr["height"].attrs["unit"] = "m"
+    xarr["height"].attrs["description"] = "Height"
+    xarr["slope"].attrs["standard_name"] = "slope"
+    xarr["slope"].attrs["long_name"] = "slope"
+    xarr["slope"].attrs["name"] = "slope"
+    xarr["slope"].attrs["unit"] = "degree"
+    xarr["slope"].attrs["description"] = "Slope"
+    xarr["aspect"].attrs["standard_name"] = "aspect"
+    xarr["aspect"].attrs["long_name"] = "aspect"
+    xarr["aspect"].attrs["name"] = "aspect"
+    xarr["aspect"].attrs["unit"] = "degree"
+    xarr["aspect"].attrs["description"] = "Aspect"
     return xarr
 
 
@@ -236,6 +268,11 @@ def get_elevation_from_tile(
             "resolution": {"x": resolution, "y": resolution},
             "transform": transform,
             "bounds": bounds,
+            "standard_name": "height",
+            "long_name": "height",
+            "name": "height",
+            "unit": "m",
+            "description": "Height",
         },
     )
 
@@ -301,6 +338,23 @@ def get_dem_from_roi(
     slope, aspect = compute_slope_aspect(dem["height"], resolution)
     dem["slope"] = (("y", "x"), slope)
     dem["aspect"] = (("y", "x"), aspect)
+    # Set variable attributes
+    dem["height"].attrs.clear()
+    dem["height"].attrs["standard_name"] = "height"
+    dem["height"].attrs["long_name"] = "height"
+    dem["height"].attrs["name"] = "height"
+    dem["height"].attrs["unit"] = "m"
+    dem["height"].attrs["description"] = "Height"
+    dem["slope"].attrs["standard_name"] = "slope"
+    dem["slope"].attrs["long_name"] = "slope"
+    dem["slope"].attrs["name"] = "slope"
+    dem["slope"].attrs["unit"] = "degree"
+    dem["slope"].attrs["description"] = "Slope"
+    dem["aspect"].attrs["standard_name"] = "aspect"
+    dem["aspect"].attrs["long_name"] = "aspect"
+    dem["aspect"].attrs["name"] = "aspect"
+    dem["aspect"].attrs["unit"] = "degree"
+    dem["aspect"].attrs["description"] = "Aspect"
     # Transform to rioxarray
     dem = dem.rio.write_crs(roi_crs)
     transform = dem.rio.transform(recalc=True)
@@ -486,5 +540,5 @@ def compute_egm96_height(data: xr.DataArray | xr.Dataset) -> xr.DataArray:
         data=elevation,
         coords={col_name: x, row_name: y},
         dims=(row_name, col_name),
-        name="elevation",
+        name="height",
     )

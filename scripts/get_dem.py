@@ -7,7 +7,7 @@ import os
 from etdataset.dem import get_dem_from_roi
 from etdataset.logging import LoggerManager
 from etdataset.utils import get_utm_bbox_from_roi
-from etdataset.writer import write_to_tif
+from etdataset.writer import write_to_netcdf, write_to_tif
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -39,6 +39,15 @@ def get_parser() -> argparse.ArgumentParser:
         help="Path to the DEM directory",
         required=True,
     )
+    parser.add_argument(
+        "-f",
+        "--format",
+        default="tif",
+        choices=["tif", "netcdf"],
+        type=str,
+        help="Output format (tif, netcdf)",
+        required=False,
+    )
 
     return parser
 
@@ -62,7 +71,7 @@ def get_dem() -> None:
     if not os.path.isfile(args.roi):
         raise FileNotFoundError(f"File not found {args.roi}")
     if not os.path.isdir(args.mnt_path):
-        raise FileNotFoundError(f"File not found {args.mnt_path}")
+        raise FileNotFoundError(f"MNT directory not found {args.mnt_path}")
 
     # Get bbox and crs
     roi_bbox, roi_crs = get_utm_bbox_from_roi(args.roi)
@@ -73,7 +82,10 @@ def get_dem() -> None:
     )
 
     # Write
-    write_to_tif(dem, "dem.tif")
+    if args.format == "tif":
+        write_to_tif(dem, "dem.tif")
+    else:
+        write_to_netcdf(dem, "dem.nc")
 
 
 if __name__ == "__main__":

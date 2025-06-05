@@ -24,9 +24,13 @@ def compute_ndvi(data: xr.Dataset) -> xr.DataArray:
     (Green Wave Effect) of Natural Vegetation; Great Plains Corridor;
     Texas A&M University Remote Sensing Center: College Station, TX, USA, 1974.
     """
-    return np.clip(
-        (data.nir - data.red) / (data.nir + data.red + 1e-9), -1, 1
-    )  # .transpose('y','x')
+    xarr = np.clip((data.nir - data.red) / (data.nir + data.red + 1e-9), -1, 1)
+    xarr.attrs["standard_name"] = "ndvi"
+    xarr.attrs["long_name"] = "ndvi"
+    xarr.attrs["name"] = "ndvi"
+    xarr.attrs["unit"] = "-"
+    xarr.attrs["description"] = "NDVI"
+    return xarr
 
 
 def ndvi_to_lai(ndvi: float, a: float, b: float, c: float = 0.0) -> float:
@@ -53,12 +57,21 @@ def compute_lai_from_ndvi(
         ndvi = compute_ndvi(data)
     else:
         ndvi = data["ndvi"]
-    return xr.apply_ufunc(ndvi_to_lai, ndvi, a, b, c, vectorize=True)
+    xarr = xr.apply_ufunc(ndvi_to_lai, ndvi, a, b, c, vectorize=True)
+    xarr.attrs["standard_name"] = "lai"
+    xarr.attrs["long_name"] = "lai"
+    xarr.attrs["name"] = "lai"
+    xarr.attrs["unit"] = "-"
+    xarr.attrs["description"] = "LAI"
+    return xarr
 
 
-def compute_lai(
+def compute_bvnet(
     data: xr.Dataset, image_path: str, satellite: str
-) -> xr.DataArray:
+) -> tuple[xr.DataArray, xr.DataArray]:
+    """
+    Compute LAI and Fcover with BVNet
+    """
     # Create a new "band" dimension from the variables
     # representing spectral bands
     band_list = [
@@ -126,4 +139,17 @@ def compute_lai(
         coords={"y": data.coords["y"], "x": data.coords["x"]},
     )
 
-    return apply_NNT(stacked_inputs, output, ["LAI", "FCOVER"], satellite)[["LAI", "FCOVER"]]
+    bvnet_xr = apply_NNT(stacked_inputs, output, ["LAI", "FCOVER"], satellite)[
+        ["LAI", "FCOVER"]
+    ]
+    bvnet_xr["LAI"].attrs["standard_name"] = "lai"
+    bvnet_xr["LAI"].attrs["long_name"] = "lai"
+    bvnet_xr["LAI"].attrs["name"] = "lai"
+    bvnet_xr["LAI"].attrs["unit"] = "-"
+    bvnet_xr["LAI"].attrs["description"] = "LAI"
+    bvnet_xr["FCOVER"].attrs["standard_name"] = "fcover"
+    bvnet_xr["FCOVER"].attrs["long_name"] = "fcover"
+    bvnet_xr["FCOVER"].attrs["name"] = "fcover"
+    bvnet_xr["FCOVER"].attrs["unit"] = "-"
+    bvnet_xr["FCOVER"].attrs["description"] = "Fraction cover"
+    return bvnet_xr["LAI"], bvnet_xr["FCOVER"]
