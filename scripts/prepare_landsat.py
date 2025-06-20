@@ -20,6 +20,7 @@ from sensorsio.utils import bb_transform
 
 from etdataset.api import add_aux, create_dataset, download, search
 from etdataset.cli import CLIException
+from etdataset.dem import add_dem
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
 from etdataset.utils import dilate_mask, get_utm_bbox_from_roi
@@ -35,6 +36,7 @@ def prepare_landsat(
     output: str,
     max_cloud_cover: float = 20,
     min_roi_coverage: float = 33,
+    mnt_path: str | None = None,
 ):
     """
     Prepare landsat data
@@ -71,17 +73,17 @@ def prepare_landsat(
         logger.warning("No product found")
         sys.exit(1)
     # Download results
-    download(products=res, output_dir=os.path.join(output_path, "Landsat"))
+    download(products=res, output_dir=output_path)
     logger.info("Download: OK")
 
     # Extract archives
 
     # List archives
-    folder = Path(output_path) / "Landsat"
+    folder = Path(output_path) / "LANDSAT"
     archives = list(folder.rglob("*.tar"))
 
     # Untar archives
-    landsat_path = Path(output_path) / "Landsat"
+    landsat_path = Path(output_path) / "LANDSAT"
     for archive in archives:
         # Open and extract
         with tarfile.open(archive) as tar:
@@ -90,7 +92,7 @@ def prepare_landsat(
                 tar.extractall(path=extract_path)
 
     # List products
-    landsat_path = Path(output_path) / "Landsat"
+    landsat_path = Path(output_path) / "LANDSAT"
     products = [f for f in landsat_path.iterdir() if f.is_dir()]
 
     # Preprocess products
@@ -109,6 +111,8 @@ def prepare_landsat(
             resampling=rio.enums.Resampling.average,
         )
         logger.debug("Create dataset: OK")
+        if mnt_path is not None:
+            data = add_dem(data, mnt_dir=mnt_path)
 
         # Apply masks
         data["lst"] = data["lst"].where(~data["water"])
@@ -130,7 +134,7 @@ def get_parser() -> argparse.ArgumentParser:
     Generate argument parser for cli
     """
     # create the top-level parser
-    parser = argparse.ArgumentParser(description="Get DEM")
+    parser = argparse.ArgumentParser(description="Prepare Landsat data")
 
     parser.add_argument(
         "-v",
@@ -178,6 +182,11 @@ def get_parser() -> argparse.ArgumentParser:
         type=int,
         default=33,
         help="Minimum overlap between ROI and a product (default: 33)",
+    )
+    parser.add_argument(
+        "--mnt_path",
+        type=str,
+        help="Directory of DEM tiles",
     )
 
     return parser
@@ -230,6 +239,8 @@ if __name__ == "__main__":
     if not os.path.isdir(args.output):
         logger.debug(f"Create output path: {args.output}")
         os.makedirs(args.output, exist_ok=True)
+    if args.mnt_path is not None and not os.path.isdir(args.mnt_path):
+        raise FileNotFoundError(f"DEM directory not found {args.mnt_path}")
 
     # Run
     prepare_landsat(
@@ -239,4 +250,5 @@ if __name__ == "__main__":
         args.output,
         args.max_cloud_cover,
         args.min_roi_overlap,
+        args.mnt_path,
     )

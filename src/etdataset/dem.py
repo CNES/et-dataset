@@ -4,6 +4,7 @@ Module for DEM management
 """
 
 import os
+import shutil
 
 import numpy as np
 import numpy.typing as npt
@@ -14,10 +15,11 @@ import rioxarray
 import xarray as xr
 from pyproj import CRS, Transformer
 from rasterio.merge import merge as rio_merge
-from rasterio.transform import array_bounds
+from rasterio.transform import array_bounds, from_origin
 from rioxarray.merge import merge_arrays
 from sensorsio import mgrs
 from sensorsio.regulargrid import read_as_numpy
+from shapely.geometry import box
 
 from etdataset.logging import LoggerManager
 from etdataset.utils import get_mgrs_tile_names_from_roi
@@ -203,16 +205,19 @@ def get_dem_from_tiles(
         },
     )
     # Set variable attributes
+    xarr["height"].attrs.clear()
     xarr["height"].attrs["standard_name"] = "height"
     xarr["height"].attrs["long_name"] = "height"
     xarr["height"].attrs["name"] = "height"
     xarr["height"].attrs["unit"] = "m"
     xarr["height"].attrs["description"] = "Height"
+    xarr["slope"].attrs.clear()
     xarr["slope"].attrs["standard_name"] = "slope"
     xarr["slope"].attrs["long_name"] = "slope"
     xarr["slope"].attrs["name"] = "slope"
     xarr["slope"].attrs["unit"] = "degree"
     xarr["slope"].attrs["description"] = "Slope"
+    xarr["aspect"].attrs.clear()
     xarr["aspect"].attrs["standard_name"] = "aspect"
     xarr["aspect"].attrs["long_name"] = "aspect"
     xarr["aspect"].attrs["name"] = "aspect"
@@ -318,20 +323,28 @@ def get_dem_from_roi(
         os.path.join(base_dir, f"COP-DEM_GLO-30-DGED_{tile_id}.tif")
         for tile_id in tile_ids
     ]
+    # Convert to shapely box
+    roi_geom = box(roi_bbox.left, roi_bbox.bottom, roi_bbox.right, roi_bbox.top)
+
+    # Compute transform
+    left = roi_bbox.left
+    top = roi_bbox.top
+    res_x = resolution  # pixel width (e.g., in meters or degrees)
+    res_y = resolution  # pixel height (positive, will be negated internally)
+    transform = from_origin(left, top, res_x, res_y)
     datasets = []
     for tile in file_names:
         # Reda file
         ds = rioxarray.open_rasterio(tile, masked=True)
-        datasets.append(
-            ds.rio.reproject(  # type: ignore
-                dst_crs=roi_crs,
-                resolution=(resolution, resolution),
-                resampling=rio.enums.Resampling.cubic,
-                transform=None,
-                shape=None,
-                dst_bounds=roi_bbox,
-            )
+        # Reproject tile
+        grid = ds.rio.reproject(  # type: ignore
+            dst_crs=roi_crs,
+            resampling=rio.enums.Resampling.cubic,
+            transform=transform,
         )
+        # Clip
+        grid = grid.rio.clip([roi_geom], roi_crs, drop=True)
+        datasets.append(grid)
     elevation = merge_arrays(datasets)
     elevation.name = "height"
     dem = elevation.to_dataset().squeeze(dim="band").drop_vars("band")
@@ -357,8 +370,8 @@ def get_dem_from_roi(
     dem["aspect"].attrs["description"] = "Aspect"
     # Transform to rioxarray
     dem = dem.rio.write_crs(roi_crs)
-    transform = dem.rio.transform(recalc=True)
     bounds = rio.coords.BoundingBox(*dem.rio.bounds())
+    logger.debug(f"DEM bbox: {bounds}")
     # Clean rio attributes
     dem = dem.drop_vars("spatial_ref", errors="ignore")
     dem.attrs["crs"] = roi_crs
@@ -542,3 +555,133 @@ def compute_egm96_height(data: xr.DataArray | xr.Dataset) -> xr.DataArray:
         dims=(row_name, col_name),
         name="height",
     )
+
+
+def check_tiles(
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    base_dir: str,
+) -> bool:
+    """
+    Description
+    -----------
+    Check if all DEM tiles exist
+
+    Parameters
+    ----------
+    roi_bbox: roi.coords.BoundingBox
+       ROI bounding box
+    roi_crs: pyproj.CRS
+       ROI CRS
+    base_dir: str
+        Path to the DEM directory
+
+    Return
+    ------
+    check: bool
+        Return True if all tiles exist
+    """
+    if not os.path.isdir(base_dir):
+        msg = f"{base_dir} is not a directory"
+        logger.error(msg)
+    # Get DEM tiles
+    tile_ids = get_mgrs_tile_names_from_roi(
+        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
+    )
+    logger.debug(f"Tiles ids required: {tile_ids}")
+    # Check file paths
+    checked = True
+    for tile_id in tile_ids:
+        filename = os.path.join(base_dir, f"COP-DEM_GLO-30-DGED_{tile_id}.tif")
+        if not os.path.isfile(filename):
+            msg = f"Tile {tile_id} is missing."
+            logger.error(msg)
+    return checked
+
+
+def copy_tiles(
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    base_dir: str,
+    output_dir: str,
+) -> None:
+    """
+    Description
+    -----------
+    Check if all DEM tiles exist
+
+    Parameters
+    ----------
+    roi_bbox: roi.coords.BoundingBox
+       ROI bounding box
+    roi_crs: pyproj.CRS
+       ROI CRS
+    base_dir: str
+        Path to the DEM directory
+    output_dir: str
+        Path to copy DEM tiles
+    """
+    if not os.path.isdir(base_dir):
+        msg = f"{base_dir} is not a directory"
+        logger.error(msg)
+    # Get DEM tiles
+    tile_ids = get_mgrs_tile_names_from_roi(
+        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
+    )
+    logger.debug(f"Tiles ids required: {tile_ids}")
+    # Copy files
+    for tile_id in tile_ids:
+        filename = os.path.join(base_dir, f"COP-DEM_GLO-30-DGED_{tile_id}.tif")
+        if not os.path.isfile(filename):
+            msg = f"Tile {tile_id} is missing."
+            logger.error(msg)
+        else:
+            shutil.copy(filename, output_dir)
+
+
+def add_dem(
+    data: xr.Dataset,
+    mnt_dir: str,
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    Add DEM information (height,slope,aspect) to a dataset
+
+    Parameters
+    ----------
+    data: xr.Dataset
+       Data
+    mnt_dir: str
+        Path to the DEM directory
+    """
+    if not os.path.isdir(mnt_dir):
+        msg = f"{mnt_dir} is not a directory"
+        logger.error(msg)
+    if data.attrs.get("crs", None) is not None:
+        crs = data.attrs["crs"]
+        data = data.rio.write_crs(crs)
+    elif hasattr(data, "rio"):
+        crs = data.rio.crs
+    else:
+        raise AttributeError("No CRS is defined")
+    # Get bbox and crs
+    bbox = rio.coords.BoundingBox(*data.rio.bounds())
+    logger.debug(f"Bbox: {bbox}")
+    logger.debug(f"CRS: {crs}")
+    updated_data = data.copy(deep=True)
+    updated_data.attrs = data.attrs.copy()
+    if check_tiles(roi_bbox=bbox, roi_crs=crs, base_dir=mnt_dir):
+        res, _ = data.rio.resolution()
+        dem = get_dem_from_roi(
+            roi_bbox=bbox, roi_crs=crs, base_dir=mnt_dir, resolution=res
+        )
+    for var in dem.data_vars:
+        da = dem[var].rio.write_crs(crs)
+        updated_data[var] = da.rio.reproject_match(
+            data,
+            resampling=rio.enums.Resampling.cubic,
+        )
+        updated_data[var].attrs.clear()
+        updated_data[var].attrs = da.attrs.copy()
+    return updated_data
