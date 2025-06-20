@@ -512,6 +512,7 @@ def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
             {MSGVar.DAILY_SURFACE_SOLAR_RADIATION_DOWNWARD.key: "daily_msg"}
         )
     )
+    projected["daily_msg"].attrs.clear()
     projected["daily_msg"].attrs.update({"long_name": "DAILY DSSF"})
     # Add attributes
     projected["daily_msg"].attrs["standard_name"] = "rld"
@@ -641,6 +642,7 @@ def add_solar_data(
         )
     )
     # Add attributes
+    projected["rsd_msg"].attrs.clear()
     projected["rsd_msg"].attrs["standard_name"] = "rsd"
     projected["rsd_msg"].attrs["long_name"] = "Shortwave downwelling radiation"
     projected["rsd_msg"].attrs["name"] = "rsd"
@@ -648,6 +650,7 @@ def add_solar_data(
     projected["rsd_msg"].attrs["description"] = (
         "Shortwave downwelling radiation"
     )
+    projected["fdiff_msg"].attrs.clear()
     projected["fdiff_msg"].attrs["standard_name"] = "fdiff"
     projected["fdiff_msg"].attrs["long_name"] = (
         "Difffuse fraction for shortwave downwelling radiation"
@@ -750,6 +753,7 @@ def add_thermal_data(
         .rename({MSGVar.SURFACE_THERMAL_RADIATION_DOWNWARD.key: "rld_msg"})
     )
     # Add attributes
+    projected["rld_msg"].attrs.clear()
     projected["rld_msg"].attrs["standard_name"] = "rld"
     projected["rld_msg"].attrs["long_name"] = "Longwave downwelling radiation"
     projected["rld_msg"].attrs["name"] = "rld"
