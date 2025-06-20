@@ -653,12 +653,12 @@ def add_solar_data(
     projected["fdiff_msg"].attrs.clear()
     projected["fdiff_msg"].attrs["standard_name"] = "fdiff"
     projected["fdiff_msg"].attrs["long_name"] = (
-        "Difffuse fraction for shortwave downwelling radiation"
+        "Diffuse fraction for shortwave downwelling radiation"
     )
     projected["fdiff_msg"].attrs["name"] = "fdiff"
     projected["fdiff_msg"].attrs["unit"] = "-"
     projected["fdiff_msg"].attrs["description"] = (
-        "Difffuse fraction for shortwave downwelling radiation"
+        "Diffuse fraction for shortwave downwelling radiation"
     )
     return data.merge(projected)
 
