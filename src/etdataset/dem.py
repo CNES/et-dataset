@@ -315,7 +315,7 @@ def get_dem_from_roi(
     logger.debug(f"ROI crs: {roi_crs}")
     # Get DEM tiles
     tile_ids = get_mgrs_tile_names_from_roi(
-        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
+        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=25
     )
     logger.debug(f"Tiles ids required: {tile_ids}")
     # Get file paths
@@ -586,7 +586,7 @@ def check_tiles(
         logger.error(msg)
     # Get DEM tiles
     tile_ids = get_mgrs_tile_names_from_roi(
-        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
+        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=25
     )
     logger.debug(f"Tiles ids required: {tile_ids}")
     # Check file paths
@@ -626,7 +626,7 @@ def copy_tiles(
         logger.error(msg)
     # Get DEM tiles
     tile_ids = get_mgrs_tile_names_from_roi(
-        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
+        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=25
     )
     logger.debug(f"Tiles ids required: {tile_ids}")
     # Copy files
