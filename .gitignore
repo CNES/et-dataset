@@ -21,5 +21,6 @@ download/
 *.nc
 
 # pixi environments
-.pixi
+.pixi/
 *.egg-info
+pixi.lock
