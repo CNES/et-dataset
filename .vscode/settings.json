@@ -1,5 +1,6 @@
 {
-    "python.defaultInterpreterPath": "./.pixi/envs/default/bin/python",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/default/bin/python",
+    "python.analysis.diagnosticSeverityOverrides": {"reportMissingImports": "none"},
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
@@ -15,7 +16,7 @@
     "pylint.enabled": false,
     "flake8.enabled": false,
     "python.testing.pytestEnabled": true,
-    "python.testing.pytestPath": "./.pixi/envs/default/bin/pytest",
+    "python.testing.pytestPath": "${workspaceFolder}/.pixi/envs/default/bin/pytest",
     "python.testing.unittestEnabled": false,
     "mypy-type-checker.args": [
         "--ignore-missing-imports",
