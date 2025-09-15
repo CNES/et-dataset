@@ -578,6 +578,14 @@ def add(
     # Read data
     era5_xrds = read(product=product_path)
     logger.debug("Read ERA5 product:OK")
+    # Process accumulated variables for ERA5land dataset
+    if dataset == ERA5Dataset.ERA5LAND:
+        era5_xrds[ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key] = era5_xrds[
+            ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key
+        ].diff(dim="time")
+        era5_xrds[ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key] = era5_xrds[
+            ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key
+        ].diff(dim="time")
     # Interpolate time
     era5_xrds = interpolate_time(data=era5_xrds, date=date)
     logger.debug("Interpolate ERA5 product:OK")
@@ -596,6 +604,12 @@ def add(
         logger.debug("Compute EGM96 height")
     else:
         era5_dem = None
+    # Copy data
+    updated_data = data.copy()
+    updated_data.attrs = data.attrs.copy()
+    #############
+    # Temperature
+    #############
     # Add temperature
     if ERA5Var.TEMPERATURE.key not in era5_xrds.data_vars:
         logger.warning(
@@ -605,17 +619,17 @@ def add(
     elif dem_missing or era5_dem is None:
         logger.warning("Skip temperature interpolation because DEM is missing")
     else:
-        data["ta"] = interpolate_temperature(
+        updated_data["ta"] = interpolate_temperature(
             src_temp=era5_xrds[ERA5Var.TEMPERATURE.key],
             src_dem=era5_dem,
             dst_dem=data["height"].rio.write_crs(crs),  # transfer crs attribute
             lapse_rate=0.0065,
         )
-        data["ta"].attrs["standard_name"] = "ta"
-        data["ta"].attrs["long_name"] = "2m air temperature"
-        data["ta"].attrs["name"] = "ta"
-        data["ta"].attrs["unit"] = "K"
-        data["ta"].attrs["description"] = "2m air temperature"
+        updated_data["ta"].attrs["standard_name"] = "ta"
+        updated_data["ta"].attrs["long_name"] = "2m air temperature"
+        updated_data["ta"].attrs["name"] = "ta"
+        updated_data["ta"].attrs["unit"] = "K"
+        updated_data["ta"].attrs["description"] = "2m air temperature"
         logger.debug("Add temperature:OK")
     # Add dewpoint temperature temperature
     if ERA5Var.DEWPOINT_TEMPERATURE.key not in era5_xrds.data_vars:
@@ -626,18 +640,23 @@ def add(
     elif dem_missing or era5_dem is None:
         logger.warning("Skip temperature interpolation because DEM is missing")
     else:
-        data["tdp"] = interpolate_temperature(
+        updated_data["tdp"] = interpolate_temperature(
             src_temp=era5_xrds[ERA5Var.DEWPOINT_TEMPERATURE.key],
             src_dem=era5_dem,
             dst_dem=data["height"].rio.write_crs(crs),  # transfer crs attribute
             lapse_rate=0.0052,
         )
-        data["tdp"].attrs["standard_name"] = "tdp"
-        data["tdp"].attrs["long_name"] = "dewpoint temperature"
-        data["tdp"].attrs["name"] = "tdp"
-        data["tdp"].attrs["unit"] = "K"
-        data["tdp"].attrs["description"] = "dewpoint temperature"
+        updated_data["tdp"].attrs["standard_name"] = "tdp"
+        updated_data["tdp"].attrs["long_name"] = "dewpoint temperature"
+        updated_data["tdp"].attrs["name"] = "tdp"
+        updated_data["tdp"].attrs["unit"] = "K"
+        updated_data["tdp"].attrs["description"] = "dewpoint temperature"
         logger.debug("Add dewpoint temperature:OK")
+    ###########
+    # Radiation
+    ###########
+    # Radiation factor
+    radiation_factor = 3600.0  # Flux over 1 hour
     # Add solar radiation
     if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key not in era5_xrds.data_vars:
         logger.warning(
@@ -646,20 +665,20 @@ def add(
         )
     else:
         dst = next(iter(data.data_vars.values()))
-        data[f"rsd_{dataset.key}"] = (
+        updated_data[f"rsd_{dataset.key}"] = (
             interpolate_radiation(
                 data=era5_xrds[ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key],
                 dem=dst.rio.write_crs(crs),  # transfer crs attribute
             )
-            / 3600.0
-        )  # Flux over 1 hour
-        data[f"rsd_{dataset.key}"].attrs["standard_name"] = "rsd"
-        data[f"rsd_{dataset.key}"].attrs["long_name"] = (
+            / radiation_factor
+        )
+        updated_data[f"rsd_{dataset.key}"].attrs["standard_name"] = "rsd"
+        updated_data[f"rsd_{dataset.key}"].attrs["long_name"] = (
             "Shortwave downwelling radiation"
         )
-        data[f"rsd_{dataset.key}"].attrs["name"] = "rsd"
-        data[f"rsd_{dataset.key}"].attrs["unit"] = "W.m-2"
-        data[f"rsd_{dataset.key}"].attrs["description"] = (
+        updated_data[f"rsd_{dataset.key}"].attrs["name"] = "rsd"
+        updated_data[f"rsd_{dataset.key}"].attrs["unit"] = "W.m-2"
+        updated_data[f"rsd_{dataset.key}"].attrs["description"] = (
             "Shortwave downwelling radiation"
         )
         logger.debug("Add solar radiation:OK")
@@ -674,20 +693,20 @@ def add(
         )
     else:
         dst = next(iter(data.data_vars.values()))
-        data[f"rld_{dataset.key}"] = (
+        updated_data[f"rld_{dataset.key}"] = (
             interpolate_radiation(
                 data=era5_xrds[ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key],
                 dem=dst.rio.write_crs(crs),  # transfer crs attribute
             )
-            / 3600.0
-        )  # Flux over 1 hour
-        data[f"rld_{dataset.key}"].attrs["standard_name"] = "rld"
-        data[f"rld_{dataset.key}"].attrs["long_name"] = (
+            / radiation_factor
+        )
+        updated_data[f"rld_{dataset.key}"].attrs["standard_name"] = "rld"
+        updated_data[f"rld_{dataset.key}"].attrs["long_name"] = (
             "Longwave downwelling radiation"
         )
-        data[f"rld_{dataset.key}"].attrs["name"] = "rld"
-        data[f"rld_{dataset.key}"].attrs["unit"] = "W.m-2"
-        data[f"rld_{dataset.key}"].attrs["description"] = (
+        updated_data[f"rld_{dataset.key}"].attrs["name"] = "rld"
+        updated_data[f"rld_{dataset.key}"].attrs["unit"] = "W.m-2"
+        updated_data[f"rld_{dataset.key}"].attrs["description"] = (
             "Longwave downwelling radiation"
         )
         logger.debug("Add thermal radiation:OK")
@@ -695,4 +714,4 @@ def add(
     # Clean
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
-    return data
+    return updated_data
