@@ -42,6 +42,7 @@ dependencies = [
   "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git",
   "scikit-image",
   "requests",
+  "pyarrow",
 ]
 
 [project.optional-dependencies]
