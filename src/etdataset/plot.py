@@ -261,7 +261,7 @@ def plot_dem(xrds_dem: xr.Dataset):
     )
 
 
-def scatter_plot(
+def density_plot(
     data: xr.Dataset,
 ):
     """
