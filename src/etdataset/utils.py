@@ -17,9 +17,11 @@ import skimage.morphology as skm
 import xarray as xr
 from fiona.errors import DriverError
 from pyproj import CRS
+from rasterio.warp import transform_bounds
 from sensorsio import mgrs
 from sensorsio.sentinel2 import get_theia_tiles
-from shapely.geometry import Point, Polygon
+from shapely import covers
+from shapely.geometry import Point, Polygon, box
 
 from etdataset.logging import LoggerManager
 
@@ -122,7 +124,7 @@ def get_bbox_from_mgrs_tile(tile: str) -> tuple[rio.coords.BoundingBox, CRS]:
         raise BBoxException("Unkown tile {tile}")
 
 
-def get_mgrs_tile_names_from_roi(
+def get_mgrs_tile_names_overlapping_roi(
     roi_bbox: rio.coords.BoundingBox, roi_crs: CRS, overlap: float = 10.0
 ) -> list[str]:
     """
@@ -133,6 +135,50 @@ def get_mgrs_tile_names_from_roi(
     # Filter
     mgrs_tiles = mgrs_tiles[mgrs_tiles["overlap_percentage"] > overlap]
     return list(mgrs_tiles.Name.values)
+
+
+def get_mgrs_tile_names_from_roi(roi_bbox: rio.coords.BoundingBox, roi_crs):
+    """
+    List of MGRS tiles corresponding to a ROI.
+    The objective is to get a list of tiles that covers or
+    intersects a given ROI while avoiding redundant overlapping
+    """
+    # Convert bounds to 4326
+    wgs84_bounds = transform_bounds(roi_crs, 4326, *roi_bbox)
+    # Convert bounds to polygon
+    roi_poly = Polygon(
+        [
+            [wgs84_bounds[0], wgs84_bounds[1]],
+            [wgs84_bounds[0], wgs84_bounds[3]],
+            [wgs84_bounds[2], wgs84_bounds[3]],
+            [wgs84_bounds[2], wgs84_bounds[1]],
+        ]
+    )
+    # Get MGRS tiles
+    mgrs_tiles = mgrs.get_mgrs_tiles_from_roi(roi_bbox, roi_crs)
+    # Sort by overlap percentage descending
+    mgrs_tiles = mgrs_tiles.sort_values("overlap_percentage", ascending=False)
+    # Selection
+    selected = []
+    covered = None
+
+    for idx, row in mgrs_tiles.iterrows():
+        geom = box(*row["geometry"].bounds)
+        if covered is None:
+            covered = geom
+            selected.append(idx)
+        else:
+            new_union = covered.union(geom)
+            if not covers(covered, new_union):
+                covered = new_union
+                selected.append(idx)
+
+        # Break if fully covered
+        if covers(covered, roi_poly):
+            break
+
+    # Return minimal set of tiles
+    return mgrs_tiles.loc[selected, "Name"].values
 
 
 def check_theia_tiles(tile_ids: list[str]) -> list[str]:
@@ -217,3 +263,28 @@ def dilate_mask(data: xr.DataArray, dilation: int = 1) -> xr.DataArray:
     binary_mask = skm.binary_dilation(binary_mask, footprint=footprint)
 
     return xr.DataArray(binary_mask, dims=data.dims, coords=data.coords)
+
+
+def close_mask(data: xr.DataArray, dilation: int = 1) -> xr.DataArray:
+    """
+    Perform a binary closing mask
+    """
+    # Ensure the data is boolean (binary image)
+    binary_mask = data.values.astype(bool)
+    # Apply binary dilation
+    footprint = skm.footprint_rectangle((2 * dilation + 1, 2 * dilation + 1))
+    binary_mask = skm.binary_closing(binary_mask, footprint=footprint)
+
+    return xr.DataArray(binary_mask, dims=data.dims, coords=data.coords)
+
+
+def get_utm_crs_from_roi(roi: rio.coords.BoundingBox):
+    """
+    Get UTM zone from a ROI
+    """
+    geom = box(*roi)
+    lon, lat = geom.centroid.x, geom.centroid.y
+    utm_zone = int((lon + 180) / 6) + 1
+    is_northern = lat >= 0
+    epsg = 32600 + utm_zone if is_northern else 32700 + utm_zone
+    return CRS.from_epsg(epsg)

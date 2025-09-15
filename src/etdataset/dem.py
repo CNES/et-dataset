@@ -314,9 +314,7 @@ def get_dem_from_roi(
     logger.debug(f"ROI bbox: {roi_bbox}")
     logger.debug(f"ROI crs: {roi_crs}")
     # Get DEM tiles
-    tile_ids = get_mgrs_tile_names_from_roi(
-        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
-    )
+    tile_ids = get_mgrs_tile_names_from_roi(roi_bbox=roi_bbox, roi_crs=roi_crs)
     logger.debug(f"Tiles ids required: {tile_ids}")
     # Get file paths
     file_names = [
@@ -585,9 +583,7 @@ def check_tiles(
         msg = f"{base_dir} is not a directory"
         logger.error(msg)
     # Get DEM tiles
-    tile_ids = get_mgrs_tile_names_from_roi(
-        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
-    )
+    tile_ids = get_mgrs_tile_names_from_roi(roi_bbox=roi_bbox, roi_crs=roi_crs)
     logger.debug(f"Tiles ids required: {tile_ids}")
     # Check file paths
     checked = True
