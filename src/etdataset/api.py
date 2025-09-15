@@ -149,10 +149,10 @@ def add_aux(
             source_crs=str(crs), target_crs="EPSG:4326", bounding_box=bounds
         )
         msg.download(date=date, latlon_bbox=latlon_bounds, path=path)
-        era5.download(date=date, dataset=era5.ERA5Dataset.ERA5, path=path)
+        era5.download(date=date, dataset=era5.ERA5Dataset.ERA5LAND, path=path)
     updated_data = msg.add(data=data, path=path)
     updated_data = era5.add(
-        data=updated_data, dataset=era5.ERA5Dataset.ERA5, path=path
+        data=updated_data, dataset=era5.ERA5Dataset.ERA5LAND, path=path
     )
     return updated_data
 
