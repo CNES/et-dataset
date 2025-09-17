@@ -53,13 +53,45 @@ def write_dataset(
         bands = list(xrds.data_vars)
     else:
         bands = [i for i in bands if i in xrds.data_vars]
-    if xrds.attrs["vis"] == xrds.attrs["tir"]:
-        filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
-    else:
+    if (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        if xrds.attrs["vis"] == xrds.attrs["tir"]:
+            filename = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}"
+            )
+        else:
+            filename = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}_"
+                f"{xrds.attrs['tir']}_"
+                f"{xrds.attrs['tir_date']:%Y%m%d}"
+                f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+            )
+    elif (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is None
+    ):
         filename = (
-            f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
-            f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
+            f"{xrds.attrs['vis']}_"
+            f"{xrds.attrs['vis_date']:%Y%m%d}"
+            f"T{xrds.attrs['vis_time']:%H%M%S%z}"
         )
+    elif (
+        xrds.attrs.get("vis", None) is None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        filename = (
+            f"{xrds.attrs['tir']}_"
+            f"{xrds.attrs['tir_date']:%Y%m%d}"
+            f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+        )
+    else:
+        filename = "data"
     # Get projection
     if xrds.attrs.get("crs", None) is not None:
         crs = xrds.attrs["crs"]
@@ -255,13 +287,45 @@ def write_dataset_to_netcdf(
     """
     Write to NETCDF format
     """
-    if xrds.attrs["vis"] == xrds.attrs["tir"]:
-        filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
-    else:
+    if (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        if xrds.attrs["vis"] == xrds.attrs["tir"]:
+            filename = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}"
+            )
+        else:
+            filename = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}_"
+                f"{xrds.attrs['tir']}_"
+                f"{xrds.attrs['tir_date']:%Y%m%d}"
+                f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+            )
+    elif (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is None
+    ):
         filename = (
-            f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
-            f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
+            f"{xrds.attrs['vis']}_"
+            f"{xrds.attrs['vis_date']:%Y%m%d}"
+            f"T{xrds.attrs['vis_time']:%H%M%S%z}"
         )
+    elif (
+        xrds.attrs.get("vis", None) is None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        filename = (
+            f"{xrds.attrs['tir']}_"
+            f"{xrds.attrs['tir_date']:%Y%m%d}"
+            f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+        )
+    else:
+        filename = "data"
     # Get projection
     if xrds.attrs.get("crs", None) is not None:
         crs = xrds.attrs["crs"]
