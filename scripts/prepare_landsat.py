@@ -111,15 +111,15 @@ def prepare_landsat(
             resolution=90,
             resampling=rio.enums.Resampling.average,
         )
-        logger.debug("Create dataset: OK")
+        logger.debug("Init dataset: OK")
         if mnt_path is not None:
             data = add_dem(data, mnt_dir=mnt_path)
             logger.debug("Add auxilary data: OK")
 
-        # Apply masks
-        data["lst"] = data["lst"].where(~close_mask(data["water"], dilation=5))
-        data["lst"] = data["lst"].where(~dilate_mask(data["cloud"], dilation=2))
-        data["lst"] = data["lst"].where(data["qa"])
+        # Apply morphological operations on water and cloud masks
+        data["water"] = close_mask(data["water"], dilation=5)
+        data["cloud"] = dilate_mask(data["cloud"], dilation=15)
+        logger.debug("Apply morphological operations on masks: OK")
         logger.info("Create dataset: OK")
 
         # Add auxilary data
@@ -152,6 +152,9 @@ def prepare_landsat(
                 ),
                 drop=True,
             )
+            data["lst"] = data["lst"].where(~data["water"])
+            data["lst"] = data["lst"].where(~data["cloud"])
+            data["lst"] = data["lst"].where(data["qa"])
             logger.info("Filter data: OK")
 
             # Write data

@@ -151,6 +151,57 @@ class ERA5Var(ERA5DataInfo, Enum):
         return super()._missing_(value)
 
 
+class DataVar(ERA5DataInfo, Enum):
+    """
+    ERA5 variables
+    """
+
+    DEWPOINT_TEMPERATURE = ("tp", "2m dewpoint temperature", "K")
+    TEMPERATURE = ("ta", "2m air temperature", "K")
+    SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY = (
+        "rsd",
+        "Surface solar radiation downward, clear sky",
+        "J m-2",
+    )
+    SURFACE_SOLAR_RADIATION_DOWNWARD = (
+        "rsd",
+        "Surface solar radiation downwards",
+        "J m-2",
+    )
+    SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY = (
+        "rld",
+        "Surface thermal radiation downward, clear sky",
+        "J m-2",
+    )
+    SURFACE_THERMAL_RADIATION_DOWNWARD = (
+        "rld",
+        "Surface thermal radiation downwards",
+        "J m-2",
+    )
+    TOTAL_COLUMN_OZONE = ("tco3", "Total column ozone", "kg m-2")
+    TOTAL_COLUMN_WATER_VAPOR = ("tcwv", "Total column water vapour", "kg m-2")
+
+    @classmethod
+    def from_key(cls, key):
+        """
+        Create enum from a key value
+        """
+        for value in cls:
+            if value.key == key:
+                return value
+        raise ValueError(f"No variable found with key {key}")
+
+    @classmethod
+    def _missing_(cls, value):
+        """
+        Overload the missing method to call from_key method
+        if enum is instanciated with a string
+        """
+        if isinstance(value, str):
+            return cls.from_key(value)
+        return super()._missing_(value)
+
+
 def read(product: str) -> xr.Dataset:
     """
     Description
@@ -517,9 +568,108 @@ def download(
     _download(dataset.label, request, filename)
 
 
+def rescale_temperature_with_lapserate(
+    dem: xr.DataArray | None,
+    era5_data=xr.DataArray | None,
+    era5_dem=xr.DataArray | None,
+    lapse_rate=float,
+    key=str,
+    description=str,
+) -> xr.DataArray | None:
+    """
+    Resacle temperature using constant lapse rate
+
+    Parameters
+    ----------
+    dem: xr.DataArray
+        DEM used to rescale data
+    era5_data: xr.DataArray
+        Data to rescaled
+    era5_dem: xr.DataArray
+        DEM correspodning to data to rescaled
+    lapse_rate: float
+        Lapse rate
+    key: str
+        Variable name
+    description: str
+        Variable description
+
+    Returns
+    -------
+    data: xr.DataArray
+        Rescaled data
+    """
+    if era5_data is None:
+        msg = f"Skip {description} interpolation because  data is missing"
+        logger.warning(msg)
+        return None
+    if dem is None:
+        logger.warning("Skip temperature interpolation because DEM is missing")
+        return None
+    data = interpolate_temperature(
+        src_temp=era5_data,
+        src_dem=era5_dem,
+        dst_dem=dem,
+        lapse_rate=lapse_rate,
+    )
+    data.attrs["standard_name"] = key
+    data.attrs["long_name"] = description
+    data.attrs["name"] = key
+    data.attrs["unit"] = "K"
+    data.attrs["description"] = description
+    return data
+
+
+def rescale_radiation(
+    dem: xr.DataArray,
+    era5_data=xr.DataArray | None,
+    key=str,
+    description=str,
+) -> xr.DataArray | None:
+    """
+    Resacle temperature using constant lapse rate
+
+    Parameters
+    ----------
+    dem: xr.DataArray
+        DEM or grid used to rescale data
+    era5_data: xr.DataArray
+        Data to rescaled
+    key: str
+        Variable name
+    description: str
+        Variable description
+
+    Returns
+    -------
+    data: xr.DataArray
+        Rescaled data
+    """
+    radiation_factor = 3600.0
+    if era5_data is None:
+        logger.warning(
+            f"Skip {description} interpolation because data is missing"
+        )
+        return None
+    data = (
+        interpolate_radiation(
+            data=era5_data,
+            dem=dem,
+        )
+        / radiation_factor
+    )
+    data.attrs["standard_name"] = key
+    data.attrs["long_name"] = description
+    data.attrs["name"] = key
+    data.attrs["unit"] = "W.m-2"
+    data.attrs["description"] = description
+    return data
+
+
 def add(
     data: xr.Dataset,
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
+    variables: list[ERA5Var] | None = None,
     path: str | None = None,
 ) -> xr.Dataset:
     """
@@ -533,28 +683,49 @@ def add(
         Data
     dataset: ERA5Dataset
         ERA5 Dataset used for download
+    variables: list[ERA5Var]
+        List of variables to add
     path: str
         Directory where ERA5 data have been downloaded data
     """
+    ##############
     # Check inputs
+    ##############
     if data.attrs.get("vis_date", None) is None:
         raise ValueError("Vis date attribute is missing in dataset")
     if data.attrs.get("vis_time", None) is None:
         raise ValueError("Vis time attribute is missing in dataset")
     if len(data.data_vars) == 0:
         raise ValueError("Dataset is empty")
+    # Extract data
     date = dt.datetime.combine(data.attrs["vis_date"], data.attrs["vis_time"])
-    dem_missing = False
-    if "height" not in data.data_vars:
-        logger.warning("DEM is missing: No variables 'height' in the dataset")
-        dem_missing = True
     if data.rio.crs is None:
         if data.attrs.get("crs") is not None:
             crs = data.attrs["crs"]
             data = data.rio.write_crs(crs)
         raise ValueError("crs attribute is missing in dataset")
     crs = data.rio.crs
+    dem = data.get("height", None)
+    if dem is not None:
+        dem = dem.rio.write_crs(crs)
     temp_dir = None
+    # Configure variables if necessary
+    if variables is None:
+        if dataset == ERA5Dataset.ERA5:
+            variables = [
+                ERA5Var.TEMPERATURE,
+                ERA5Var.DEWPOINT_TEMPERATURE,
+                ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY,
+                ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY,
+            ]
+        else:
+            variables = [
+                ERA5Var.TEMPERATURE,
+                ERA5Var.DEWPOINT_TEMPERATURE,
+                ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD,
+                ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD,
+            ]
+    # Download data if necessary
     if path is None:
         # Download data
         logger.debug("Download ERA5 data")
@@ -564,9 +735,11 @@ def add(
         logger.debug(f"Temp dir: {path}")
         # Download files
         download(date=date, dataset=dataset, path=path)
-    # Check data
     logger.debug("Check data")
-    # Data path
+    ############################
+    # Prepare ERA5/ERA5Land data
+    ############################
+    # ERA5/ERA5Land data path
     product_path = os.path.join(
         path,
         "ERA5_data",
@@ -604,6 +777,9 @@ def add(
         logger.debug("Compute EGM96 height")
     else:
         era5_dem = None
+    ##########
+    # Add data
+    ##########
     # Copy data
     updated_data = data.copy()
     updated_data.attrs = data.attrs.copy()
@@ -611,106 +787,90 @@ def add(
     # Temperature
     #############
     # Add temperature
-    if ERA5Var.TEMPERATURE.key not in era5_xrds.data_vars:
-        logger.warning(
-            "Skip temperature interpolation because required "
-            "temperature data is missing"
-        )
-    elif dem_missing or era5_dem is None:
-        logger.warning("Skip temperature interpolation because DEM is missing")
-    else:
-        updated_data["ta"] = interpolate_temperature(
-            src_temp=era5_xrds[ERA5Var.TEMPERATURE.key],
-            src_dem=era5_dem,
-            dst_dem=data["height"].rio.write_crs(crs),  # transfer crs attribute
+    if ERA5Var.TEMPERATURE in variables:
+        rescaled = rescale_temperature_with_lapserate(
+            dem=dem,
+            era5_data=era5_xrds.get(ERA5Var.TEMPERATURE.key, None),
+            era5_dem=era5_dem,
             lapse_rate=0.0065,
+            key="ta",
+            description="2m air temperature",
         )
-        updated_data["ta"].attrs["standard_name"] = "ta"
-        updated_data["ta"].attrs["long_name"] = "2m air temperature"
-        updated_data["ta"].attrs["name"] = "ta"
-        updated_data["ta"].attrs["unit"] = "K"
-        updated_data["ta"].attrs["description"] = "2m air temperature"
-        logger.debug("Add temperature:OK")
+        if rescaled is not None:
+            updated_data["ta"] = rescaled
+            logger.debug("Add temperature:OK")
     # Add dewpoint temperature temperature
-    if ERA5Var.DEWPOINT_TEMPERATURE.key not in era5_xrds.data_vars:
-        logger.warning(
-            "Skip temperature interpolation because required "
-            "dewpoint temperature data is missing"
+    if ERA5Var.DEWPOINT_TEMPERATURE in variables:
+        rescaled = rescale_temperature_with_lapserate(
+            dem=dem,
+            era5_data=era5_xrds.get(ERA5Var.DEWPOINT_TEMPERATURE.key, None),
+            era5_dem=era5_dem,
+            lapse_rate=0.0065,
+            key="tdp",
+            description="dewpoint temperature",
         )
-    elif dem_missing or era5_dem is None:
-        logger.warning("Skip temperature interpolation because DEM is missing")
-    else:
-        updated_data["tdp"] = interpolate_temperature(
-            src_temp=era5_xrds[ERA5Var.DEWPOINT_TEMPERATURE.key],
-            src_dem=era5_dem,
-            dst_dem=data["height"].rio.write_crs(crs),  # transfer crs attribute
-            lapse_rate=0.0052,
-        )
-        updated_data["tdp"].attrs["standard_name"] = "tdp"
-        updated_data["tdp"].attrs["long_name"] = "dewpoint temperature"
-        updated_data["tdp"].attrs["name"] = "tdp"
-        updated_data["tdp"].attrs["unit"] = "K"
-        updated_data["tdp"].attrs["description"] = "dewpoint temperature"
-        logger.debug("Add dewpoint temperature:OK")
+        if rescaled is not None:
+            updated_data["tdp"] = rescaled
+            logger.debug("Add dewpoint temperature:OK")
     ###########
     # Radiation
     ###########
-    # Radiation factor
-    radiation_factor = 3600.0  # Flux over 1 hour
     # Add solar radiation
-    if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key not in era5_xrds.data_vars:
-        logger.warning(
-            "Skip surface solar radiation interpolation because required "
-            "radiation data is missing"
-        )
-    else:
+    if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD in variables:
         dst = next(iter(data.data_vars.values()))
-        updated_data[f"rsd_{dataset.key}"] = (
-            interpolate_radiation(
-                data=era5_xrds[ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key],
-                dem=dst.rio.write_crs(crs),  # transfer crs attribute
-            )
-            / radiation_factor
+        rescaled = rescale_radiation(
+            dem=dst.rio.write_crs(crs),  # transfer crs attribute
+            era5_data=era5_xrds.get(
+                ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key, None
+            ),
+            key="rsd",
+            description="shortwave downwelling radiation",
         )
-        updated_data[f"rsd_{dataset.key}"].attrs["standard_name"] = "rsd"
-        updated_data[f"rsd_{dataset.key}"].attrs["long_name"] = (
-            "Shortwave downwelling radiation"
-        )
-        updated_data[f"rsd_{dataset.key}"].attrs["name"] = "rsd"
-        updated_data[f"rsd_{dataset.key}"].attrs["unit"] = "W.m-2"
-        updated_data[f"rsd_{dataset.key}"].attrs["description"] = (
-            "Shortwave downwelling radiation"
-        )
-        logger.debug("Add solar radiation:OK")
-    # Add thermal radiation
-    if (
-        ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key
-        not in era5_xrds.data_vars
-    ):
-        logger.warning(
-            "Skip surface thermal radiation interpolation because required "
-            "radiation data is missing"
-        )
-    else:
+        if rescaled is not None:
+            updated_data[f"rsd_{dataset.key}"] = rescaled
+            logger.debug("Add solar radiation:OK")
+    # Add solar radiation
+    if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY in variables:
         dst = next(iter(data.data_vars.values()))
-        updated_data[f"rld_{dataset.key}"] = (
-            interpolate_radiation(
-                data=era5_xrds[ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key],
-                dem=dst.rio.write_crs(crs),  # transfer crs attribute
-            )
-            / radiation_factor
+        rescaled = rescale_radiation(
+            dem=dst.rio.write_crs(crs),  # transfer crs attribute
+            era5_data=era5_xrds.get(
+                ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY.key, None
+            ),
+            key="rsd",
+            description="shortwave downwelling radiation (clear sky)",
         )
-        updated_data[f"rld_{dataset.key}"].attrs["standard_name"] = "rld"
-        updated_data[f"rld_{dataset.key}"].attrs["long_name"] = (
-            "Longwave downwelling radiation"
+        if rescaled is not None:
+            updated_data[f"rsd_{dataset.key}"] = rescaled
+            logger.debug("Add solar radiation (clear sky):OK")
+    # Add solar radiation
+    if ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD in variables:
+        dst = next(iter(data.data_vars.values()))
+        rescaled = rescale_radiation(
+            dem=dst.rio.write_crs(crs),  # transfer crs attribute
+            era5_data=era5_xrds.get(
+                ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key, None
+            ),
+            key="rld",
+            description="longwave downwelling radiation",
         )
-        updated_data[f"rld_{dataset.key}"].attrs["name"] = "rld"
-        updated_data[f"rld_{dataset.key}"].attrs["unit"] = "W.m-2"
-        updated_data[f"rld_{dataset.key}"].attrs["description"] = (
-            "Longwave downwelling radiation"
+        if rescaled is not None:
+            updated_data[f"rld_{dataset.key}"] = rescaled
+            logger.debug("Add thermal radiation:OK")
+    # Add solar radiation
+    if ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY in variables:
+        dst = next(iter(data.data_vars.values()))
+        rescaled = rescale_radiation(
+            dem=dst.rio.write_crs(crs),  # transfer crs attribute
+            era5_data=era5_xrds.get(
+                ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY.key, None
+            ),
+            key="rld",
+            description="longwave downwelling radiation (clear sky)",
         )
-        logger.debug("Add thermal radiation:OK")
-
+        if rescaled is not None:
+            updated_data[f"rld_{dataset.key}"] = rescaled
+            logger.debug("Add thermal radiation (clear sky):OK")
     # Clean
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
