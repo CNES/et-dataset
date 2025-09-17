@@ -621,9 +621,7 @@ def copy_tiles(
         msg = f"{base_dir} is not a directory"
         logger.error(msg)
     # Get DEM tiles
-    tile_ids = get_mgrs_tile_names_from_roi(
-        roi_bbox=roi_bbox, roi_crs=roi_crs, overlap=5
-    )
+    tile_ids = get_mgrs_tile_names_from_roi(roi_bbox=roi_bbox, roi_crs=roi_crs)
     logger.debug(f"Tiles ids required: {tile_ids}")
     # Copy files
     for tile_id in tile_ids:
