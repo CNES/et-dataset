@@ -10,6 +10,7 @@ import math
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
 from matplotlib.colors import ListedColormap
 
@@ -258,3 +259,43 @@ def plot_dem(xrds_dem: xr.Dataset):
         vmax=xrds_dem["aspect"].max(),
         cmap="twilight_shifted",
     )
+
+
+def density_plot(
+    data: xr.Dataset,
+):
+    """
+    Plot
+    """
+    # dimensions
+    _, axes = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
+
+    for i, var in enumerate(["ndvi", "fcover", "albedo"]):
+        ax = axes[i]
+        df = pd.DataFrame(
+            data={
+                "lst": data["lst"].values.reshape(-1),
+                "var": data[var].values.reshape(-1),
+            }
+        ).dropna(axis=0, how="any")
+        y = df["lst"].values
+        # Flatten and mask values
+        x = df["var"].values
+        mask = np.isfinite(x) & np.isfinite(y)  # type: ignore
+        x = x[mask]
+        y = y[mask]
+        ax.hist2d(x, y, (150, 150), cmap="viridis", cmin=1)
+
+        # Fix limits
+        xmin = np.nanmin(x) - 0.05
+        xmax = np.nanmax(x) + 0.05
+        ymin = np.nanmin(y) - 5
+        ymax = np.nanmax(y) + 5
+        ax.set_xlim([xmin, xmax])
+        ax.set_ylim([ymin, ymax])
+
+        # Labels
+        ax.set_xlabel(var)
+        ax.set_ylabel("Land Surface Temperature K")
+
+    plt.show()

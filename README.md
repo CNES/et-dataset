@@ -275,5 +275,71 @@ A complete notebook is available to describe landsat data preparation: [prepare_
 ## Scripts
 
 Several scripts are available:
-* [get_dem.py](scripts/get_dem.py): Extract DEM based on a ROI from the copernicus DEM.
 * [prepare_landsat.py](scripts/prepare_landsat.py): Prepare landsat data
+* [get_dem.py](scripts/get_dem.py): Extract DEM based on a ROI from the copernicus DEM.
+* [copy_dem.py](scripts/copy_dem.py): Copy DEM tiles from the tiled copernicus DEM to a directory.
+
+### Prepare landsat
+
+```bash
+python scripts/prepare_landsat.py -h
+usage: prepare_landsat.py [-h] [-v] -r ROI -s START_DATE -e END_DATE [-o OUTPUT] [--max_cloud_cover MAX_CLOUD_COVER] [--min_roi_overlap MIN_ROI_OVERLAP] [--mnt_path MNT_PATH] [--filter]
+
+Prepare Landsat data
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose mode
+  -r ROI, --roi ROI     Path of the region of interest in Shapefile format
+  -s START_DATE, --start-date START_DATE
+                        Start date (YYYY-MM-DD)
+  -e END_DATE, --end-date END_DATE
+                        End date (YYYY-MM-DD)
+  -o OUTPUT, --output OUTPUT
+                        Output dataset directory path (default: current directory)
+  --max_cloud_cover MAX_CLOUD_COVER
+                        Maximum cloud cover (default: 25)
+  --min_roi_overlap MIN_ROI_OVERLAP
+                        Minimum overlap between ROI and a product (default: 33)
+  --mnt_path MNT_PATH   Directory of DEM tiles
+  --filter              Apply more filetering (NDVI, Fcover, Abedo)
+```
+
+Example 
+```bash
+python scripts/prepare_landsat.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2023-03-01" -e "2023-03-12" -o notebooks/out --mnt_path $HOME/data/MNT/DEM_Copercinus_30m/ --filter
+```
+
+### Get DEM
+
+```bash
+python scripts/get_dem.py -h
+usage: get_dem.py [-h] [-v] -r ROI --mnt_path MNT_PATH [-f {tif,netcdf}]
+
+Get DEM
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose mode
+  -r ROI, --roi ROI     Path of the region of interest in Shapefile format
+  --mnt_path MNT_PATH   Path to the DEM directory
+  -f {tif,netcdf}, --format {tif,netcdf}
+                        Output format (tif, netcdf)
+```
+
+### Copy DEM
+
+```bash
+python scripts/copy_dem.py -h
+usage: copy_dem.py [-h] [-v] -r ROI --mnt_path MNT_PATH [-o OUTPUT]
+
+Copy DEM tiles
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose mode
+  -r ROI, --roi ROI     Path of the region of interest in Shapefile format
+  --mnt_path MNT_PATH   Path to the DEM directory
+  -o OUTPUT, --output OUTPUT
+                        Output directory
+```

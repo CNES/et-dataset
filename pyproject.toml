@@ -42,6 +42,7 @@ dependencies = [
   "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git",
   "scikit-image",
   "requests",
+  "pyarrow",
 ]
 
 [project.optional-dependencies]
@@ -150,7 +151,7 @@ ignore_missing_imports = true
 
 [tool.pixi.project]
 channels = ["conda-forge"]
-platforms = ["linux-64","win-64"]
+platforms = ["linux-64","win-64","osx-64", "osx-arm64"]
 
 [tool.pixi.pypi-dependencies]
 et-dataset = { path = ".", editable = true }

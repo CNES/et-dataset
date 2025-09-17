@@ -142,6 +142,8 @@ def compute_bvnet(
     bvnet_xr = apply_NNT(stacked_inputs, output, ["LAI", "FCOVER"], satellite)[
         ["LAI", "FCOVER"]
     ]
+    # Clip Fcover
+    bvnet_xr["FCOVER"] = bvnet_xr["FCOVER"].clip(0.0, 1.0)
     bvnet_xr["LAI"].attrs["standard_name"] = "lai"
     bvnet_xr["LAI"].attrs["long_name"] = "lai"
     bvnet_xr["LAI"].attrs["name"] = "lai"

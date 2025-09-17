@@ -145,7 +145,7 @@ class LandsatReader(ProductReader):
         Land Surface Albedo I: Algorithms.
         Remote Sens. Environ. 2001, 76, 213-238
         """
-        return (
+        albedo = (
             0.356 * data.blue
             + 0.130 * data.red
             + 0.373 * data.nir
@@ -153,6 +153,7 @@ class LandsatReader(ProductReader):
             + 0.072 * data.swir2
             - 0.0018
         )
+        return albedo.clip(0.01, 0.99)
 
     def read_vis_bands(
         self,
@@ -415,7 +416,7 @@ class HLSReader(ProductReader):
         Land Surface Albedo I: Algorithms.
         Remote Sens. Environ. 2001, 76, 213-238.
         """
-        return (
+        albedo = (
             0.356 * data.blue
             + 0.130 * data.red
             + 0.373 * data.nir
@@ -423,6 +424,7 @@ class HLSReader(ProductReader):
             + 0.072 * data.swir2
             - 0.0018
         )
+        return albedo.clip(0.01, 0.99)
 
     def read_vis_bands(
         self,
@@ -554,7 +556,7 @@ class Sentinel2Reader(ProductReader):
         New Narrow-to-Broadband Conversion Coefficients,
         IEEE Geoscience and Remote Sensing Letters, 2020
         """
-        return (
+        albedo = (
             0.2266 * data.blue
             + 0.1236 * data.green
             + 0.1573 * data.red
@@ -562,6 +564,7 @@ class Sentinel2Reader(ProductReader):
             + 0.1170 * data.swir1
             + 0.0338 * data.swir2
         )
+        return albedo.clip(0.01, 0.99)
 
     def read_vis_bands(
         self,
