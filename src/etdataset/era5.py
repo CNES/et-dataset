@@ -627,7 +627,7 @@ def rescale_radiation(
     description=str,
 ) -> xr.DataArray | None:
     """
-    Resacle temperature using constant lapse rate
+    Rescale radiation using constant lapse rate
 
     Parameters
     ----------
@@ -877,15 +877,15 @@ def add(
         and ERA5Var.TOTAL_COLUMN_OZONE.key in era5_xrds.data_vars
     ):
         dst = next(iter(data.data_vars.values()))
-        data[f"tco3_{dataset.key}"] = interpolate_ozone(
+        updated_data[f"tco3_{dataset.key}"] = interpolate_ozone(
             data=era5_xrds[ERA5Var.TOTAL_COLUMN_OZONE.key],
             dem=dst.rio.write_crs(crs),  # transfer crs attribute
         )
-        data[f"tco3_{dataset.key}"].attrs["standard_name"] = "tco3"
-        data[f"tco3_{dataset.key}"].attrs["long_name"] = "Total column ozone"
-        data[f"tco3_{dataset.key}"].attrs["name"] = "tco3"
-        data[f"tco3_{dataset.key}"].attrs["unit"] = "kg.m-2"
-        data[f"tco3_{dataset.key}"].attrs["description"] = "Total column ozone"
+        updated_data[f"tco3_{dataset.key}"].attrs["standard_name"] = "tco3"
+        updated_data[f"tco3_{dataset.key}"].attrs["long_name"] = "Total column ozone"
+        updated_data[f"tco3_{dataset.key}"].attrs["name"] = "tco3"
+        updated_data[f"tco3_{dataset.key}"].attrs["unit"] = "kg.m-2"
+        updated_data[f"tco3_{dataset.key}"].attrs["description"] = "Total column ozone"
         logger.debug("Add total_column_ozone :OK")
     # Clean
     if temp_dir is not None:
