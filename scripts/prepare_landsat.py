@@ -23,7 +23,7 @@ from etdataset.cli import CLIException
 from etdataset.dem import add_dem
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection
-from etdataset.utils import close_mask, dilate_mask, get_utm_bbox_from_roi
+from etdataset.utils import dilate_mask, get_utm_bbox_from_roi
 from etdataset.writer import write_dataset
 
 logger = LoggerManager.get_logger(__name__)
@@ -37,7 +37,6 @@ def prepare_landsat(
     max_cloud_cover: float = 20,
     min_roi_coverage: float = 33,
     mnt_path: str | None = None,
-    apply_filter: bool = False,  # noqa
 ):
     """
     Prepare landsat data
@@ -116,48 +115,16 @@ def prepare_landsat(
             data = add_dem(data, mnt_dir=mnt_path)
             logger.debug("Add auxilary data: OK")
 
-        # Apply morphological operations on water and cloud masks
-        data["water"] = close_mask(data["water"], dilation=5)
-        data["cloud"] = dilate_mask(data["cloud"], dilation=15)
-        logger.debug("Apply morphological operations on masks: OK")
+        # Apply a dilation of cloud mask
+        data["cloud"] = dilate_mask(data["cloud"], dilation=20)
+        logger.debug("Apply dilation of cloud on mask: OK")
         logger.info("Create dataset: OK")
 
         # Add auxilary data
         updated_data = add_aux(data=data, path=output_path)
         logger.info("Add auxilary data: OK")
 
-        # Filter data (NDVI, Fcover, albedo)
-        if apply_filter:
-            updated_data = updated_data.compute()
-            # Filter NDVI
-            updated_data[["ndvi", "lst"]] = updated_data[["ndvi", "lst"]].where(
-                (updated_data["ndvi"] > 0) & (updated_data["ndvi"] <= 1),
-                drop=True,
-            )
-            # Filter Fcover
-            updated_data[["fcover", "lst"]] = updated_data[
-                ["fcover", "lst"]
-            ].where(
-                (updated_data["fcover"] >= 0) & (updated_data["fcover"] <= 1),
-                drop=True,
-            )
-            # Filter albedo
-            updated_data[["albedo", "lst"]] = updated_data[
-                ["albedo", "lst"]
-            ].where(
-                (updated_data["albedo"] > updated_data["albedo"].quantile(0.05))
-                & (
-                    updated_data["albedo"]
-                    < updated_data["albedo"].quantile(0.95)
-                ),
-                drop=True,
-            )
-            data["lst"] = data["lst"].where(~data["water"])
-            data["lst"] = data["lst"].where(~data["cloud"])
-            data["lst"] = data["lst"].where(data["qa"])
-            logger.info("Filter data: OK")
-
-            # Write data
+        # Write data
         write_dataset(updated_data, directory=etdataset_path)
         logger.info(f"Process product {product}:OK")
 
@@ -220,11 +187,6 @@ def get_parser() -> argparse.ArgumentParser:
         "--mnt_path",
         type=str,
         help="Directory of DEM tiles",
-    )
-    parser.add_argument(
-        "--filter",
-        action="store_true",
-        help="Apply more filetering (NDVI, Fcover, Abedo)",
     )
 
     return parser
@@ -289,5 +251,4 @@ if __name__ == "__main__":
         args.max_cloud_cover,
         args.min_roi_overlap,
         args.mnt_path,
-        args.filter,
     )

@@ -283,7 +283,7 @@ Several scripts are available:
 
 ```bash
 python scripts/prepare_landsat.py -h
-usage: prepare_landsat.py [-h] [-v] -r ROI -s START_DATE -e END_DATE [-o OUTPUT] [--max_cloud_cover MAX_CLOUD_COVER] [--min_roi_overlap MIN_ROI_OVERLAP] [--mnt_path MNT_PATH] [--filter]
+usage: prepare_landsat.py [-h] [-v] -r ROI -s START_DATE -e END_DATE [-o OUTPUT] [--max_cloud_cover MAX_CLOUD_COVER] [--min_roi_overlap MIN_ROI_OVERLAP] [--mnt_path MNT_PATH]
 
 Prepare Landsat data
 
@@ -302,12 +302,11 @@ options:
   --min_roi_overlap MIN_ROI_OVERLAP
                         Minimum overlap between ROI and a product (default: 33)
   --mnt_path MNT_PATH   Directory of DEM tiles
-  --filter              Apply more filetering (NDVI, Fcover, Abedo)
 ```
 
 Example 
 ```bash
-python scripts/prepare_landsat.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2023-03-01" -e "2023-03-12" -o notebooks/out --mnt_path $HOME/data/MNT/DEM_Copercinus_30m/ --filter
+python scripts/prepare_landsat.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2023-03-01" -e "2023-03-12" -o notebooks/out --mnt_path $HOME/data/MNT/DEM_Copercinus_30m/
 ```
 
 ### Get DEM
