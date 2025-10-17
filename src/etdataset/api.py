@@ -10,24 +10,20 @@ import xarray as xr
 from pyproj import CRS
 from sensorsio import utils
 
-from etdataset.interpolation import create_grid_dataset
 from etdataset import era5, msg
+from etdataset.era5 import download_date_by_date as download_et
+from etdataset.era5 import read_as_dataset as read_et
+from etdataset.interpolation import create_grid_dataset
 from etdataset.logging import LoggerManager
+from etdataset.msg import download_date_by_date as download_radiation
+from etdataset.msg import read_as_dataset as read_radiation
 from etdataset.provider import Collection, get_provider
 from etdataset.reader import get_product_reader
 from etdataset.selection import filter_with_roi, select_products
 from etdataset.utils import (
     check_mgrs_format,
     get_bbox_from_mgrs_tile,
-    get_utm_bbox_from_roi
-)
-from etdataset.msg import (
-    download_date_by_date as download_radiation,
-    read_as_dataset as read_radiation
-)
-from etdataset.era5 import(
-    download_date_by_date as download_et,
-    read_as_dataset as read_et
+    get_utm_bbox_from_roi,
 )
 from etdataset.writer import write_daily_radiation, write_et_single_date
 
@@ -430,7 +426,9 @@ def download_aux(
         )
 
 
-def prepare_daily_radiation(t1: str, t2: str, roi_path: str, path: str | None = None) -> None:
+def prepare_daily_radiation(
+    t1: str, t2: str, roi_path: str, path: str | None = None
+) -> None:
     """
     Description
     -----------
@@ -458,7 +456,9 @@ def prepare_daily_radiation(t1: str, t2: str, roi_path: str, path: str | None = 
         write_daily_radiation(dst, date, path)
 
 
-def prepare_et_single_date(t1: str, t2: str, roi_path: str, path: str) -> None:
+def prepare_et_single_date(
+    t1: str, t2: str, roi_path: str, path: str | None = None
+) -> None:
     """
     Description
     -----------
@@ -485,5 +485,5 @@ def prepare_et_single_date(t1: str, t2: str, roi_path: str, path: str) -> None:
     grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
     date_list = download_et(t1, t2)
     for date in date_list:
-        dst = read_et(date.to_pydatetime(),grid)
-        write_et_single_date(dst,date,path)
+        dst = read_et(date.to_pydatetime(), grid)
+        write_et_single_date(dst, date, path)

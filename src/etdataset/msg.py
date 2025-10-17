@@ -17,7 +17,6 @@ from enum import Enum
 
 import dask.array as da
 import numpy as np
-import datetime
 import pandas as pd
 import rasterio as rio
 import requests
@@ -27,8 +26,7 @@ from pyproj import CRS
 from sensorsio import utils
 
 from etdataset.logging import LoggerManager
-from etdataset.utils import mask_bits
-from etdataset.utils import get_bbox_from_roi
+from etdataset.utils import get_bbox_from_roi, mask_bits
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -893,7 +891,7 @@ def add(
 def download_date_by_date(
     date1_str: str, date2_str: str, roi_path: str, output: str | None = None
 ) -> list:
-    """
+    """import datetime as dt
     Description
     -----------
     Download MSG products day by day from a start and end date
@@ -914,7 +912,9 @@ def download_date_by_date(
     time: pandas.core.indexes.datetimes.DatetimeIndex
         list of dates beetween start and end date
     """
-    roi_bbox_latlon,_ = get_bbox_from_roi(roi_path) # Identify the satellite from which the data must originate.
+    roi_bbox_latlon, _ = get_bbox_from_roi(
+        roi_path
+    )  # Identify the satellite from which the data must originate.
     time = xr.date_range(date1_str, freq="1D", end=date2_str)
     for t in time:
         download(t.to_pydatetime(), roi_bbox_latlon, output)
@@ -922,7 +922,7 @@ def download_date_by_date(
 
 
 def read_as_dataset(
-    date: datetime.datetime, roi_path : str, grid: xr.Dataset, path: str | None=None
+    date: dt.datetime, roi_path: str, grid: xr.Dataset, path: str | None = None
 ) -> xr.Dataset:
     """
     Description
@@ -950,21 +950,28 @@ def read_as_dataset(
     if path is None:
         path = os.getcwd()
     msg_path = os.path.join(path, "MSG_data")
-    roi_bbox_latlon,_ = get_bbox_from_roi(roi_path)
+    roi_bbox_latlon, _ = get_bbox_from_roi(roi_path)
     sat = get_satellite(roi_bbox_latlon)
-    product_path = os.path.join(msg_path, f"{sat.key}_{date.strftime('%Y-%m-%d')}")
+    product_path = os.path.join(
+        msg_path, f"{sat.key}_{date.strftime('%Y-%m-%d')}"
+    )
     # Get the path of the MSG daily solar radiation file
-    filename = get_filename(sat, product=MSGProduct.DAILY_SURFACE_SOLAR_RADIATION_DOWNWARD, date=date, fmt=MSGFormat.NETCDF)
+    filename = get_filename(
+        sat,
+        product=MSGProduct.DAILY_SURFACE_SOLAR_RADIATION_DOWNWARD,
+        date=date,
+        fmt=MSGFormat.NETCDF,
+    )
     path_file = os.path.join(product_path, filename)
     if not os.path.isfile(path_file):
-        raise OSError(f"Data file not found: {path_file}. Please download data before reading it")
+        raise OSError(
+            f"Data file not found: {path_file}. Please download data before reading it"
+        )
     # Project MSG data on the ROI
     dst = add_daily_data(
         data=grid,
         product=path_file,
-    ).rename_vars( {"daily_msg": "daily_radiation"})
+    ).rename_vars({"daily_msg": "daily_radiation"})
     # Select daily_radiation variable
     dst_rad = dst[["daily_radiation"]]
     return dst_rad
-
-
