@@ -17,6 +17,7 @@ from enum import Enum
 
 import dask.array as da
 import numpy as np
+import datetime
 import pandas as pd
 import rasterio as rio
 import requests
@@ -27,6 +28,7 @@ from sensorsio import utils
 
 from etdataset.logging import LoggerManager
 from etdataset.utils import mask_bits
+from etdataset.utils import get_bbox_from_roi
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -886,3 +888,83 @@ def add(
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
     return updated_data
+
+
+def download_date_by_date(
+    date1_str: str, date2_str: str, roi_path: str, output: str | None = None
+) -> list:
+    """
+    Description
+    -----------
+    Download MSG products day by day from a start and end date
+
+    Parameters
+    ----------
+    data1_str: str
+        Start date
+    date2_str: dt.datetime
+        End date
+    roi_path: str
+        Path to shapefile .shp
+    output: str
+        Directory path to store data
+
+    Return
+    ------
+    time: pandas.core.indexes.datetimes.DatetimeIndex
+        list of dates beetween start and end date
+    """
+    roi_bbox_latlon,_ = get_bbox_from_roi(roi_path) # Identify the satellite from which the data must originate.
+    time = xr.date_range(date1_str, freq="1D", end=date2_str)
+    for t in time:
+        download(t.to_pydatetime(), roi_bbox_latlon, output)
+    return time
+
+
+def read_as_dataset(
+    date: datetime.datetime, roi_path : str, grid: xr.Dataset, path: str | None=None
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    Read MSG daily solar radiation .nc file as dataset,
+    projecting data on a given ROI
+
+    Parameters
+    ----------
+    date: datetime.datetime
+        Date
+    roi_path: str
+        Path to the ROI shapefile .shp
+    grid: xr.Dataset
+        grid centered on the ROI
+    path: str
+        Directory path where MSG data have been downloaded
+
+    Return
+    ------
+    dst_rad: xr.Dataset
+        Daily radiation dataset
+    """
+    # Get the path of the subdirectory where data have been downloaded
+    if path is None:
+        path = os.getcwd()
+    msg_path = os.path.join(path, "MSG_data")
+    roi_bbox_latlon,_ = get_bbox_from_roi(roi_path)
+    sat = get_satellite(roi_bbox_latlon)
+    product_path = os.path.join(msg_path, f"{sat.key}_{date.strftime('%Y-%m-%d')}")
+    # Get the path of the MSG daily solar radiation file
+    filename = get_filename(sat, product=MSGProduct.DAILY_SURFACE_SOLAR_RADIATION_DOWNWARD, date=date, fmt=MSGFormat.NETCDF)
+    path_file = os.path.join(product_path, filename)
+    if not os.path.isfile(path_file):
+        raise OSError(f"Data file not found: {path_file}. Please download data before reading it")
+    # Project MSG data on the ROI
+    dst = add_daily_data(
+        data=grid,
+        product=path_file,
+    ).rename_vars( {"daily_msg": "daily_radiation"})
+    # Select daily_radiation variable
+    dst_rad = dst[["daily_radiation"]]
+    return dst_rad
+
+

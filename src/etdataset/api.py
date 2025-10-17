@@ -10,6 +10,7 @@ import xarray as xr
 from pyproj import CRS
 from sensorsio import utils
 
+from etdataset.interpolation import create_grid_dataset
 from etdataset import era5, msg
 from etdataset.logging import LoggerManager
 from etdataset.provider import Collection, get_provider
@@ -18,7 +19,17 @@ from etdataset.selection import filter_with_roi, select_products
 from etdataset.utils import (
     check_mgrs_format,
     get_bbox_from_mgrs_tile,
+    get_utm_bbox_from_roi
 )
+from etdataset.msg import (
+    download_date_by_date as download_radiation,
+    read_as_dataset as read_radiation
+)
+from etdataset.era5 import(
+    download_date_by_date as download_et,
+    read_as_dataset as read_et
+)
+from etdataset.writer import write_daily_radiation, write_et_single_date
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -417,3 +428,62 @@ def download_aux(
             latlon_bbox=bounds,
             path=output_dir,
         )
+
+
+def prepare_daily_radiation(t1: str, t2: str, roi_path: str, path: str | None = None) -> None:
+    """
+    Description
+    -----------
+    For each day from a start to a end date:
+    - Download MSG data,
+    - Read it a dataset projected on a given ROI with a resolution of 3km per pixel,
+    - Create a corresponding daily radiation .tif file.
+
+    Parameters
+    ----------
+    t1: str
+        Start date
+    t2: dt.datetime
+        End date
+    roi_path: str
+        Path to the ROI shapefile .shp
+    path: str
+        Directory path to store .tif files
+    """
+    roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
+    grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
+    date_list = download_radiation(t1, t2, roi_path)
+    for date in date_list:
+        dst = read_radiation(date.to_pydatetime(), roi_path, grid)
+        write_daily_radiation(dst, date, path)
+
+
+def prepare_et_single_date(t1: str, t2: str, roi_path: str, path: str) -> None:
+    """
+    Description
+    -----------
+    For each day from a start to a end date:
+    - Download ERA5-Land,
+    - Read it as a dataset:
+        - projecting on a given ROI with a resolution of 3km per pixel,
+        - keeping only the evapotranspiration variable,
+        - adding a "flags" (0-1) variable.
+    - Create a corresponding et single date .tif file.
+
+    Parameters
+    ----------
+    t1: str
+        Start date
+    t2: dt.datetime
+        End date
+    roi_path: str
+        Path to the ROI shapefile .shp
+    path: str
+        Directory path to store .tif files
+    """
+    roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
+    grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
+    date_list = download_et(t1, t2)
+    for date in date_list:
+        dst = read_et(date.to_pydatetime(),grid)
+        write_et_single_date(dst,date,path)

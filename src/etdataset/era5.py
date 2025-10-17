@@ -891,3 +891,72 @@ def add(
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
     return updated_data
+
+
+def download_date_by_date(
+    date1_str: str, date2_str: str, output: str | None = None
+) -> list:
+    """
+    Description
+    -----------
+    Download ERA5-Land products day by day from a start and end date
+
+    Parameters
+    ----------
+    data1_str: str
+        Start date
+    date2_str: dt.datetime
+        End date
+    output: str
+        Directory path to store data
+
+    Return
+    ------
+    time: pandas.core.indexes.datetimes.DatetimeIndex
+        list of dates beetween start and end date
+    """
+    time = xr.date_range(date1_str, freq="1D", end=date2_str)
+    for t in time:
+        download(t.to_pydatetime(), ERA5Dataset.ERA5LAND, path=output)
+    return time
+
+
+def read_as_dataset(date: datetime.datetime, grid: xr.DataArray, path: str | None= None
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    - Read ERA5-Land .zip repertory as dataset,
+    keeping only the "total evaporation" variable
+    and projecting data on a given ROI
+    - Add a "flags" variable (1 for nan value, 0 otherwise)
+
+    Parameters
+    ----------
+    date: datetime.datetime
+        Date
+    grid: xr.Dataset
+        grid centered on the ROI
+    path: str
+        Directory path where ERA5-Land data have been downloaded
+
+    Return
+    ------
+    dst_rad: xr.Dataset
+        Daily evapotranspiration dataset with flags
+    """
+    # Read as dataset
+    if path is None:
+        path = os.getcwd()
+    grid.attrs["vis_date"] = date.date()
+    grid.attrs["vis_time"] = date.time()
+    dst = add_era5(
+        grid,
+        variables=[ERA5Var.TOTAL_EVAPORATION],
+        path=path,
+        dataset=ERA5Dataset.ERA5LAND,
+    )
+    # Add "flags" variable
+    dst["flags"] = dst[f"e_{ERA5Dataset.ERA5LAND.key}"].isnull().astype(int)
+    dst = dst.rename_vars({f"e_{ERA5Dataset.ERA5LAND.key}": "et"})
+    return dst[["et", "flags"]]
