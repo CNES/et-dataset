@@ -465,11 +465,11 @@ def prepare_daily_radiation(
     # Run
     roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
     grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
-    date_list = download_radiation(min_date, max_date, roi_path)
+    date_list = download_radiation(
+        min_date, max_date, roi_bbox, roi_crs, output
+    )
     for date in date_list:
-        dst = create_daily_radiation_dataset(
-            date.to_pydatetime(), roi_path, grid
-        )
+        dst = create_daily_radiation_dataset(date.to_pydatetime(), grid, output)
         write_daily_radiation(dst, output)
 
 
@@ -513,7 +513,7 @@ def prepare_et_single_date(
     # Run
     roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
     grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
-    date_list = download_et(min_date, max_date, ["total_evaporation"])
+    date_list = download_et(min_date, max_date, ["total_evaporation"], output)
     for date in date_list:
-        dst = create_daily_et_dataset(date.to_pydatetime(), grid)
+        dst = create_daily_et_dataset(date.to_pydatetime(), grid, output)
         write_et_single_date(dst, output)

@@ -981,7 +981,7 @@ def add_et(
         path = temp_dir.name
         logger.debug(f"Temp dir: {path}")
         # Download files
-        download(date=date, dataset=dataset, path=path, for_time_series=True)
+        download(date=date, dataset=dataset, path=path)
     logger.debug("Check data")
     ##############
     # Prepare data
@@ -1034,22 +1034,22 @@ def add_et(
 
 
 def download_date_by_date(
-    date1_str: dt.datetime,
-    date2_str: dt.datetime,
+    date1: dt.datetime,
+    date2: dt.datetime,
     variables: list | None = None,
     output: str | None = None,
-) -> pd.core.indexes.datetimes.DatetimeIndex:
+) -> pd.DatetimeIndex:
     """
     Description
     -----------
-    Download ERA5-Land "Total evaporation" product day by day
+    Download ERA5-Land product day by day
     from a start and end date
 
     Parameters
     ----------
-    data1_str: dt.datetime
+    date1: dt.datetime
         Start date
-    date2_str: dt.datetime
+    date2: dt.datetime
         End date
     variables: list[str]
         List of ERA5-Land product to download
@@ -1059,7 +1059,7 @@ def download_date_by_date(
 
     Return
     ------
-    time: pandas.core.indexes.datetimes.DatetimeIndex
+    time: pd.DatetimeIndex
         list of dates beetween start and end date
     """
     # Check
@@ -1068,9 +1068,9 @@ def download_date_by_date(
     else:
         for v in variables:
             if v not in ERA5Dataset.ERA5LAND.variables:
-                raise ERA5Exception("Error: variables must be in ERA5LAND")
+                raise ERA5Exception(f"Error: {v} is not in ERA5LAND")
     # Run
-    time = xr.date_range(date1_str, freq="1D", end=date2_str)
+    time = xr.date_range(date1, freq="1D", end=date2)
     for t in time:
         download(
             t.to_pydatetime(), ERA5Dataset.ERA5LAND, variables, path=output

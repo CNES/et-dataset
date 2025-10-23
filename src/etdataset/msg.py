@@ -26,7 +26,7 @@ from pyproj import CRS
 from sensorsio import utils
 
 from etdataset.logging import LoggerManager
-from etdataset.utils import get_bbox_from_roi, mask_bits
+from etdataset.utils import mask_bits
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -889,8 +889,12 @@ def add(
 
 
 def download_date_by_date(
-    date1_str: str, date2_str: str, roi_path: str, output: str | None = None
-) -> pd.core.indexes.datetimes.DatetimeIndex:
+    date1: dt.datetime,
+    date2: dt.datetime,
+    roi_bbox: rio.BoundingBox,
+    roi_crs: CRS,
+    output: str | None = None,
+) -> pd.DatetimeIndex:
     """import datetime as dt
     Description
     -----------
@@ -898,12 +902,14 @@ def download_date_by_date(
 
     Parameters
     ----------
-    data1_str: str
+    date1_str: str
         Start date
     date2_str: dt.datetime
         End date
-    roi_path: str
-        Path to shapefile .shp
+    roi_bbox: rio.BoundingBox
+        ROI bounding box
+    roi_crs: CRS
+        ROI CRS
     output: str
         Directory path to store data
 
@@ -912,17 +918,17 @@ def download_date_by_date(
     time: pandas.core.indexes.datetimes.DatetimeIndex
         list of dates beetween start and end date
     """
-    roi_bbox_latlon, _ = get_bbox_from_roi(
-        roi_path
-    )  # Identify the satellite from which the data must originate.
-    time = xr.date_range(date1_str, freq="1D", end=date2_str)
+    roi_bbox_latlon = utils.bb_transform(
+        source_crs=str(roi_crs), target_crs="EPSG:4326", bounding_box=roi_bbox
+    )
+    time = xr.date_range(date1, freq="1D", end=date2)
     for t in time:
         download(t.to_pydatetime(), roi_bbox_latlon, output)
     return time
 
 
 def create_daily_radiation_dataset(
-    date: dt.datetime, roi_path: str, grid: xr.Dataset, path: str | None = None
+    date: dt.datetime, grid: xr.Dataset, path: str | None = None
 ) -> xr.Dataset:
     """
     Description
@@ -934,8 +940,6 @@ def create_daily_radiation_dataset(
     ----------
     date: datetime.datetime
         Date
-    roi_path: str
-        Path to the ROI shapefile .shp
     grid: xr.Dataset
         grid centered on the ROI
     path: str
@@ -950,7 +954,16 @@ def create_daily_radiation_dataset(
     if path is None:
         path = os.getcwd()
     msg_path = os.path.join(path, "MSG_data")
-    roi_bbox_latlon, _ = get_bbox_from_roi(roi_path)
+    if grid.rio.crs is None:
+        if grid.attrs.get("crs") is not None:
+            crs = grid.attrs["crs"]
+            grid = grid.rio.write_crs(crs)
+        raise ValueError("crs attribute is missing in dataset")
+    crs = grid.rio.crs
+    bounds = rio.coords.BoundingBox(*grid.rio.bounds())
+    roi_bbox_latlon = utils.bb_transform(
+        source_crs=str(crs), target_crs="EPSG:4326", bounding_box=bounds
+    )
     sat = get_satellite(roi_bbox_latlon)
     product_path = os.path.join(
         msg_path, f"{sat.key}_{date.strftime('%Y-%m-%d')}"

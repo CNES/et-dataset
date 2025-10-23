@@ -204,6 +204,6 @@ def test_era5_read(parameters: ERA5ReadParams):
     """
     Test ERA5Data class instantiation
     """
-    era5_ds = era5.ERA5Data(get_era5_product())
+    era5_ds = era5.ERA5Data(get_era5_product())  # type: ignore
     xarr = era5_ds.read(**parameters.__dict__)
     assert xarr
