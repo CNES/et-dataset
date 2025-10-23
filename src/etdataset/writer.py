@@ -5,7 +5,6 @@
 Common function
 """
 
-import datetime
 import os
 
 import numpy as np
@@ -355,9 +354,7 @@ def write_dataset_to_netcdf(
     xrds.to_netcdf(os.path.join(directory, filename))
 
 
-def write_daily_radiation(
-    data: xr.Dataset, date: datetime.datetime, path: str | None = None
-) -> None:
+def write_daily_radiation(data: xr.Dataset, path: str | None = None) -> None:
     """
     Description
     -----------
@@ -367,8 +364,6 @@ def write_daily_radiation(
     ----------
     data: xr.Dataset
         Daily radaition dataset
-    date: datetime.datetime
-        Date
     path: str
         Directory path to store the .tif file
     """
@@ -376,6 +371,7 @@ def write_daily_radiation(
         path = os.getcwd()
     ts_path = os.path.join(path, "timeseries/daily_radiation")
     os.makedirs(ts_path, exist_ok=True)
+    date = data.attrs["vis_date"]
     filename = os.path.join(ts_path, f"radiation_{date.strftime('%Y%m%d')}.tif")
     row, col = get_row_col(data)
     band = "daily_radiation"
@@ -396,9 +392,7 @@ def write_daily_radiation(
         source_ds.set_band_description(1, band)
 
 
-def write_et_single_date(
-    data: xr.Dataset, date: datetime.datetime, path: str | None = None
-) -> None:
+def write_et_single_date(data: xr.Dataset, path: str | None = None) -> None:
     """
     Description
     -----------
@@ -408,8 +402,6 @@ def write_et_single_date(
     ----------
     data: xr.Dataset
         Daily radaition dataset
-    date: datetime.datetime
-        Date
     path: str
         Directory to store the .tif file
     """
@@ -417,6 +409,7 @@ def write_et_single_date(
         path = os.getcwd()
     ts_path = os.path.join(path, "timeseries/et")
     os.makedirs(ts_path, exist_ok=True)
+    date = data.attrs["vis_date"]
     file_name = os.path.join(
         ts_path, f"et_single_date_{date.strftime('%Y%m%d')}.tif"
     )

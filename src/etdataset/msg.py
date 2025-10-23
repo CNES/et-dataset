@@ -890,7 +890,7 @@ def add(
 
 def download_date_by_date(
     date1_str: str, date2_str: str, roi_path: str, output: str | None = None
-) -> list:
+) -> pd.core.indexes.datetimes.DatetimeIndex:
     """import datetime as dt
     Description
     -----------
@@ -921,7 +921,7 @@ def download_date_by_date(
     return time
 
 
-def read_as_dataset(
+def create_daily_radiation_dataset(
     date: dt.datetime, roi_path: str, grid: xr.Dataset, path: str | None = None
 ) -> xr.Dataset:
     """
@@ -965,9 +965,10 @@ def read_as_dataset(
     path_file = os.path.join(product_path, filename)
     if not os.path.isfile(path_file):
         raise OSError(
-            f"Data file not found: {path_file}. Please download data before reading it"
+            f"Data file not found: {path_file}. Please download data before"
         )
     # Project MSG data on the ROI
+    grid.attrs["vis_date"] = date.date()
     dst = add_daily_data(
         data=grid,
         product=path_file,

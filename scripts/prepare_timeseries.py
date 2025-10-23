@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 import argparse
+import datetime as dt
 import os
 
 from etdataset.api import prepare_daily_radiation, prepare_et_single_date
+from etdataset.cli import CLIException
+from etdataset.logging import LoggerManager
+
+logger = LoggerManager.get_logger(__name__)
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -13,16 +18,18 @@ def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser("Prepare timeseries")
 
     parser.add_argument(
-        "--t1",
+        "-s",
+        "--start_date",
         type=str,
-        help="start date in str type",
+        help="start date (YY-MM-DD)",
         required=True,
     )
 
     parser.add_argument(
-        "--t2",
+        "-e",
+        "--end_date",
         type=str,
-        help="end date in str type",
+        help="end date (YY-MM-DD)",
         required=True,
     )
 
@@ -37,10 +44,9 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-o",
         "--output",
-        default=os.getcwd(),
         type=str,
         help="Output directory",
-        required=False,
+        default=os.getcwd(),
     )
 
     return parser
@@ -51,11 +57,37 @@ def prepare_timeseries() -> None:
     parser = get_parser()
     args = parser.parse_args()
 
+    # Check
+    try:
+        min_date = dt.datetime.strptime(args.start_date, "%Y-%m-%d")
+    except ValueError:
+        raise CLIException(
+            "Error: The format for start date must be Year-Month-Day"
+        )
+    try:
+        max_date = dt.datetime.strptime(args.end_date, "%Y-%m-%d")
+    except ValueError:
+        raise CLIException(
+            "Error: The format for end date must be Year-Month-Day"
+        )
+    if max_date < min_date:
+        raise CLIException("End date must be more recent than start date")
+    if not os.path.isfile(args.roi):
+        raise FileNotFoundError(f"File not found {args.roi}")
+    if not os.path.isdir(args.output):
+        logger.debug(f"Create output path: {args.output}")
+        os.makedirs(args.output, exist_ok=True)
+
+    # Run
     # Prepare daily radiation files
-    prepare_daily_radiation(args.t1, args.t2, args.roi, args.output)
+    prepare_daily_radiation(
+        args.start_date, args.end_date, args.roi, args.output
+    )
 
     # Prepare et single dat files
-    prepare_et_single_date(args.t1, args.t2, args.roi, args.output)
+    prepare_et_single_date(
+        args.start_date, args.end_date, args.roi, args.output
+    )
 
 
 if __name__ == "__main__":
