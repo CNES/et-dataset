@@ -92,7 +92,7 @@ select = [
   "DTZ004",
   #"DTZ005", datime not use with zone
   "DTZ006",
-  #"DTZ007", datetime not use with zone 
+  #"DTZ007", datetime not use with zone
   "DTZ011",
   "DTZ012",
   "E101",
