@@ -1,23 +1,45 @@
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0  # Use the ref you want to point at
+    hooks:
+    - id: trailing-whitespace
+    - id : check-added-large-files
+      args: ['--maxkb=8000']
+    - id: end-of-file-fixer
+    - id: check-yaml
+    - id: check-json
+
+
   - repo: local
     hooks:
-    - id: hatch-fmt
-      name: hatch-fmt
-      entry: .pixi/envs/default/bin/hatch fmt
+    - id: ruff
+      name: Run ruff
+      entry: pixi run --no-install -e dev ruff check
       language: system
       types_or: [python, pyi, jupyter]
       stages: [pre-commit]
+      args: [--force-exclude]
+
+    - id: mypy
+      name: Run mypy
+      entry: pixi run --no-install -e dev mypy
+      language: system
+      args: ["--ignore-missing-imports", "--scripts-are-modules"]
+      require_serial: true
+      files: \.py$
+      types: [python]
+      stages: [pre-commit]
 
     - id: jupyter-nb-clear-output
-      name: jupyter-nb-clear-output
+      name: Clear jupyter notebook
       files: \.ipynb$
       stages: [pre-commit]
       language: system
       types: [jupyter]
-      entry: .pixi/envs/default/bin/jupyter nbconvert --ClearOutputPreprocessor.enabled=True --inplace
-    
+      entry: pixi run --no-install -e dev jupyter nbconvert --ClearOutputPreprocessor.enabled=True --inplace
+
     - id: check-file-size
-      name: check-file-size
+      name: Check file size
       entry: hooks/check-file-size.sh
       language: script
       stages: [pre-commit]

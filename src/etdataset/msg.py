@@ -886,3 +886,106 @@ def add(
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
     return updated_data
+
+
+def download_date_by_date(
+    date1: dt.datetime,
+    date2: dt.datetime,
+    roi_bbox: rio.BoundingBox,
+    roi_crs: CRS,
+    output: str | None = None,
+) -> pd.DatetimeIndex:
+    """import datetime as dt
+    Description
+    -----------
+    Download MSG products day by day from a start and end date
+
+    Parameters
+    ----------
+    date1_str: str
+        Start date
+    date2_str: dt.datetime
+        End date
+    roi_bbox: rio.BoundingBox
+        ROI bounding box
+    roi_crs: CRS
+        ROI CRS
+    output: str
+        Directory path to store data
+
+    Return
+    ------
+    time: pandas.core.indexes.datetimes.DatetimeIndex
+        list of dates beetween start and end date
+    """
+    roi_bbox_latlon = utils.bb_transform(
+        source_crs=str(roi_crs), target_crs="EPSG:4326", bounding_box=roi_bbox
+    )
+    time = xr.date_range(date1, freq="1D", end=date2)
+    for t in time:
+        download(t.to_pydatetime(), roi_bbox_latlon, output)
+    return time
+
+
+def create_daily_radiation_dataset(
+    date: dt.datetime, grid: xr.Dataset, path: str | None = None
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    Read MSG daily solar radiation .nc file as dataset,
+    projecting data on a given ROI
+
+    Parameters
+    ----------
+    date: datetime.datetime
+        Date
+    grid: xr.Dataset
+        grid centered on the ROI
+    path: str
+        Directory path where MSG data have been downloaded
+
+    Return
+    ------
+    dst_rad: xr.Dataset
+        Daily radiation dataset
+    """
+    # Get the path of the subdirectory where data have been downloaded
+    if path is None:
+        path = os.getcwd()
+    msg_path = os.path.join(path, "MSG_data")
+    if grid.rio.crs is None:
+        if grid.attrs.get("crs") is not None:
+            crs = grid.attrs["crs"]
+            grid = grid.rio.write_crs(crs)
+        raise ValueError("crs attribute is missing in dataset")
+    crs = grid.rio.crs
+    bounds = rio.coords.BoundingBox(*grid.rio.bounds())
+    roi_bbox_latlon = utils.bb_transform(
+        source_crs=str(crs), target_crs="EPSG:4326", bounding_box=bounds
+    )
+    sat = get_satellite(roi_bbox_latlon)
+    product_path = os.path.join(
+        msg_path, f"{sat.key}_{date.strftime('%Y-%m-%d')}"
+    )
+    # Get the path of the MSG daily solar radiation file
+    filename = get_filename(
+        sat,
+        product=MSGProduct.DAILY_SURFACE_SOLAR_RADIATION_DOWNWARD,
+        date=date,
+        fmt=MSGFormat.NETCDF,
+    )
+    path_file = os.path.join(product_path, filename)
+    if not os.path.isfile(path_file):
+        raise OSError(
+            f"Data file not found: {path_file}. Please download data before"
+        )
+    # Project MSG data on the ROI
+    grid.attrs["vis_date"] = date.date()
+    dst = add_daily_data(
+        data=grid,
+        product=path_file,
+    ).rename_vars({"daily_msg": "daily_radiation"})
+    # Select daily_radiation variable
+    dst_rad = dst[["daily_radiation"]]
+    return dst_rad

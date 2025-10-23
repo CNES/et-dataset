@@ -104,7 +104,7 @@ def prepare_landsat(
 
         # Create dataset
         data = create_dataset(
-            vis_path=product,
+            vis_path=str(product),
             roi_bbox=roi_bbox,
             roi_crs=roi_crs,
             resolution=90,
@@ -125,7 +125,7 @@ def prepare_landsat(
         logger.info("Add auxilary data: OK")
 
         # Write data
-        write_dataset(updated_data, directory=etdataset_path)
+        write_dataset(updated_data, directory=str(etdataset_path))
         logger.info(f"Process product {product}:OK")
 
 

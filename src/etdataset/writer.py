@@ -352,3 +352,81 @@ def write_dataset_to_netcdf(
     xrds = xrds.rio.write_crs(crs)  # write crs if necessary
     # Save to netCDF4
     xrds.to_netcdf(os.path.join(directory, filename))
+
+
+def write_daily_radiation(data: xr.Dataset, path: str | None = None) -> None:
+    """
+    Description
+    -----------
+    Create .tif file from a daily radiation dataset
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Daily radaition dataset
+    path: str
+        Directory path to store the .tif file
+    """
+    if path is None:
+        path = os.getcwd()
+    ts_path = os.path.join(path, "timeseries/daily_radiation")
+    os.makedirs(ts_path, exist_ok=True)
+    date = data.attrs["vis_date"]
+    filename = os.path.join(ts_path, f"radiation_{date.strftime('%Y%m%d')}.tif")
+    row, col = get_row_col(data)
+    band = "daily_radiation"
+    with rio.open(
+        filename,
+        mode="w+",
+        driver="GTiff",
+        width=col,
+        height=row,
+        count=1,
+        dtype=rio.dtypes.float32,
+        nodata=np.nan,
+        crs=data.rio.crs,
+        transform=data.rio.transform(),
+    ) as source_ds:
+        source_ds.colorinterp = [ColorInterp.gray]
+        source_ds.write_band(1, data[band].data)
+        source_ds.set_band_description(1, band)
+
+
+def write_et_single_date(data: xr.Dataset, path: str | None = None) -> None:
+    """
+    Description
+    -----------
+    Create .tif file from a daily evapotranspiration dataset with flags
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Daily radaition dataset
+    path: str
+        Directory to store the .tif file
+    """
+    if path is None:
+        path = os.getcwd()
+    ts_path = os.path.join(path, "timeseries/et")
+    os.makedirs(ts_path, exist_ok=True)
+    date = data.attrs["vis_date"]
+    file_name = os.path.join(
+        ts_path, f"et_single_date_{date.strftime('%Y%m%d')}.tif"
+    )
+    row, col = get_row_col(data)
+    bands = list(data.data_vars)
+    with rio.open(
+        file_name,
+        mode="w+",
+        driver="GTiff",
+        width=col,
+        height=row,
+        count=2,
+        dtype=rio.dtypes.float32,
+        nodata=np.nan,
+        crs=data.rio.crs,
+        transform=data.rio.transform(),
+    ) as source_ds:
+        for i, band in enumerate(bands, start=1):
+            source_ds.write_band(i, data[band].data)
+            source_ds.set_band_description(i, band)

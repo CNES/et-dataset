@@ -1,21 +1,21 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/default/bin/python",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/dev/bin/python",
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.fixAll": "explicit",
-      "source.organizeImports": "explicit",
+      "source.organizeImports": "explicit"
     },
     "notebook.formatOnSave.enabled": true,
     "notebook.codeActionsOnSave": {
       "notebook.source.fixAll": "explicit",
-      "notebook.source.organizeImports": "explicit",
+      "notebook.source.organizeImports": "explicit"
     },
     "pylint.enabled": false,
     "flake8.enabled": false,
     "python.testing.pytestEnabled": true,
-    "python.testing.pytestPath": "${workspaceFolder}/.pixi/envs/default/bin/pytest",
+    "python.testing.pytestPath": "${workspaceFolder}/.pixi/envs/dev/bin/pytest",
     "python.testing.unittestEnabled": false,
     "mypy-type-checker.args": [
         "--ignore-missing-imports",
@@ -25,12 +25,12 @@
     "files.watcherExclude": {
         "**/.git/objects/**": true,
         "**/.git/subtree-cache/**": true,
-        "**/.pixi/**": true,
+        "**/.pixi/**": true
     },
     "ruff.enable": true,
     "ruff.configuration": "./ruff.toml",
     "python.analysis.extraPaths": [
-      "./.pixi/envs/default/lib/"
+      "./.pixi/envs/dev/lib/"
     ],
     "python.testing.pytestArgs": [
       "tests"

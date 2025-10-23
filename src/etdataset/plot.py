@@ -1,3 +1,4 @@
+# type: ignore
 #
 # Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales /
 #             Université Paul Sabatier (UT3)
@@ -5,6 +6,7 @@
 """
 Functions for plotting
 """
+# Skip this file with mypy
 
 import math
 

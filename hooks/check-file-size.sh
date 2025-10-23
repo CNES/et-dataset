@@ -44,4 +44,3 @@ then
 	  echo Commit aborted
     exit 1;
 fi
-
