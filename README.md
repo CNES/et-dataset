@@ -20,7 +20,7 @@ Python package to prepare datasets for evapotranspiration processing:
 
 ## Pre-requistes
 
-To search and download products and auxiliary data, you need accounts and set environment variables corresponding to login and password for each catalog: 
+To search and download products and auxiliary data, you need accounts and set environment variables corresponding to login and password for each catalog:
 * [USGS machine to machine](https://m2m.cr.usgs.gov/): required to define `USGS_USERNAME` and `USGS_PASSWORD` (the api key is used as a password here)
 * [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
@@ -39,22 +39,17 @@ The installation requires to have:
 git clone https://src.koda.cnrs.fr/trishna/et-dataset.git
 ```
 
-### Install dependencies
+### Install
 
-The dependencies are installed by pixi. 
+The dependencies are installed by pixi.
 ```console
 cd et-dataset
 pixi install
-``` 
+```
 
 To activate the environment
 ```console
 pixi shell
-```
-
-### Install et-dataset
-```console
-pip install .
 ```
 
 To use notebook
@@ -64,10 +59,10 @@ pip install .[notebook]
 
 To install in a developper mode
 ```console
-pip install -e .[notebook]
+pixi install -e dev
 ```
 
-### Update 
+### Update
 
 For a classic installation
 ```console
@@ -81,7 +76,7 @@ For a developper installtion
 ```console
 cd et-dataset
 git pull
-pixi shell
+pixi shell -e dev
 ```
 
 ## Usage
@@ -126,7 +121,7 @@ The command enables to download products from a product list from catalogs:
 * For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
 The product list must be provided in a CSV file format.
-The required column are *Product_name* and *URL* which must contain the URLs to download a product. 
+The required column are *Product_name* and *URL* which must contain the URLs to download a product.
 The *URL* column can be a str or a list of str.
 
 #### Command line
@@ -151,7 +146,7 @@ The command enables to download auxiliary data from a product list coming from:
 * [Climate Data Store](https://cds.climate.copernicus.eu/)
 
 The product list must be provided in a CSV file format.
-The required column is *Date* which must contain the date of the products. 
+The required column is *Date* which must contain the date of the products.
 
 #### Command line
 ```bash
@@ -214,7 +209,7 @@ options:
 #### Notebooks
 
 * [select_ecols8_matches.ipynb](notebooks/select_ecols8_matches.ipynb): Find matches between ECOSTRESS/Sentinel2
-* [select_ecos2_matches.ipynb](notebooks/select_ecos2_matches.ipynb): Find matches between ECOSTRESS/Landsat 
+* [select_ecos2_matches.ipynb](notebooks/select_ecos2_matches.ipynb): Find matches between ECOSTRESS/Landsat
 
 ### Create command
 
@@ -226,14 +221,14 @@ Compatible VIS products are:
 
 Compatible TIR products are:
 * Landsat L2A
-* ECOSTRESS collectin V2 only 
+* ECOSTRESS collectin V2 only
 
 LAI is calculated from the spectral reflectances with the [pyBVNET](https://forge.ird.fr/cesbio/modelisation/pybvnet) package, using the BVNET neural networks.
 
 Albedo is computed with these following formula:
 
 * For Landsat (*Liang, S. Narrowband to Broadband Conversions of Land Surface Albedo I: Algorithms. Remote Sens. Environ. 2001, 76, 213–238.*)
-```math 
+```math
 Albedo = 0.356 * band_B2 + 0.130 * band_B4 + 0.373 * band_5 + 0.085 * band_B6 + 0.072 * band_B7 - 0.0018
 ```
 * For Sentinel2 (*Bonafoni and al., Albedo Retrieval From Sentinel-2 by New Narrow-to-Broadband Conversion Coefficients, IEEE Geoscience and Remote Sensing Letters, 2020*)
@@ -264,9 +259,9 @@ options:
 #### Notebooks
 
 **Warning: Notebooks have to be updated**
-* [create_ecols8_dataset.ipynb](notebooks/create_ecols8_dataset.ipynb): Create dataset with ECOSTRESS and Landsat 
-* [create_ecos2_dataset.ipynb](notebooks/create_ecos2_dataset.ipynb): Create dataset with ECOSTRESS and Sentinel2 
-* [create_ls8_dataset.ipynb](notebooks/create_ls8_dataset.ipynb): Create dataset with Landsat 
+* [create_ecols8_dataset.ipynb](notebooks/create_ecols8_dataset.ipynb): Create dataset with ECOSTRESS and Landsat
+* [create_ecos2_dataset.ipynb](notebooks/create_ecos2_dataset.ipynb): Create dataset with ECOSTRESS and Sentinel2
+* [create_ls8_dataset.ipynb](notebooks/create_ls8_dataset.ipynb): Create dataset with Landsat
 
 ## Data preparation
 
@@ -304,7 +299,7 @@ options:
   --mnt_path MNT_PATH   Directory of DEM tiles
 ```
 
-Example 
+Example
 ```bash
 python scripts/prepare_landsat.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2023-03-01" -e "2023-03-12" -o notebooks/out --mnt_path $HOME/data/MNT/DEM_Copercinus_30m/
 ```

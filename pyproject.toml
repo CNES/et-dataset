@@ -1,13 +1,9 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "et-dataset"
-dynamic = ["version"]
+version = "0.0.1"
 description = 'Data preparation for ET dataset'
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "LicenseRef-Public-Domain"
 keywords = []
 authors = [
@@ -16,8 +12,6 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
@@ -39,7 +33,7 @@ dependencies = [
   "earthaccess",
   "sensorsio",
   "theia-picker",
-  "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git",
+  "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git@75d4a534afd5361f3d90637a3574494fbf5d194e",
   "scikit-image",
   "requests",
   "pyarrow",
@@ -47,10 +41,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "hatch",
   "pytest",
   "pip-review",
   "pre-commit",
+  "ruff",
+  "mypy",
 ]
 notebook = [
   "matplotlib",
@@ -60,10 +55,14 @@ notebook = [
 ]
 
 [project.urls]
-Source = "https://gitlab.cnes.fr/cesbio/et-dataset"
+Source = "https://src.koda.cnrs.fr/trishna/et-dataset"
 
 [project.scripts]
 et-dataset = "etdataset.cli:etdataset"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -71,46 +70,22 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/etdataset"]
 
-[tool.hatch.version]
-path = "src/etdataset/__about__.py"
-
-[tool.hatch.envs.hatch-static-analysis]
-config-path = "none"
-dependencies = ["ruff==0.11.1"]
-
-[tool.hatch.envs.default]
-dependencies = [
-  "coverage[toml]>=6.5",
-  "pytest",
-]
-[tool.hatch.envs.default.scripts]
-run = "pytest{env:HATCH_TEST_ARGS:} {args}"
-run-cov = "coverage run -m pytest{env:HATCH_TEST_ARGS:} {args}"
-cov-combine = "coverage combine"
-cov-report = "coverage report"
 
 [tool.pytest.ini_options]
 filterwarnings = [
   "ignore",
   "default:::etdataset",
         ]
-
-[[tool.hatch.envs.all.matrix]]
-python = ["3.10", "3.11", "3.12"]
-
-[tool.hatch.envs.types]
-dependencies = [
-  "mypy>=1.0.0",
-]
-[tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/etdataset tests}"
+testpaths=["tests"]
 
 [tool.coverage.run]
-source_pkgs = ["etdataset", "tests"]
+source = ["etdataset", "tests"]
 branch = true
 parallel = true
 omit = [
   "src/etdataset/__about__.py",
+    "./.pixi/*",
+  "./hooks/*",
 ]
 
 [tool.coverage.paths]
@@ -125,9 +100,6 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-exclude = [
-    "plot.py",
-        ]
 plugins = ["numpy.typing.mypy_plugin"]
 disable_error_code = ["import-untyped"]
 
@@ -158,8 +130,7 @@ et-dataset = { path = ".", editable = true }
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
-dev = { features = ["dev"], solve-group = "default" }
-notebook = { features = ["notebook"], solve-group = "default" }
+dev = { features = ["dev","notebook"], solve-group = "default" }
 
 [tool.pixi.tasks]
 
@@ -171,5 +142,3 @@ hdf4 = ">=4.2.15,<5"
 hdf5 = ">=1.14.4,<2"
 netcdf4 = ">=1.7.2,<2"
 h5netcdf = ">=1.6.1,<2"
-ipykernel = ">=7.0.1,<8"
-matplotlib = ">=3.10.7,<4"
