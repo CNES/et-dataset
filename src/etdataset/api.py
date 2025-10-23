@@ -11,12 +11,12 @@ from pyproj import CRS
 from sensorsio import utils
 
 from etdataset import era5, msg
+from etdataset.era5 import create_daily_et_dataset
 from etdataset.era5 import download_date_by_date as download_et
-from etdataset.era5 import read_as_dataset as read_et
 from etdataset.interpolation import create_grid_dataset
 from etdataset.logging import LoggerManager
+from etdataset.msg import create_daily_radiation_dataset
 from etdataset.msg import download_date_by_date as download_radiation
-from etdataset.msg import read_as_dataset as read_radiation
 from etdataset.provider import Collection, get_provider
 from etdataset.reader import get_product_reader
 from etdataset.selection import filter_with_roi, select_products
@@ -427,37 +427,54 @@ def download_aux(
 
 
 def prepare_daily_radiation(
-    t1: str, t2: str, roi_path: str, path: str | None = None
+    start_date: str, end_date: str, roi_path: str, output: str | None = None
 ) -> None:
     """
     Description
     -----------
     For each day from a start to a end date:
     - Download MSG data,
-    - Read it a dataset projected on a given ROI with a resolution of 3km per pixel,
+    - Read it a dataset projected on a given ROI
+    with a resolution of 3km per pixel
     - Create a corresponding daily radiation .tif file.
 
     Parameters
     ----------
-    t1: str
-        Start date
-    t2: dt.datetime
-        End date
+    start_date: str
+        Start date (YYYY-MM-DD)
+    end_date: str
+        End date (YYYY-MM-DD)
     roi_path: str
-        Path to the ROI shapefile .shp
+        Path of the region of interest in Shapefile format
     path: str
         Directory path to store .tif files
+        default: current directory)
     """
+    # Check
+    min_date = parse_date(start_date)
+    max_date = parse_date(end_date)
+    if output is None:
+        output = os.getcwd()
+    if max_date < min_date:
+        raise APIException("End date must be more recent than start date")
+    if not os.path.isfile(roi_path):
+        raise FileNotFoundError(f"File not found {roi_path}")
+    if not os.path.isdir(output):
+        logger.debug(f"Create output path: {output}")
+        os.makedirs(output, exist_ok=True)
+    # Run
     roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
     grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
-    date_list = download_radiation(t1, t2, roi_path)
+    date_list = download_radiation(min_date, max_date, roi_path)
     for date in date_list:
-        dst = read_radiation(date.to_pydatetime(), roi_path, grid)
-        write_daily_radiation(dst, date, path)
+        dst = create_daily_radiation_dataset(
+            date.to_pydatetime(), roi_path, grid
+        )
+        write_daily_radiation(dst, output)
 
 
 def prepare_et_single_date(
-    t1: str, t2: str, roi_path: str, path: str | None = None
+    start_date: str, end_date: str, roi_path: str, output: str | None = None
 ) -> None:
     """
     Description
@@ -472,18 +489,31 @@ def prepare_et_single_date(
 
     Parameters
     ----------
-    t1: str
-        Start date
-    t2: dt.datetime
-        End date
+    start_date: str
+        Start date (YYYY-MM-DD)
+    end_date: str
+        End date (YYYY-MM-DD)
     roi_path: str
-        Path to the ROI shapefile .shp
-    path: str
-        Directory path to store .tif files
+        Path of the region of interest in Shapefile format
+    output: str
+        Directory path to store .tif files (default: current directory)
     """
+    # Check
+    min_date = parse_date(start_date)
+    max_date = parse_date(end_date)
+    if output is None:
+        output = os.getcwd()
+    if max_date < min_date:
+        raise APIException("End date must be more recent than start date")
+    if not os.path.isfile(roi_path):
+        raise FileNotFoundError(f"File not found {roi_path}")
+    if not os.path.isdir(output):
+        logger.debug(f"Create output path: {output}")
+        os.makedirs(output, exist_ok=True)
+    # Run
     roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
     grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
-    date_list = download_et(t1, t2)
+    date_list = download_et(min_date, max_date, ["total_evaporation"])
     for date in date_list:
-        dst = read_et(date.to_pydatetime(), grid)
-        write_et_single_date(dst, date, path)
+        dst = create_daily_et_dataset(date.to_pydatetime(), grid)
+        write_et_single_date(dst, output)
