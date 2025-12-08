@@ -37,6 +37,8 @@ dependencies = [
   "scikit-image",
   "requests",
   "pyarrow",
+  "numcodecs",
+  "zarr",
 ]
 
 [project.optional-dependencies]

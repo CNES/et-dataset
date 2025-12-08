@@ -161,14 +161,10 @@ def add_aux(
     updated_data = msg.add(data=data, path=path)
     updated_data = era5.add(
         data=updated_data,
-        dataset=era5.ERA5Dataset.ERA5LAND,
-        variables=[era5.ERA5Var.TEMPERATURE, era5.ERA5Var.DEWPOINT_TEMPERATURE],
-        path=path,
-    )
-    updated_data = era5.add(
-        data=updated_data,
         dataset=era5.ERA5Dataset.ERA5,
         variables=[
+            era5.ERA5Var.TEMPERATURE,
+            era5.ERA5Var.DEWPOINT_TEMPERATURE,
             era5.ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY,
             era5.ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY,
         ],

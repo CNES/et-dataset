@@ -13,6 +13,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime, time
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from time import sleep
 
@@ -22,7 +23,6 @@ import rasterio as rio
 import xarray as xr
 from pyproj import CRS
 
-from etdataset.dem import compute_egm96_height
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
@@ -67,7 +67,6 @@ class ERA5Dataset(DatasetInfo, Enum):
             "total_column_water",
             "total_precipitation",
             "total_column_water_vapour",
-            "geopotential",
         ],
     )
     ERA5LAND = (
@@ -238,6 +237,46 @@ def read(product: str) -> xr.Dataset:
             .drop_vars("number")
         )
     return xr.open_dataset(product)
+
+
+@lru_cache
+def get_era5_dem() -> xr.DataArray:
+    """
+    Get DEM for ERA5
+
+    Returns
+    -------
+    dem: xr.DataArray
+        ERA5 DEM
+    """
+    data = xr.open_dataarray(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "geopotential_era5.nc",
+        )
+    )
+    return data / G_CST
+
+
+@lru_cache
+def get_era5land_dem() -> xr.DataArray:
+    """
+    Get DEM for ERA5Land
+
+    Returns
+    -------
+    dem: xr.DataArray
+        ERA5 DEM
+    """
+    data = xr.open_dataarray(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "geopotential_era5land.zarr",
+        )
+    )
+    return data / G_CST
 
 
 def interpolate_time(
@@ -565,7 +604,7 @@ def download(
         era5_path,
         f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
     )
-    # Skio download if file already exists
+    # Skip download if file already exists
     if os.path.exists(filename):
         logger.info(f"File {filename} already exits. Skip download.")
         return
@@ -628,7 +667,7 @@ def rescale_temperature_with_lapserate(
     era5_data: xr.DataArray
         Data to rescaled
     era5_dem: xr.DataArray
-        DEM correspodning to data to rescaled
+        DEM corresponding to data to rescaled
     lapse_rate: float
         Lapse rate
     key: str
@@ -792,9 +831,16 @@ def add(
         raise OSError(f"ERA5 data not found: {product_path}")
     # Read data
     era5_xrds = read(product=product_path)
+    era5_xrds = era5_xrds[[var.key for var in variables]]
     logger.debug("Read ERA5 product:OK")
+    logger.debug(f"Variables : {list(era5_xrds.data_vars)}")
     # Process accumulated variables for ERA5land dataset
-    if dataset == ERA5Dataset.ERA5LAND:
+    if (
+        dataset == ERA5Dataset.ERA5LAND
+        and ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key in era5_xrds.data_vars
+        and ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key
+        in era5_xrds.data_vars
+    ):
         era5_xrds[ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key] = era5_xrds[
             ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key
         ].diff(dim="time")
@@ -804,19 +850,21 @@ def add(
     # Interpolate time
     era5_xrds = interpolate_time(data=era5_xrds, date=date)
     logger.debug("Interpolate ERA5 product:OK")
-    # Check DEM
-    if (
-        dataset == ERA5Dataset.ERA5
-        and ERA5Var.GEOPOTENTIAL.key in era5_xrds.data_vars
-    ):
-        era5_dem = era5_xrds[ERA5Var.GEOPOTENTIAL.key] / G_CST
-        logger.warning(
-            "DEM is missing in ERA5 data: No variables 'height' in the dataset"
-        )
+    # Add DEM
+    if dataset == ERA5Dataset.ERA5:
+        era5_dem = get_era5_dem()
+        era5_dem = xr.DataArray(
+            era5_dem.data,
+            dims=era5_xrds.dims,
+            coords=era5_xrds.coords,
+        ).rio.write_crs(CRS(4326))
     elif dataset == ERA5Dataset.ERA5LAND:
-        # Compute height
-        era5_dem = compute_egm96_height(era5_xrds)
-        logger.debug("Compute EGM96 height")
+        era5_dem = get_era5land_dem()
+        era5_dem = xr.DataArray(
+            era5_dem.data,
+            dims=era5_xrds.dims,
+            coords=era5_xrds.coords,
+        ).rio.write_crs(CRS(4326))
     else:
         era5_dem = None
     ##########
