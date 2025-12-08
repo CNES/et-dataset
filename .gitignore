@@ -20,6 +20,9 @@ download/
 *.mat
 *.nc
 *.zip
+*.zarr/
+!src/etdataset/data/geopotential_era5.nc
+!src/etdataset/data/geopotential_era5land.zarr/
 
 # pixi environments
 .pixi/
