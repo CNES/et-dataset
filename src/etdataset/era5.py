@@ -579,6 +579,7 @@ def download(
         "month": date.month,
         "day": date.day,
         "time": [
+            "00:00",
             "01:00",
             "02:00",
             "03:00",
@@ -834,7 +835,7 @@ def add(
             dem=dem,
             era5_data=era5_xrds.get(ERA5Var.TEMPERATURE.key, None),
             era5_dem=era5_dem,
-            lapse_rate=0.0065,
+            lapse_rate=-0.0065,
             key="ta",
             description="2m air temperature",
         )
@@ -847,7 +848,7 @@ def add(
             dem=dem,
             era5_data=era5_xrds.get(ERA5Var.DEWPOINT_TEMPERATURE.key, None),
             era5_dem=era5_dem,
-            lapse_rate=0.0065,
+            lapse_rate=-0.0065,
             key="tdp",
             description="dewpoint temperature",
         )

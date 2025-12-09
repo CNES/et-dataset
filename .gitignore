@@ -11,6 +11,11 @@ __pycache__/
 .ipynb_checkpoints/
 out/
 download/
+rasters_COP30/
+ICOS/
+mnt/
+csv/
+data/
 
 # Data
 *.tif

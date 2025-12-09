@@ -24,7 +24,6 @@ dependencies = [
   "numpy",
   "pandas",
   "pyproj",
-  "rasterio",
   "shapely",
   "psutil",
   "fiona",
@@ -142,3 +141,5 @@ hdf4 = ">=4.2.15,<5"
 hdf5 = ">=1.14.4,<2"
 netcdf4 = ">=1.7.2,<2"
 h5netcdf = ">=1.6.1,<2"
+rasterio = ">=1.4,<2"
+line_profiler = ">=5.0.0,<6"
