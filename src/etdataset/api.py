@@ -11,7 +11,10 @@ from pyproj import CRS
 from sensorsio import utils
 
 from etdataset import era5, msg
-from etdataset.era5 import create_daily_et_dataset
+from etdataset.era5 import (
+    create_daily_et_dataset,
+    create_daily_explanatory_dataset,
+)
 from etdataset.era5 import download_date_by_date as download_et
 from etdataset.interpolation import create_grid_dataset
 from etdataset.logging import LoggerManager
@@ -25,7 +28,11 @@ from etdataset.utils import (
     get_bbox_from_mgrs_tile,
     get_utm_bbox_from_roi,
 )
-from etdataset.writer import write_daily_radiation, write_et_single_date
+from etdataset.writer import (
+    write_daily_explanatory,
+    write_daily_radiation,
+    write_et_single_date,
+)
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -161,10 +168,14 @@ def add_aux(
     updated_data = msg.add(data=data, path=path)
     updated_data = era5.add(
         data=updated_data,
+        dataset=era5.ERA5Dataset.ERA5LAND,
+        variables=[era5.ERA5Var.TEMPERATURE, era5.ERA5Var.DEWPOINT_TEMPERATURE],
+        path=path,
+    )
+    updated_data = era5.add(
+        data=updated_data,
         dataset=era5.ERA5Dataset.ERA5,
         variables=[
-            era5.ERA5Var.TEMPERATURE,
-            era5.ERA5Var.DEWPOINT_TEMPERATURE,
             era5.ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY,
             era5.ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY,
         ],
@@ -513,3 +524,59 @@ def prepare_et_single_date(
     for date in date_list:
         dst = create_daily_et_dataset(date.to_pydatetime(), grid, output)
         write_et_single_date(dst, output)
+
+
+def prepare_daily_explanatory(
+    start_date: str, end_date: str, roi_path: str, output: str | None = None
+) -> None:
+    """
+    Description
+    -----------
+    For each day from a start to a end date:
+    - Download ERA5-Land regression model explanatory products,
+    - Read it as a dataset, projecting on a given ROI
+    with a resolution of 3km per pixel,
+    - Create a corresponding explanatory_YYYYMMDD.tif file.
+
+    Parameters
+    ----------
+    start_date: str
+        Start date (YYYY-MM-DD)
+    end_date: str
+        End date (YYYY-MM-DD)
+    roi_path: str
+        Path of the region of interest in Shapefile format
+    output: str
+        Directory path to store .tif files (default: current directory)
+    """
+    # Check
+    min_date = parse_date(start_date)
+    max_date = parse_date(end_date)
+    if output is None:
+        output = os.getcwd()
+    if max_date < min_date:
+        raise APIException("End date must be more recent than start date")
+    if not os.path.isfile(roi_path):
+        raise FileNotFoundError(f"File not found {roi_path}")
+    if not os.path.isdir(output):
+        logger.debug(f"Create output path: {output}")
+        os.makedirs(output, exist_ok=True)
+    # Run
+    roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
+    grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
+    date_list = download_et(
+        min_date,
+        max_date,
+        [
+            "total_precipitation",
+            "surface_runoff",
+            "skin_reservoir_content",
+            "volumetric_soil_water_layer_1",
+        ],
+        output,
+    )
+    for date in date_list:
+        dst = create_daily_explanatory_dataset(
+            date.to_pydatetime(), grid, output
+        )
+        write_daily_explanatory(dst, output)

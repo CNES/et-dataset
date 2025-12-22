@@ -50,7 +50,7 @@ def write_dataset(
     """
     row, col = get_row_col(xrds)
     if bands is None:
-        bands = list(xrds.data_vars)
+        bands = [str(b) for b in xrds.data_vars]
     else:
         bands = [i for i in bands if i in xrds.data_vars]
     if (
@@ -143,54 +143,13 @@ def write_dataset(
                 source_ds.set_band_description(1, band)
 
 
-def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
-    row, col = get_row_col(xrds)
-    if xrds.attrs["vis"] == xrds.attrs["tir"]:
-        filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
-    else:
-        filename = (
-            f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
-            f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
-        )
-    if xrds.attrs.get("tile", None) is not None:
-        filename += f"_{xrds.attrs['tile']}"
-    filename += ".tif"
-    try:
-        dtype = xrds[band].dtype
-    except KeyError:
-        raise ValueError(f"Band {band} not in dataset")
-    # Get projection
-    if xrds.attrs.get("crs", None) is not None:
-        crs = xrds.attrs["crs"]
-        transform = xrds.attrs["transform"]
-    elif hasattr(xrds, "rio"):
-        crs = xrds.rio.crs
-        transform = xrds.rio.transform()
-    else:
-        raise AttributeError("No CRS is defined")
-    with rio.open(
-        os.path.join(directory, filename),
-        mode="w+",
-        driver="GTiff",
-        width=col,
-        height=row,
-        count=1,
-        dtype=dtype,
-        nodata=np.nan,
-        crs=crs,
-        transform=transform,
-    ) as source_ds:
-        source_ds.write_band(1, xrds[band].data)
-        source_ds.set_band_description(1, band)
-
-
 def export_matlab(
     xrds: xr.Dataset,
     bands: list[str] | None = None,
     directory: str = os.getcwd(),
 ):
     if bands is None:
-        bands = list(xrds.data_vars)
+        bands = [str(b) for b in xrds.data_vars]
     else:
         bands = [i for i in bands if i in xrds.data_vars]
     if xrds.attrs["vis"] == xrds.attrs["tir"]:
@@ -422,6 +381,46 @@ def write_et_single_date(data: xr.Dataset, path: str | None = None) -> None:
         width=col,
         height=row,
         count=2,
+        dtype=rio.dtypes.float32,
+        nodata=np.nan,
+        crs=data.rio.crs,
+        transform=data.rio.transform(),
+    ) as source_ds:
+        for i, band in enumerate(bands, start=1):
+            source_ds.write_band(i, data[band].data)
+            source_ds.set_band_description(i, band)
+
+
+def write_daily_explanatory(data: xr.Dataset, path: str | None = None) -> None:
+    """
+    Description
+    -----------
+    Create .tif file from a daily explanatory variable dataset
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Daily explanatory variables dataset
+    path: str
+        Directory path to store the .tif file
+    """
+    if path is None:
+        path = os.getcwd()
+    ts_path = os.path.join(path, "explanatory_variables")
+    os.makedirs(ts_path, exist_ok=True)
+    date = data.attrs["vis_date"]
+    file_name = os.path.join(
+        ts_path, f"explanatory_{date.strftime('%Y%m%d')}.tif"
+    )
+    row, col = get_row_col(data)
+    bands = list(data.data_vars)
+    with rio.open(
+        file_name,
+        mode="w+",
+        driver="GTiff",
+        width=col,
+        height=row,
+        count=4,
         dtype=rio.dtypes.float32,
         nodata=np.nan,
         crs=data.rio.crs,
