@@ -25,12 +25,22 @@ from sklearn.metrics import (
     root_mean_squared_error,
 )
 
-from etdataset import era5
 from etdataset.dem import compute_slope_aspect
+from etdataset.era5 import ERA5Dataset, ERA5Var, add, read
 from etdataset.interpolation import create_grid_dataset
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
+
+G_CST = 9.80665
+
+#########################################################
+##                                                     ##
+##                                                     ##
+##                    ICOS STATIONS                    ##
+##                                                     ##
+##                                                     ##
+#########################################################
 
 
 class StationConfig(TypedDict):
@@ -159,7 +169,16 @@ def load_stations_config(csv_path: str) -> dict[str, StationConfig]:
     return stations_cfg
 
 
-def _download(obj, path: str, id_station: str, cookies: dict):
+#####################################
+##                                 ##
+##                                 ##
+##   DOWNLOAD ICOS STATIONS FILE   ##
+##                                 ##
+##                                 ##
+#####################################
+
+
+def _download_file(obj, path: str, id_station: str, cookies: dict):
     """
     Description
     ----------
@@ -250,7 +269,9 @@ def download_file(
     os.makedirs(download_folder, exist_ok=True)
 
     for obj in data_objects:
-        downloaded_file = _download(obj, download_folder, station_id, cookies)
+        downloaded_file = _download_file(
+            obj, download_folder, station_id, cookies
+        )
         if downloaded_file is None:
             continue
         # Unzip the downloaded file
@@ -446,7 +467,7 @@ def add_time_attrs(ds: xr.Dataset, date: dt.datetime) -> xr.Dataset:
     """
     Description
     -----------
-    Add attributes to the data
+    Add time and date attributes to the data
     """
     ds.attrs.update(
         {
@@ -653,7 +674,7 @@ class ICOSStation:
         Determines the appropriate UTM CRS based on the station's latitude and
         longitude.
 
-         It creates an Area of Interest (AOI) around the point and
+        It creates an Area of Interest (AOI) around the point and
         retrieves the corresponding UTM CRS metadata.
 
         Returns
@@ -756,7 +777,276 @@ class ICOSStation:
         }
 
 
-def get_dem_from_roi(
+#########################################################
+##                                                     ##
+##                                                     ##
+##                  VALIDATION (ERA5)                  ##
+##                      lapse_rate                     ##
+##                                                     ##
+##                                                     ##
+#########################################################
+
+
+def _compute_lapse_rate(records: list) -> float:
+    """
+    Description
+    -----------
+    Computes the vertical temperature lapse rate by selecting the two
+    atmospheric levels closest to the station's altitude.
+
+    Parameters
+    ----------
+    records : list
+        List of atmospheric records, where each element is a dictionary
+        containing at least:
+        - 'z'  : altitude of the level (m)
+        - 'T'  : temperature at the level (K)
+        - 'dz' : absolute difference between the level altitude and the
+                station altitude (m)
+    Returns
+    -------
+    lr: float
+         Computed vertical temperature lapse rate (K/m).
+    """
+    df = pd.DataFrame(records).sort_values("z")
+
+    # Sort by altitude difference (dz) to identify
+    # the levels closest to the reference altitude
+    df_sorted = df.sort_values("dz")
+
+    # Select the level closest to the reference altitude
+    df_ref = df_sorted.iloc[0]
+    z_ref = df_ref["z"]  # reference altitude
+    t_ref = df_ref["T"]  # temperature at reference altitude
+
+    # Select the second closest level
+    df_second = df_sorted.iloc[1]
+    z_second = df_second["z"]  # second level altitude
+    t_second = df_second["T"]
+
+    # Compute the vertical temperature gradient (lapse rate)
+    lr = (t_ref - t_second) / (z_ref - z_second)
+    return lr
+
+
+def compute_lapse_rate(
+    station: ICOSStation,
+    output: str,
+    output_csv: str,
+    start_date: dt.date,
+    end_date: dt.date,
+):
+    """
+    Description
+    -----------
+    Compute daily vertical lapse rates for air temperature and dew point
+    temperature at a given ICOS station using ERA5 pressure-level data.
+    e.g : "Elevation Correction of ERA5 Reanalysis Temperature over the
+    Qilian Mountains of China", Peng Zhao and Lihui Qian.
+
+    For each day in the specified period, temperature, relative humidity and
+    geopotential are extracted at multiple pressure levels, interpolated to the
+    station location. Geopotential are converted to altitude.
+
+    The lapse rate is then computed using the two atmospheric levels closest
+    to the station elevation.
+
+    Parameters
+    -----------
+    station : ICOSStation
+        ICOS station object containing latitude, longitude, elevation,
+        and station name.
+    output : str
+        Path to the directory containing downloaded ERA5 pressure-level files.
+    output_csv : str
+        Path to the directory where the output CSV file will be written.
+    start_date : dt.datetime
+        Start date (inclusive).
+    end_date : dt.datetime
+        End date (inclusive).
+
+    Returns
+    --------
+    Results are written to a CSV file containing daily lapse rates for
+    air temperature and dew point temperature.
+    """
+
+    # Get the station's data
+    lat_sta = station.latitude
+    lon_sta = station.longitude
+    z_sta = station.elevation
+
+    # Loop over the requested time period
+    cur_date = start_date
+    lapse_records = []
+    while cur_date <= end_date:
+        filename = f"download_era5_pressure_{cur_date.isoformat()}.zip"
+        logger.info(
+            f"Current file : download_era5_pressure_{cur_date.isoformat()}.zip "
+        )
+        logger.info(f"elevation station : {z_sta}")
+        filepath = os.path.join(output, "ERA5_data", filename)
+        era5_xrds = read(product=filepath)
+        records_ta = []
+        records_tdp = []
+        # Pressure levels used to estimate the vertical gradient
+        pressure_levels = [800, 825, 850, 875, 900, 925, 950, 975, 1000]
+        for p in pressure_levels:
+            logger.info(f"pressure level :{p}")
+            # Interpolate geopotential height at station location
+            height = (
+                era5_xrds["z"]
+                .sel(
+                    time=f"{cur_date.isoformat()}T12:00",
+                    pressure_level=p,
+                )
+                .interp(
+                    latitude=lat_sta,
+                    longitude=lon_sta,
+                    method="linear",
+                )
+                .item()
+            )
+            # Interpolate air temperature at station location
+            air_temp = (
+                era5_xrds["t"]
+                .sel(time=f"{cur_date.isoformat()}T12:00", pressure_level=p)
+                .interp(
+                    latitude=lat_sta,
+                    longitude=lon_sta,
+                    method="linear",
+                )
+                .item()
+            )
+            # Interpolate relative humidity at station location
+            rel_hum = (
+                era5_xrds["r"]
+                .sel(time=f"{cur_date.isoformat()}T12:00", pressure_level=p)
+                .interp(latitude=lat_sta, longitude=lon_sta)
+                .item()
+            )
+            # Compute dew point temperature
+            dp_temp = ICOSVar.compute_dewpoint_temp(
+                ta=pd.Series([air_temp]),
+                rh=pd.Series([rel_hum]),
+            )[0]
+
+            z = height / G_CST  # Convert geopotential to geometric height
+            records_ta.append({"z": z, "T": air_temp, "dz": abs(z - z_sta)})
+            records_tdp.append({"z": z, "T": dp_temp, "dz": abs(z - z_sta)})
+
+        # Compute lapse rates using the two levels closest to station height
+        lapse_rate_ta = _compute_lapse_rate(records_ta)
+        lapse_rate_tdp = _compute_lapse_rate(records_tdp)
+
+        lapse_records.append(
+            {
+                "time": cur_date,
+                "station": station.name,
+                "lapse_rate_ta": lapse_rate_ta,
+                "lapse_rate_tdp": lapse_rate_tdp,
+            }
+        )
+        cur_date += dt.timedelta(days=1)
+
+    os.makedirs(output_csv, exist_ok=True)
+    out_path = os.path.join(output_csv, f"{station.name}_lapse_rate.csv")
+    df = pd.DataFrame(lapse_records)
+    df.to_csv(out_path)
+
+
+def run_station_process_lr(
+    station_id: str,
+    cfg: dict[str, StationConfig],
+    output: str,
+    start_date: dt.date,
+    end_date: dt.date,
+    out_csv: str,
+):
+    if station_id not in cfg:
+        logger.warning(
+            f" Station {station_id} not found in stations_dict. skipping."
+        )
+    # Initialize station object
+    station = ICOSStation(station_id, cfg)
+    logger.info(f"\n Processing station: {station.name} ({station_id})")
+    try:
+        compute_lapse_rate(
+            station=station,
+            output=output,
+            output_csv=out_csv,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        logger.info(f"{station_id} finished")
+    except Exception:
+        logger.exception("Error")
+
+
+def generate_lapse_rate_for_stations_multiprocess(
+    station_ids,
+    cfg,
+    output,
+    start_date,
+    end_date,
+    out_csv,
+):
+    """
+    Description
+    ----------
+    Launch the generation of time series (ICOS, ERA5, downscaled ERA5)
+    for stations in parallel using multiprocessing.
+
+    Each station is processed in a separate subprocess, calling the function
+    'run_station_process_lr'
+
+    Parameters
+    ----------
+    station_ids: list
+        List of station identifiers
+    cfg: dict
+        Configuration station
+    output: str
+        Path to the ERA5 directory
+    start_date: dt.date
+        Start date
+    end_date: dt.date
+        End date
+    out_csv: str
+        Directory where the station time series CSV files will be written.
+    """
+    procs = []
+    # Spawn one process per station
+    for sid in station_ids:
+        p = Process(
+            target=run_station_process_lr,
+            args=(
+                sid,
+                cfg,
+                output,
+                start_date,
+                end_date,
+                out_csv,
+            ),
+        )
+        procs.append(p)
+        p.start()
+    # Block until all station processes complete
+    for p in procs:
+        p.join()
+
+
+#########################################################
+##                                                     ##
+##                                                     ##
+##      VALIDATION (ERA5, ERA5 DOWNSCALED, ICOS)       ##
+##                      Ta and Tdp                     ##
+##                                                     ##
+##                                                     ##
+#########################################################
+
+
+def get_dem_from_roi(  # Not used with the cluster
     roi_bbox: rio.coords.BoundingBox,
     roi_crs: CRS,
     base_dir: str,
@@ -873,27 +1163,27 @@ def process_era5_point(
 
     Parameters
     -----------
-    date : dt.datetime
+    date: dt.datetime
         The date for which ERA5 data are extracted.
     station : ICOSStation
         ICOS station object containing metadata and coordinate utilities.
-    lat : float
+    lat: float
         Latitude of the point where ERA5 data will be extracted
         (used when 'resampled=False').
-    lon : float
+    lon: float
         Longitude of the point where ERA5 data will be extracted
         (used when 'resampled=False').
-    output :
+    output:
         Path where ERA5 data are.
-    grid_res : float
+    grid_res: float
         Resolution (in degrees) of the regular grid used when
         'resampled=False'. Default is 0.25°.
-    resampled : bool
-        "True" : to use high-resolution resampled ERA5 data combined with a DEM.
-        "False": ERA5 data are taken directly from a coarse grid.
-    dem_dir : str
+    resampled: bool
+        'True': to use high-resolution resampled ERA5 data combined with a DEM.
+        'False': ERA5 data are taken directly from a coarse grid.
+    dem_dir: str
         Directory containing DEM tiles used for the high-resolution resampling.
-    dem_res : int
+    dem_res: int
         DEM resolution (in meters) used when 'resampled=True'.
 
     Returns
@@ -913,12 +1203,12 @@ def process_era5_point(
         dem = get_dem_from_roi(roi_bbox_utm, roi_crs_utm, dem_dir, dem_res)
         # Add attributes
         add_time_attrs(dem, date)
-        updated = era5.add(
+        updated = add(
             dem,
-            dataset=era5.ERA5Dataset.ERA5,
+            dataset=ERA5Dataset.ERA5,
             variables=[
-                era5.ERA5Var.TEMPERATURE,
-                era5.ERA5Var.DEWPOINT_TEMPERATURE,
+                ERA5Var.TEMPERATURE,
+                ERA5Var.DEWPOINT_TEMPERATURE,
             ],
             path=output,
         )
@@ -928,6 +1218,22 @@ def process_era5_point(
             station.work_area_from_coord_station(0, 0)["utm"][0].left,
             station.work_area_from_coord_station(0, 0)["utm"][0].bottom,
         )
+        z = (
+            dem["height"]
+            .interp({"x": x, "y": y}, method="linear")
+            .values.item()
+        )
+        diff = station.elevation - z
+
+        logger.info(f"Elevation DEM : {z:.2f} m")
+        logger.info(
+            f"Elevation station : {station.name} et {station.elevation:.2f} m"
+        )
+        logger.info(f"Difference : {diff:.2f} m")
+        # assert (
+        #    np.abs(diff) <= 20.0
+        # ), f"""Difference of elevation between the DEM and the metadata of the
+        # station is too important: {np.abs(diff):.2f} m > 20 m"""
 
         # get Ta and Td by bilinear interpolation and convert them from kelvin
         # to celsius in the resampled ERA5 data
@@ -950,12 +1256,12 @@ def process_era5_point(
         grid["height"] = grid["grid"].copy()
         # Add attributes
         add_time_attrs(grid, date)
-        updated = era5.add(
+        updated = add(
             data=grid,
-            dataset=era5.ERA5Dataset.ERA5,
+            dataset=ERA5Dataset.ERA5,
             variables=[
-                era5.ERA5Var.TEMPERATURE,
-                era5.ERA5Var.DEWPOINT_TEMPERATURE,
+                ERA5Var.TEMPERATURE,
+                ERA5Var.DEWPOINT_TEMPERATURE,
             ],
             path=output,
         )
@@ -975,51 +1281,6 @@ def process_era5_point(
             ),
         )
     return create_xr_point_dataset(date, ta, td)
-
-
-def download_date_by_date(
-    date1: dt.datetime,
-    date2: dt.datetime,
-    variables: list | None = None,
-    output: str | None = None,
-) -> pd.DatetimeIndex:
-    """
-    Description
-    -----------
-    Download ERA5-Land product day by day
-    from a start and end date
-
-    Parameters
-    ----------
-    date1: dt.datetime
-        Start date
-    date2: dt.datetime
-        End date
-    variables: list[str]
-        List of ERA5-Land product to download
-        (default: all ERA5-Land products)
-    output: str
-        Directory path to store data
-
-    Return
-    ------
-    time: pd.DatetimeIndex
-        list of dates beetween start and end date
-    """
-    # Check
-    if variables is None:
-        variables = era5.ERA5Dataset.ERA5.variables
-    else:
-        for v in variables:
-            if v not in era5.ERA5Dataset.ERA5.variables:
-                raise era5.ERA5Exception(f"Error: {v} is not in ERA5LAND")
-    # Run
-    time = xr.date_range(date1, freq="1D", end=date2)
-    for t in time:
-        era5.download(
-            t.to_pydatetime(), era5.ERA5Dataset.ERA5, variables, path=output
-        )
-    return time
 
 
 def remove_dates_from_csv(csv_path: str, dates_to_remove):
@@ -1103,7 +1364,7 @@ def generate_timeseries_era5(
         filename = f"download_era5_{cur_date.isoformat()}.zip"
         filepath = os.path.join(output, "ERA5_data", filename)
 
-        era5.read(product=filepath)
+        read(product=filepath)
         times = [
             dt.datetime.combine(cur_date, dt.time(hour=h))
             for h in range(hour_start, hour_end + 1, hour_step)
@@ -1340,7 +1601,7 @@ def generate_timeseries_for_stations_multiprocess(
     Launch the generation of time series (ICOS, ERA5, projected ERA5)
     for stations in parallel using multiprocessing.
 
-    Each station is processed in a separate subprocess, calling
+    Each station is processed in a separate subprocess, calling the function
     'run_station_process'
 
     Parameters
@@ -1471,6 +1732,15 @@ def generate_timeseries_for_stations(
     return results
 
 
+#########################################################
+##                                                     ##
+##                                                     ##
+##                    PLOTS                            ##
+##                                                     ##
+##                                                     ##
+#########################################################
+
+
 def _plot_variable_subplots(stations: dict, var: str, color: dict):
     n = len(stations)
     figsize = (20 * n, 8)
@@ -1543,6 +1813,82 @@ def plot_ta_tdp_csv(stations: dict, start: str | None, end: str | None):
     _plot_variable_subplots(filtered_stations, "Tdp", color_tdp)
 
     plt.show()
+
+
+def _plot_lr_subplots(
+    stations: dict,
+    var: str,
+    color: dict,
+    mean_theoretical: float,
+):
+    n = len(stations)
+    figsize = (20 * n, 8)
+
+    fig, axes = plt.subplots(1, n, figsize=figsize, sharex=False)
+    if n == 1:
+        axes = [axes]
+
+    for ax, (station_name, df_it) in zip(axes, stations.items(), strict=True):
+        df = df_it.sort_values("time")
+
+        ax.plot(
+            df["time"],
+            df[f"{var}"],
+            label=f"{var} ERA5",
+            color=color["era5"],
+            linestyle="-",
+            marker="o",
+        )
+
+        ax.axhline(
+            y=mean_theoretical,
+            color=color.get("mean", "black"),
+            linestyle="--",
+            linewidth=2,
+            label="Theoretical value",
+        )
+
+        ax.set_title(f"Station {station_name} — {var}", fontsize=13)
+        ax.set_ylabel(f"{var} (K/km)")
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.legend(fontsize=10)
+
+    fig.autofmt_xdate()
+    fig.tight_layout()
+    return fig
+
+
+def plot_lr_csv(stations: dict, start: str | None, end: str | None):
+    start_date = pd.to_datetime(start) if start else None
+    end_date = pd.to_datetime(end) if end else None
+
+    filtered_stations = {}
+
+    for name, station_df in stations.items():
+        if start:
+            mask_start = station_df["time"] >= start_date
+
+        if end:
+            mask_end = station_df["time"] <= end_date
+
+        filtered_stations[name] = station_df[mask_start & mask_end]
+
+    color_ta = {"era5": "#32b332"}
+    color_tdp = {"era5": "#9543bb"}
+
+    _plot_lr_subplots(filtered_stations, "lapse_rate_ta", color_ta, -0.0065)
+    _plot_lr_subplots(filtered_stations, "lapse_rate_tdp", color_tdp, -0.0065)
+
+    plt.show()
+
+
+#########################################################
+##                                                     ##
+##                                                     ##
+##                    METRICS                          ##
+##                                                     ##
+##                                                     ##
+#########################################################
 
 
 def slope_forced_origin(x, y):

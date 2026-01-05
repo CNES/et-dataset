@@ -85,6 +85,12 @@ class ERA5Dataset(DatasetInfo, Enum):
         ],
     )
 
+    ERA5PRESSURE = (
+        "era5_pressure",
+        "reanalysis-era5-pressure-levels",
+        ["Temperature", "Geopotential", "Relative humidity"],
+    )
+
 
 @dataclass
 class ERA5DataInfo:
@@ -184,6 +190,36 @@ class DataVar(ERA5DataInfo, Enum):
     TOTAL_COLUMN_OZONE = ("tco3", "Total column ozone", "kg m-2")
     TOTAL_COLUMN_WATER_VAPOR = ("tcwv", "Total column water vapour", "kg m-2")
     TOTAL_EVAPORATION = ("e", "Total evaporation", "m")
+
+    @classmethod
+    def from_key(cls, key):
+        """
+        Create enum from a key value
+        """
+        for value in cls:
+            if value.key == key:
+                return value
+        raise ValueError(f"No variable found with key {key}")
+
+    @classmethod
+    def _missing_(cls, value):
+        """
+        Overload the missing method to call from_key method
+        if enum is instanciated with a string
+        """
+        if isinstance(value, str):
+            return cls.from_key(value)
+        return super()._missing_(value)
+
+
+class ERA5pressureVar(ERA5DataInfo, Enum):
+    """
+    ERA5 pressure variables
+    """
+
+    TEMPERATURE = ("t2m", "Temperature", "K")
+    GEOPOTENTIAL = ("z", "Geopotential", "m2 s-2")
+    RELATIVE_HUMIDITY = ("rh", "Relative humidity", "%")
 
     @classmethod
     def from_key(cls, key):
@@ -535,7 +571,7 @@ def _download(dataset: str, request: dict, target: str) -> None:
 
 def download(
     date: datetime,
-    dataset: ERA5Dataset = ERA5Dataset.ERA5,
+    dataset,
     variables: list[str] | None = None,
     path: str | None = None,
 ) -> None:
@@ -572,41 +608,89 @@ def download(
     # Dataset
     if variables is None:
         variables = dataset.variables
-    request = {
-        "product_type": "reanalysis",
-        "variable": variables,
-        "year": date.year,
-        "month": date.month,
-        "day": date.day,
-        "time": [
-            "00:00",
-            "01:00",
-            "02:00",
-            "03:00",
-            "04:00",
-            "05:00",
-            "06:00",
-            "07:00",
-            "08:00",
-            "09:00",
-            "10:00",
-            "11:00",
-            "12:00",
-            "13:00",
-            "14:00",
-            "15:00",
-            "16:00",
-            "17:00",
-            "18:00",
-            "19:00",
-            "20:00",
-            "21:00",
-            "22:00",
-            "23:00",
-        ],
-        "data_format": "netcdf",
-        "download_format": "zip",
-    }
+    if dataset == ERA5Dataset.ERA5PRESSURE:
+        request = {
+            "product_type": "reanalysis",
+            "variable": variables,
+            "year": date.year,
+            "month": date.month,
+            "day": date.day,
+            "pressure_level": [
+                "800",
+                "825",
+                "850",
+                "875",
+                "900",
+                "925",
+                "950",
+                "975",
+                "1000",
+            ],
+            "time": [
+                "00:00",
+                "01:00",
+                "02:00",
+                "03:00",
+                "04:00",
+                "05:00",
+                "06:00",
+                "07:00",
+                "08:00",
+                "09:00",
+                "10:00",
+                "11:00",
+                "12:00",
+                "13:00",
+                "14:00",
+                "15:00",
+                "16:00",
+                "17:00",
+                "18:00",
+                "19:00",
+                "20:00",
+                "21:00",
+                "22:00",
+                "23:00",
+            ],
+            "data_format": "netcdf",
+            "download_format": "zip",
+        }
+    else:
+        request = {
+            "product_type": "reanalysis",
+            "variable": variables,
+            "year": date.year,
+            "month": date.month,
+            "day": date.day,
+            "time": [
+                "00:00",
+                "01:00",
+                "02:00",
+                "03:00",
+                "04:00",
+                "05:00",
+                "06:00",
+                "07:00",
+                "08:00",
+                "09:00",
+                "10:00",
+                "11:00",
+                "12:00",
+                "13:00",
+                "14:00",
+                "15:00",
+                "16:00",
+                "17:00",
+                "18:00",
+                "19:00",
+                "20:00",
+                "21:00",
+                "22:00",
+                "23:00",
+            ],
+            "data_format": "netcdf",
+            "download_format": "zip",
+        }
     # Download
     _download(dataset.label, request, filename)
 
@@ -1034,48 +1118,100 @@ def add_et(
     return updated_data
 
 
+# def download_date_by_date(
+#    date1: dt.datetime,
+#    date2: dt.datetime,
+#    variables: list | None = None,
+#    output: str | None = None,
+# ) -> pd.DatetimeIndex:
+#    """
+#    Description
+#    -----------
+#    Download ERA5-Land product day by day
+#    from a start and end date
+#
+#    Parameters
+#    ----------
+#    date1: dt.datetime
+#        Start date
+#    date2: dt.datetime
+#        End date
+#    variables: list[str]
+#        List of ERA5-Land product to download
+#        (default: all ERA5-Land products)
+#    output: str
+#        Directory path to store data
+#
+#    Return
+#    ------
+#    time: pd.DatetimeIndex
+#        list of dates beetween start and end date
+#    """
+#    # Check
+#    if variables is None:
+#        variables = ERA5Dataset.ERA5LAND.variables
+#    else:
+#        for v in variables:
+#            if v not in ERA5Dataset.ERA5LAND.variables:
+#                raise ERA5Exception(f"Error: {v} is not in ERA5LAND")
+#    # Run
+#    time = xr.date_range(date1, freq="1D", end=date2)
+#    for t in time:
+#        download(
+#            t.to_pydatetime(), ERA5Dataset.ERA5LAND, variables, path=output
+#        )
+#    return time
+
+
 def download_date_by_date(
     date1: dt.datetime,
     date2: dt.datetime,
-    variables: list | None = None,
+    dataset,
+    variables: list[str] | None = None,
     output: str | None = None,
 ) -> pd.DatetimeIndex:
     """
-    Description
-    -----------
-    Download ERA5-Land product day by day
-    from a start and end date
+    Download ERA5 products day by day for a given dataset
+    between two dates.
 
     Parameters
     ----------
-    date1: dt.datetime
-        Start date
-    date2: dt.datetime
-        End date
-    variables: list[str]
-        List of ERA5-Land product to download
-        (default: all ERA5-Land products)
-    output: str
-        Directory path to store data
+    date1 : datetime.datetime
+        Start date.
+    date2 : datetime.datetime
+        End date.
+    dataset :
+        ERA5 dataset class to use (e.g. ERA5Dataset.ERA5,
+        ERA5Dataset.ERA5LAND, ERA5Dataset.ERA5PRESSURE).
+    variables : list[str], optional
+        List of variables to download. If None, all variables
+        available in the dataset are downloaded.
+    output : str, optional
+        Directory path where downloaded files will be stored.
 
-    Return
-    ------
-    time: pd.DatetimeIndex
-        list of dates beetween start and end date
+    Returns
+    -------
+    time : pd.DatetimeIndex
+        List of dates between start and end date (daily frequency).
     """
-    # Check
+
     if variables is None:
-        variables = ERA5Dataset.ERA5LAND.variables
+        # Use all available variables from the dataset
+        variables = dataset.variables
     else:
         for v in variables:
-            if v not in ERA5Dataset.ERA5LAND.variables:
-                raise ERA5Exception(f"Error: {v} is not in ERA5LAND")
-    # Run
+            if v not in dataset.variables:
+                raise ERA5Exception(f"Error: {v} is not available in {dataset}")
+
     time = xr.date_range(date1, freq="1D", end=date2)
     for t in time:
         download(
-            t.to_pydatetime(), ERA5Dataset.ERA5LAND, variables, path=output
+            t.to_pydatetime(),
+            dataset,
+            variables,
+            path=output,
         )
+
     return time
 
 
