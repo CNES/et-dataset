@@ -24,8 +24,7 @@ The goal of the script is to:
 * Download and load ICOS weather data
 * Extract ERA5 weather fields around each ICOS station
 * Compare Ta and Td (air and dewpoint temperature) of ICOS vs ERA5 vs ERA5 downscaled
-
-
+* Compute air temperature and dew point lapse rate for each station over time in order to see whether the actual lapse rate approaches the constant value used
 
 ## ICOS stations
 

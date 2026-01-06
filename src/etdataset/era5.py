@@ -1118,51 +1118,6 @@ def add_et(
     return updated_data
 
 
-# def download_date_by_date(
-#    date1: dt.datetime,
-#    date2: dt.datetime,
-#    variables: list | None = None,
-#    output: str | None = None,
-# ) -> pd.DatetimeIndex:
-#    """
-#    Description
-#    -----------
-#    Download ERA5-Land product day by day
-#    from a start and end date
-#
-#    Parameters
-#    ----------
-#    date1: dt.datetime
-#        Start date
-#    date2: dt.datetime
-#        End date
-#    variables: list[str]
-#        List of ERA5-Land product to download
-#        (default: all ERA5-Land products)
-#    output: str
-#        Directory path to store data
-#
-#    Return
-#    ------
-#    time: pd.DatetimeIndex
-#        list of dates beetween start and end date
-#    """
-#    # Check
-#    if variables is None:
-#        variables = ERA5Dataset.ERA5LAND.variables
-#    else:
-#        for v in variables:
-#            if v not in ERA5Dataset.ERA5LAND.variables:
-#                raise ERA5Exception(f"Error: {v} is not in ERA5LAND")
-#    # Run
-#    time = xr.date_range(date1, freq="1D", end=date2)
-#    for t in time:
-#        download(
-#            t.to_pydatetime(), ERA5Dataset.ERA5LAND, variables, path=output
-#        )
-#    return time
-
-
 def download_date_by_date(
     date1: dt.datetime,
     date2: dt.datetime,

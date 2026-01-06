@@ -755,7 +755,7 @@ def generate_lapse_rate_for_stations_multiprocess(
     """
     Description
     ----------
-    Launch the generation of time series (ICOS, ERA5, downscaled ERA5)
+    Launch the generation of time series of lapse rate
     for stations in parallel using multiprocessing.
 
     Each station is processed in a separate subprocess, calling the function
@@ -866,12 +866,25 @@ def process_era5_point(
     """
     # Get Ta and Td from the resampled ERA5 data
     if resampled:
+        # WITH THE CLUSTER
+        # mnt_path = "/work/datalake/static_aux/MNT/COP-DEM_GLO-30-\
+        # DGED_S2_tiles/"
+
         # Get the ROI bbox (UTM) around the ICOS station (10km x 10km)
         roi_bbox_utm, roi_crs_utm = station.work_area_from_coord_station(
             10000, 10000
         )["utm"]
         # Get the DEM from ROI
         dem = get_dem_from_roi(roi_bbox_utm, roi_crs_utm, dem_dir, dem_res)
+
+        # WITH TH CLUSTER
+        # Get the DEM from ROI
+        # dem = get_dem_from_roi(
+        #    roi_bbox=roi_bbox_utm,
+        #    roi_crs=roi_crs_utm,
+        #    base_dir=mnt_path,
+        #    resolution=dem_res,
+        # )
         # Add attributes
         add_time_attrs(dem, date)
         updated = add(
@@ -952,30 +965,6 @@ def process_era5_point(
             ),
         )
     return create_xr_point_dataset(date, ta, td)
-
-
-def remove_dates_from_csv(csv_path: str, dates_to_remove):
-    """
-    Description
-    -----------
-    Removes the data (Ta and Tdp of ERA5 and ERA5 resampled) of the given
-    dates in the csv of a station.
-
-    Parameters
-    ----------
-    csv_path: str
-        path to the csv of the station
-    dates_to_remove : list[str]
-        list of dates to removed in the csv
-    """
-    df = pd.read_csv(csv_path, parse_dates=["time"])
-
-    dates_to_remove = pd.to_datetime(dates_to_remove)
-
-    df = df[~df["time"].isin(dates_to_remove)]
-
-    df.to_csv(csv_path, index=False)
-    # print(f"Removed dates: {len(dates_to_remove)}")
 
 
 def generate_timeseries_era5(
@@ -1253,7 +1242,8 @@ def run_station_process(
         logger.exception("Error")
 
 
-def generate_timeseries_for_stations_multiprocess(
+def generate_timeseries_for_stations_multiprocess(  # Genrate timeseries with
+    # multiprocessing
     station_ids,
     cfg,
     out,
@@ -1327,7 +1317,8 @@ def generate_timeseries_for_stations_multiprocess(
         p.join()
 
 
-def generate_timeseries_for_stations(
+def generate_timeseries_for_stations(  # Generate timeseries without
+    # multiprocessing
     station_ids: list[str],
     cfg: dict[str, StationConfig],
     out: str,
@@ -1345,7 +1336,8 @@ def generate_timeseries_for_stations(
     Description
     ----------
     Loop on the list of stations to generate for each ICOS, ERA5, and projected
-    ERA5 temperature/dewpoint time series and CSV file.
+    ERA5 temperature/dewpoint time series and CSV file. (without
+    multiprocessing)
 
     Parameters
     ----------
