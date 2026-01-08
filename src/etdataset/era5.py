@@ -217,9 +217,9 @@ class ERA5pressureVar(ERA5DataInfo, Enum):
     ERA5 pressure variables
     """
 
-    TEMPERATURE = ("t2m", "Temperature", "K")
+    TEMPERATURE = ("t", "Temperature", "K")
     GEOPOTENTIAL = ("z", "Geopotential", "m2 s-2")
-    RELATIVE_HUMIDITY = ("rh", "Relative humidity", "%")
+    RELATIVE_HUMIDITY = ("r", "Relative humidity", "%")
 
     @classmethod
     def from_key(cls, key):
