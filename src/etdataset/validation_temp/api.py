@@ -193,7 +193,7 @@ def compute_lapse_rate(
         lapse_records.append(
             {
                 "time": cur_date,
-                "station": station.name,
+                "station": station.id,
                 "lapse_rate_ta": lapse_rate_ta,
                 "lapse_rate_tdp": lapse_rate_tdp,
             }
@@ -201,7 +201,7 @@ def compute_lapse_rate(
         cur_date += dt.timedelta(days=1)
 
     os.makedirs(output_csv, exist_ok=True)
-    out_path = os.path.join(output_csv, f"{station.name}_lapse_rate.csv")
+    out_path = os.path.join(output_csv, f"{station.id}_lapse_rate.csv")
     df = pd.DataFrame(lapse_records)
     df.to_csv(out_path)
 
@@ -401,7 +401,7 @@ def process_era5_point(
 
         logger.info(f"Elevation DEM : {z:.2f} m")
         logger.info(
-            f"Elevation station : {station.name} et {station.elevation:.2f} m"
+            f"Elevation station : {station.id} et {station.elevation:.2f} m"
         )
         logger.info(f"Difference : {diff:.2f} m")
         # assert (
@@ -534,7 +534,7 @@ def generate_timeseries_era5(
                     station.longitude,
                     out,
                     resampled=False,
-                    dem_dir=f"rasters_COP30/{station.name}",
+                    dem_dir=f"rasters_COP30/{station.id}",
                 )
             )
             # ERA5 data are extracted after resampling ERA5 variables at the
@@ -547,7 +547,7 @@ def generate_timeseries_era5(
                     station.longitude,
                     out,
                     resampled=True,
-                    dem_dir=f"rasters_COP30/{station.name}",
+                    dem_dir=f"rasters_COP30/{station.id}",
                 )
             )
         day_ds = xr.concat(ds_list, dim="time")
@@ -617,7 +617,7 @@ def generate_timeseries_with_csv(
         Full path to the generated CSV file.
     """
     os.makedirs(out_csv, exist_ok=True)
-    csv_path = os.path.join(out_csv, f"{station.name}_timeseries.csv")
+    csv_path = os.path.join(out_csv, f"{station.id}_timeseries.csv")
     # Load or initialize the CSV
     if skip_existing and os.path.exists(csv_path):
         df = pd.read_csv(csv_path, parse_dates=["time"])
@@ -866,7 +866,7 @@ def generate_timeseries_for_stations(  # Generate timeseries without
             continue
         # Initialize station object
         station = ICOSStation(sid, cfg)
-        logger.info(f"\n Processing station: {station.name} ({sid})")
+        logger.info(f"\n Processing station: {station.id} ({sid})")
 
         csv_out = generate_timeseries_with_csv(
             station=station,

@@ -8,6 +8,7 @@ Functions for plotting
 
 from pathlib import Path
 
+import geopandas as gpd
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -202,3 +203,17 @@ def plot_lr_csv(csv_dir: Path, start: str, end: str):
     )
     fig_ta.show()
     fig_tdp.show()
+
+
+def plot_station_map(csv_path: str = "stations_package.gpkg"):
+    stations_gdf = gpd.read_file(csv_path, layer="stations")
+    m = stations_gdf.explore(
+        column="elevation",
+        tooltip="name",
+        popup=True,
+        legend=True,
+        marker_kwds={"radius": 8},
+        style_kwds={"color": "black"},
+        figsize=(8, 8),
+    )
+    return m
