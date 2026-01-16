@@ -112,9 +112,9 @@ def compute_lapse_rate(
     output_csv : str
         Path to the directory where the output CSV file will be written.
     start_date : dt.datetime
-        Start date (inclusive).
+        Start date
     end_date : dt.datetime
-        End date (inclusive).
+        End date
 
     Returns
     --------
@@ -214,6 +214,26 @@ def run_station_process_lr(
     end_date: dt.date,
     out_csv: str,
 ):
+    """
+    Description
+    ----------
+    Run process for a station.
+
+    Parameters
+    ----------
+    station_id: str
+        station identifier
+    cfg: dict
+        station Configuration
+    out: str
+        Path to the ERA5 directory
+    start_date: dt.date
+        Start date
+    end_date: dt.date
+        End date
+    out_csv: str
+        Directory where the station time series CSV files will be written.
+    """
     if station_id not in cfg:
         logger.warning(
             f" Station {station_id} not found in stations_dict. skipping."
