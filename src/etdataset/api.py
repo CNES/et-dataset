@@ -227,9 +227,10 @@ def search(
         roi_bbox, roi_crs = get_bbox_from_mgrs_tile(tile_id)
 
     # Filter with additional criteria for collection 1
-    results = filter_with_roi(
-        results, roi_bbox, roi_crs, min_overlap=min_roi_overlap
-    )
+    if len(results) > 0:
+        results = filter_with_roi(
+            results, roi_bbox, roi_crs, min_overlap=min_roi_overlap
+        )
     logger.info(
         f"Products found for {collection.name} "
         f"after ROI filtering: {len(results)}"

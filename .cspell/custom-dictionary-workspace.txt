@@ -1,0 +1,27 @@
+# Custom Dictionary Words
+
+# Mission
+trishna
+landsat
+sentinel2
+hlsl
+hlslandsat
+hlss
+hlssentinel
+ecostress
+theia
+earthdata
+
+# Provider
+usgs
+
+# Variables
+latlon
+
+# Python package
+earthaccess
+sensorsio
+
+mgrs
+gpkg
+lste
