@@ -164,7 +164,7 @@ def test_download_icos_station(monkeypatch):
                 "d",
                 (),
                 {
-                    "uri": "fake_uri",
+                    "uri": "uri",
                 },
             )(),
         ],
@@ -172,7 +172,7 @@ def test_download_icos_station(monkeypatch):
     # Fake download_file
     calls = []
 
-    def fake_download_file(data_objects, cookies, station_id):
+    def download_file(data_objects, cookies, station_id):
         calls.append(
             {
                 "data_objects": data_objects,
@@ -181,10 +181,10 @@ def test_download_icos_station(monkeypatch):
             }
         )
 
-    monkeypatch.setattr(icos, "download_file", fake_download_file)
+    monkeypatch.setattr(icos, "download_file", download_file)
 
     # call of the function
-    auth_token = "FAKE_TOKEN"
+    auth_token = "TOKEN"
     station_ids = ["toto", "momo"]
     icos.download_icos_station(auth_token, station_ids)
 
@@ -194,7 +194,7 @@ def test_download_icos_station(monkeypatch):
         assert call["cookies"] == {"cpauthToken": auth_token}
         assert call["station_id"] == station_ids[i]
         assert len(call["data_objects"]) == 1
-        assert call["data_objects"][0].uri == "fake_uri"
+        assert call["data_objects"][0].uri == "uri"
 
 
 def test_get_gpkg_file(monkeypatch):
