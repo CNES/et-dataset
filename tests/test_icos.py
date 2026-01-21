@@ -223,7 +223,7 @@ def test_get_gpkg_file(monkeypatch):
     # fake args for the function to_file()
     args = {}
 
-    def fake_to_file(
+    def to_file(
         self,  # noqa: ARG001
         output,
         layer,
@@ -232,10 +232,10 @@ def test_get_gpkg_file(monkeypatch):
         # gdf.to_file(...) is an instance method and receives gdf as self
         args.update({"output": output, "layer": layer, "driver": driver})
 
-    monkeypatch.setattr(gpd.GeoDataFrame, "to_file", fake_to_file)
+    monkeypatch.setattr(gpd.GeoDataFrame, "to_file", to_file)
 
     station = ["toto"]
-    gdf = icos.get_gpkg_file(station, cfg, output="fake_output.gpkg")
+    gdf = icos.get_gpkg_file(station, cfg, output="output.gpkg")
 
     assert isinstance(gdf, gpd.GeoDataFrame)
     assert len(gdf) == 1
@@ -250,7 +250,7 @@ def test_get_gpkg_file(monkeypatch):
     assert row.geometry.y == 2.3  # latitude
     assert row.geometry.z == 6
 
-    assert args["output"] == "fake_output.gpkg"
+    assert args["output"] == "output.gpkg"
     assert args["layer"] == "stations"
     assert args["driver"] == "GPKG"
 
