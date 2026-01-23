@@ -932,7 +932,7 @@ def add(
             dem=dem,
             era5_data=era5_xrds.get(ERA5Var.DEWPOINT_TEMPERATURE.key, None),
             era5_dem=era5_dem,
-            lapse_rate=-0.0065,
+            lapse_rate=-0.0052,
             key="tdp",
             description="dewpoint temperature",
         )
@@ -1141,13 +1141,12 @@ def download_date_by_date(
     variables : list[str], optional
         List of variables to download. If None, all variables
         available in the dataset are downloaded.
-    output : str, optional
-        Directory path where downloaded files will be stored.
-
+    output : str
+        Directory path to store data
     Returns
     -------
     time : pd.DatetimeIndex
-        List of dates between start and end date (daily frequency).
+        List of dates between start and end date
     """
 
     if variables is None:
