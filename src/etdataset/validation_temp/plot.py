@@ -196,7 +196,7 @@ def plot_lr_csv(csv_dir: Path, start: str, end: str):
         annotation_text="Theoretical value",
     )
     fig_tdp.add_hline(
-        y=-0.0065,
+        y=-0.0052,
         line_dash="dash",
         line_color="black",
         annotation_text="Theoretical value",
@@ -205,7 +205,10 @@ def plot_lr_csv(csv_dir: Path, start: str, end: str):
     fig_tdp.show()
 
 
-def plot_station_map(csv_path: str = "stations_package.gpkg"):
+def plot_station_map_with_gpkg(csv_path: str = "stations_package.gpkg"):
+    """
+    Plot station locations on a map with data from gpkg
+    """
     stations_gdf = gpd.read_file(csv_path, layer="stations")
     m = stations_gdf.explore(
         column="elevation",
@@ -217,3 +220,107 @@ def plot_station_map(csv_path: str = "stations_package.gpkg"):
         figsize=(8, 8),
     )
     return m
+
+
+def plot_station_map(gdf: gpd.GeoDataFrame):
+    m = gdf.explore(
+        column="elev",
+        tooltip="name",
+        popup=True,
+        legend=True,
+        marker_kwds={"radius": 8},
+        style_kwds={"color": "black"},
+        figsize=(8, 8),
+    )
+    return m
+
+
+def plot_ta_tdp_icos(
+    stations: dict,
+    var: str,
+    colors: dict,
+    start: str | None = None,
+    end: str | None = None,
+):
+    start_date = pd.to_datetime(start) if start else None
+    end_date = pd.to_datetime(end) if end else None
+
+    fig = go.Figure()
+
+    for station_name, df in stations.items():
+        if df.empty:
+            continue
+
+        df_v = df.sort_values("time")
+        df_t = df_v.copy()
+
+        if start_date is not None:
+            df_t = df_t[df_t["time"] >= start_date]
+
+        if end_date is not None:
+            df_t = df_t[df_t["time"] <= end_date]
+
+        if df_t.empty:
+            continue
+
+        fig.add_trace(
+            go.Scatter(
+                x=df_t["time"],
+                y=df_t[f"{var}"],
+                name=f"{station_name} ICOS",
+                legendgroup=station_name,
+                legendgrouptitle_text=f"Station {station_name}",
+                line={"color": colors["icos"], "dash": "solid"},
+                mode="lines+markers",
+            )
+        )
+    if var == "Ta":
+        title = "Air temperature of ICOS stations"
+    elif var == "Tdp":
+        title = "Dew point temperature of ICOS stations"
+    else:
+        title = f"{var} ICOS stations"
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Time",
+        yaxis_title=f"{var} (°C)",
+        hovermode="x unified",
+        template="plotly",
+        showlegend=True,
+    )
+
+    return fig
+
+
+def load_csv_data_icos(csv_dir: Path):
+    stations = {}
+
+    for csv_file in csv_dir.glob("*_data.csv"):
+        station_name = csv_file.stem.split("_")[0].split("-")[1]
+        df = pd.read_csv(csv_file, parse_dates=["time"])
+        stations[station_name] = df
+
+    return stations
+
+
+def plot_temp_icos(
+    csv_dir,
+    start: str | None = None,
+    end: str | None = None,
+):
+    stations = load_csv_data_icos(Path(csv_dir))
+
+    color_ta = {
+        "icos": "#1f77b4",
+    }
+
+    color_tdp = {
+        "icos": "#8124ac",
+    }
+
+    fig_ta = plot_ta_tdp_icos(stations, "TA", color_ta, start, end)
+    fig_tdp = plot_ta_tdp_icos(stations, "TD", color_tdp, start, end)
+
+    fig_ta.show()
+    fig_tdp.show()

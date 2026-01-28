@@ -3,10 +3,10 @@ import os
 import zipfile
 from dataclasses import dataclass
 from enum import Enum
-from typing import TypedDict
 
 import geopandas as gpd
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pyproj
 import rasterio as rio
@@ -24,8 +24,6 @@ from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
 
-G_CST = 9.80665
-
 #########################################################
 ##                                                     ##
 ##                                                     ##
@@ -35,73 +33,88 @@ G_CST = 9.80665
 #########################################################
 
 
-class StationConfig(TypedDict):
-    name: str
+@dataclass
+class StationConfig:
     id: str
+    name: str
+    country: str
     lat: float
     lon: float
-    elevation: float
-    crs: CRS
-    country_code: str
+    elev: float
 
 
-def get_csv_with_valid_icos_stations():
+def get_csv_with_valid_icos_stations(update: bool = False):  # noqa: FBT001
     """
     Description
     ----------
-    Fetch all ICOS ecosystem stations (ES) that have available Meteo L2 dataset,
+    Return the file path that contains all ICOS ecosystem stations (ES)
+    that have available Meteo L2 dataset.
+    If the file is not available or an update has been requested,
+    fetch all ICOS ecosystem stations (ES) that have available Meteo L2 dataset,
     extract their metadata, save the list into a CSV file.
-    Run it only once (just to get the csv file)
 
     Returns
     -------
     csv_path : str
-        Path to the CSV file containing stations informations.
+        Path to the CSV file containing stations information.
     """
-    icos_stations = meta.list_stations()
-    ecosystem_stations = [
-        s for s in icos_stations if s.type_uri.endswith("/ES")
-    ]
-    datatypes = meta.list_datatypes()
-    meteo_l2_filter = [
-        d.uri
-        for d in datatypes
-        if "Meteo" in d.uri
-        and "L2" in getattr(d, "label", "")
-        and "Meteosens" not in d.uri
-    ]
-    list_valid_station = []
-    for _, s in enumerate(ecosystem_stations, 1):
-        data_objects = meta.list_data_objects(
-            station=s.uri,
-            datatype=meteo_l2_filter,
-            order_by={"prop": "submTime", "descending": True},
-        )
-        if data_objects:
-            list_valid_station.append(
-                {
-                    "id": s.id,
-                    "name": s.name,
-                    "country": s.country_code,
-                    "lat": s.lat,
-                    "lon": s.lon,
-                    "elev": s.elevation,
-                }
+    csv_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "stations_meteoL2.csv",
+    )
+
+    if not os.path.isfile(csv_path) or update:
+        icos_stations = meta.list_stations()
+        ecosystem_stations = [
+            s for s in icos_stations if s.type_uri.endswith("/ES")
+        ]
+        datatypes = meta.list_datatypes()
+        meteo_l2_filter = [
+            d.uri
+            for d in datatypes
+            if "Meteo" in d.uri
+            and "L2" in getattr(d, "label", "")
+            and "Meteosens" not in d.uri
+        ]
+        list_valid_station = []
+        for s in ecosystem_stations:
+            data_objects = meta.list_data_objects(
+                station=s.uri,
+                datatype=meteo_l2_filter,
+                order_by={"prop": "submTime", "descending": True},
             )
-    df = pd.DataFrame(list_valid_station)
-    df.sort_values(
-        by=["country", "name"], ascending=[True, False], inplace=True
-    )
-    csv_path = "stations_meteoL2.csv"
-    df.to_csv(csv_path, index=False)
-    logger.info(
-        f"All valid stations and their metadata are stored in the csv file\
-          : {csv_path}"
-    )
+            if data_objects:
+                list_valid_station.append(
+                    {
+                        "id": s.id,
+                        "name": s.name,
+                        "country": s.country_code,
+                        "lat": s.lat,
+                        "lon": s.lon,
+                        "elev": s.elevation,
+                    }
+                )
+        df = pd.DataFrame(list_valid_station)
+        df.sort_values(
+            by=["country", "name"], ascending=[True, False], inplace=True
+        )
+        df.to_csv(csv_path, index=False)
+        logger.info(
+            f"All valid stations and their metadata are stored in the csv file\
+            : {csv_path}"
+        )
     return csv_path
 
 
-def filter_stations_by_country_code(csv_path: str, country_code: str):
+def get_station_list():
+    """ """
+    csv_path = get_csv_with_valid_icos_stations()
+    data = pd.read_csv(csv_path, index_col="id")
+    return list(data.index)
+
+
+def filter_stations_by_country_code(country_code: str):
     """
     Description
     ----------
@@ -119,12 +132,13 @@ def filter_stations_by_country_code(csv_path: str, country_code: str):
     data_filtered: pd.DataFrame
         A DataFrame containing only the stations filtered
     """
+    csv_path = get_csv_with_valid_icos_stations()
     data = pd.read_csv(csv_path)
     data_filtered = data[data["country"] == country_code]
     return data_filtered
 
 
-def load_stations_config(csv_path: str) -> dict[str, StationConfig]:
+def get_stations_config(id_station: str) -> StationConfig:
     """
     Description
     ----------
@@ -143,22 +157,17 @@ def load_stations_config(csv_path: str) -> dict[str, StationConfig]:
 
     Returns
     -------
-    starions_cfg : dict[str, StationConfig]
+    StationConfig
         A dictionary mapping station IDs to their corresponding StationConfig.
     """
-    df = pd.read_csv(csv_path)
-    stations_cfg: dict[str, StationConfig] = {}
-    for _, row in df.iterrows():
-        stations_cfg[row["id"]] = StationConfig(
-            id=row["id"],
-            name=row["name"],
-            lat=row["lat"],
-            lon=row["lon"],
-            elevation=row["elev"],
-            crs=CRS.from_epsg(4326),
-            country_code=row["country"],
-        )
-    return stations_cfg
+    csv_path = get_csv_with_valid_icos_stations()
+    df = pd.read_csv(csv_path, index_col="id")
+    try:
+        station = df.loc[id_station]
+    except KeyError:
+        raise ValueError("Station id is unknown: {id_station}")
+    # convert to StationConfig
+    return StationConfig(id=id_station, **station)
 
 
 #####################################
@@ -198,8 +207,7 @@ def _download_file(obj, path: str, id_station: str, cookies: dict):
         download request fails.
 
     """
-    filename = obj.filename
-
+    filename = f"ICOSETC_{id_station}_METEO_L2.zip"
     # Do not download if the file already exists
     if os.path.exists(os.path.join(path, filename)):
         logger.info(
@@ -211,13 +219,12 @@ def _download_file(obj, path: str, id_station: str, cookies: dict):
     hash_id = obj.uri.split("/")[-1]
     url = f"https://data.icos-cp.eu/objects/{hash_id}"
     logger.info(f"Download url =  {url}")
-
     response = requests.get(url, cookies=cookies)
 
     if response.status_code == 200:
         with open(os.path.join(path, filename), "wb") as file:
             file.write(response.content)
-        logger.debug(
+        logger.info(
             f"File of the station {id_station} :"
             f"{filename} downloaded successfully"
         )
@@ -229,7 +236,7 @@ def _download_file(obj, path: str, id_station: str, cookies: dict):
 
 
 def download_file(
-    data_objects, cookies: dict, station_id: str, path: str | None = None
+    data_objects, cookies: dict, id_station: str, path: str | None = None
 ):
     """
     Description
@@ -253,23 +260,28 @@ def download_file(
     str or None
 
     """
+    filename = f"ICOSETC_{id_station}_METEO_L2.zip"
+
     if cookies is None:
         raise ValueError("The autentification token is not provided")
+
     if path is None:
-        path = os.getcwd()
-    download_folder = os.path.join(path, "ICOS")
+        download_folder = os.path.join(os.getcwd(), "ICOS")
+    else:
+        download_folder = path
+
     os.makedirs(download_folder, exist_ok=True)
 
     for obj in data_objects:
         downloaded_file = _download_file(
-            obj, download_folder, station_id, cookies
+            obj, download_folder, id_station, cookies
         )
         if downloaded_file is None:
             continue
         # Unzip the downloaded file
         if downloaded_file.lower().endswith(".zip"):
             extract_folder = os.path.join(
-                download_folder, os.path.splitext(obj.filename)[0]
+                download_folder, os.path.splitext(filename)[0]
             )
             if not os.path.exists(extract_folder) or not os.listdir(
                 extract_folder
@@ -279,17 +291,30 @@ def download_file(
                     with zipfile.ZipFile(downloaded_file, "r") as zip_ref:
                         zip_ref.extractall(extract_folder)
                     logger.info(
-                        f"{station_id} station file unzipped in : {extract_folder}"  # noqa: E501
+                        f"{id_station} station file unzipped in : {extract_folder}"  # noqa: E501
                     )
+                    for f in os.listdir(extract_folder):
+                        if f.lower().endswith(".csv"):
+                            old_csv_path = os.path.join(extract_folder, f)
+                            filename_csv = f"ICOSETC_{id_station}_METEO_L2.csv"
+                            csv_path = os.path.join(
+                                extract_folder, filename_csv
+                            )
+                            os.rename(old_csv_path, csv_path)
+                            logger.info(f"CSV file renamed to: {csv_path}")
+                            break
+
                 except zipfile.BadZipFile:
                     logger.exception(f"Non valid zip file: {downloaded_file}")
             else:
                 logger.info(
-                    f"{station_id} station file already extracted : {extract_folder}"  # noqa: E501
+                    f"{id_station} station file already extracted : {extract_folder}"  # noqa: E501
                 )
 
 
-def download_icos_station(auth_token: str, ids: list):
+def download_icos_station(
+    stations: list[str] | str = "all", output: str | None = None
+):
     """
     Description
     ----------
@@ -312,10 +337,24 @@ def download_icos_station(auth_token: str, ids: list):
     -------
     None
     """
-    if auth_token is None:
-        raise ValueError("Authentification token is not provided")
+    if os.environ.get("ICOS_API_TOKEN", None) is None:
+        raise ValueError("ICOS_API_TOKEN is not provided")
+    token = os.environ["ICOS_API_TOKEN"]
+    cookies = {"cpauthToken": token}
+    csv_path = get_csv_with_valid_icos_stations()
+    df = pd.read_csv(csv_path)
+    valid_stations_list = df["id"].tolist()
 
-    cookies = {"cpauthToken": auth_token}
+    if stations == "all":
+        ids = valid_stations_list
+    elif isinstance(stations, str) and stations != "all":
+        ids = [stations]
+    elif isinstance(stations, list) and stations != "all":
+        ids = stations
+
+    invalid_stations = [s for s in ids if s not in valid_stations_list]
+    if invalid_stations:
+        raise ValueError(f"Invalid station ID given: {invalid_stations}.")
     # Iterates over a list of ICOS station IDs
     for station_id in ids:
         station_uri = (
@@ -337,43 +376,172 @@ def download_icos_station(auth_token: str, ids: list):
             order_by={"prop": "submTime", "descending": True},
         )
         " Download all the files"
-        download_file(data_objects, cookies, station_id)
+        download_file(data_objects, cookies, station_id, output)
     logger.info(f"All the stations are downloaded {ids}")
 
 
-def get_gpkg_file(
+def get_station_location(
     stations: str | list[str],
-    cfg: dict[str, StationConfig],
-    output: str = "stations_package.gpkg",
+    save: bool = False,  # noqa: FBT001
 ) -> gpd.GeoDataFrame:
     """
     Description
     ----------
-    Create a gpkg file of all the given ICOS stations
+    Create a geopandas DataFrame of all the given
+    ICOS stations
 
     Parameters
     ----------
     stations : str | list[str]
         the given ICOS stations
-    cfg : dict[str, StationConfig]
-        configuration file of valid ICOS stations
-
+    save : bool = False
+        save or not the geodataframe into a geopackage file
     Returns
     -------
     gdf : GeoDataFrame
     """
-    df = pd.DataFrame.from_dict(cfg, orient="index")
-    df = df[["id", "name", "lat", "lon", "elevation"]]
+    if isinstance(stations, str):
+        stations = [stations]
+    csv_path = get_csv_with_valid_icos_stations()
+    df = pd.read_csv(csv_path, usecols=["id", "name", "lat", "lon", "elev"])
     df = df[df["id"].isin(stations)]
     geometry = [
-        Point(row["lon"], row["lat"], row["elevation"])
-        for _, row in df.iterrows()
+        Point(row["lon"], row["lat"], row["elev"]) for _, row in df.iterrows()
     ]
+
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs=CRS.from_epsg(4326))
-    gdf.to_file(output, layer="stations", driver="GPKG")
+
+    if save:
+        pckg_path = "stations_package.gpkg"
+        gdf.to_file(pckg_path, layer="stations", driver="GPKG")
+        logger.info(f"Stations package save : {pckg_path}")
+        return gdf
     return gdf
 
 
+def filter_valid_data(cfg: StationConfig) -> pd.DataFrame:
+    """
+    Description
+    -----------
+    Filter invalid RH and TA datas in station's csv
+
+    Parameters
+    -----------
+    cfg : StationConfig
+        Station configuration
+
+    Return
+    -----------
+    data : pd.DataFrame
+        Filtered dataframe
+    """
+
+    csv_path = f"ICOS/ICOSETC_{cfg.id}_METEO_L2/ICOSETC_{cfg.id}_METEO_L2.csv"
+    usecols = [
+        "TIMESTAMP_START",
+        "TA",
+        "RH",
+    ]
+    data = pd.read_csv(csv_path, usecols=usecols)
+
+    data["TIMESTAMP_START"] = pd.to_datetime(
+        data["TIMESTAMP_START"], format="%Y%m%d%H%M"
+    )
+
+    # Select only valid mesures
+    filtered_data = data[
+        (data["TA"] != -9999) & (data["RH"] != -9999)
+    ].reset_index(drop=True)
+    return filtered_data
+
+
+def compute_dewpoint_temp(
+    ta: npt.ArrayLike, rh: npt.ArrayLike, f: float = 243.04, d: float = 17.625
+) -> npt.NDArray:
+    """
+    Description
+    -----------
+    Compute dew point temperature Tp from air temperature Ta (°C) and
+    relative humidity RH (%):
+
+            RH = 100 * exp[d*Td/(Td+f)-d*Ta/(Ta+f)]
+
+            it gives:
+
+            Td = f*(I + d*Ta/(Ta+f))/(d-I-d*Ta/(Ta+f))
+
+            with I = ln(RH/100)
+
+    from "The Relationship between Relative Humidity and the Dewpoint
+    Temperature in Moist Air: A Simple Conversion and Applications"
+    by Mark G. Lawrence
+
+    Parameters
+    -----------
+    ta : ntp.ArrayLike
+        Air temperature from ICOS
+    rh : ntp.ArrayLike
+        Relative humidity from ICOS
+
+    Return
+    -----------
+    tp : ntp.NDArray
+        Dew point temperature
+    """
+    ta = np.array(ta)
+    rh = np.array(rh)
+    L = np.log(rh / 100)
+    gamma = L + d * ta / (ta + f)
+
+    num = f * gamma
+    den = d - gamma
+    tp = num / den
+
+    return tp
+
+
+def kelvin_to_celsius(kelvin: npt.ArrayLike) -> npt.NDArray:
+    """
+    Description
+    -----------
+    Compute the temperature in celsius from a temperature in kelvin
+
+    """
+    return np.array(kelvin) - 273.15
+
+
+def save_station_data(
+    cfg: StationConfig,
+    data: pd.DataFrame,
+    td: np.ndarray,
+    out_dir: str = "icos_data",
+):
+    """
+    Save ICOS station data with dew point temperature to CSV.
+
+    Parameters
+    ----------
+    cfg : StationConfig
+        Station configuration
+    data : pd.DataFrame
+        DataFrame with TIMESTAMP_START, TA, RH
+    td : np.ndarray
+        Dew point temperature array
+    """
+    path = os.getcwd()
+    folder = os.path.join(path, out_dir)
+    os.makedirs(folder, exist_ok=True)
+
+    data = data.copy()
+    data["TD"] = td
+    data = data.rename(columns={"TIMESTAMP_START": "time"})
+    csv_path = os.path.join(folder, f"{cfg.id}_data.csv")
+    data.to_csv(csv_path, index=False)
+
+    return csv_path
+
+
+#############################################################################################
 @dataclass
 class DatasetInfo:
     """Class for dataset info"""
@@ -416,7 +584,7 @@ class ICOSVar(ICOSDataInfo, Enum):
     @staticmethod
     def compute_dewpoint_temp(
         ta: pd.Series, rh: pd.Series, f: float = 243.04, d: float = 17.625
-    ) -> np.ndarray:
+    ) -> pd.Series:
         """
         Description
         -----------
@@ -437,14 +605,14 @@ class ICOSVar(ICOSDataInfo, Enum):
 
         Parameters
         -----------
-        ta : np.ndarray
+        ta : pd.Series
             Air temperature from ICOS
-        rh : np.ndarray
+        rh : pd.Series
             Relative humidity from ICOS
 
         Return
         -----------
-        tp : np.ndarray
+        tp : pd.Series
             Dew point temperature
         """
 
@@ -478,14 +646,14 @@ class ICOSVar(ICOSDataInfo, Enum):
         return super()._missing_(value)
 
 
-def kelvin_to_celsius(kelvin: float | np.ndarray) -> float | np.ndarray:
-    """
-    Description
-    -----------
-    Compute the temperature in celsius from a temperature in kelvin
-
-    """
-    return kelvin - 273.15
+# def kelvin_to_celsius(kelvin: float | np.ndarray) -> float | np.ndarray:
+#    """
+#    Description
+#    -----------
+#    Compute the temperature in celsius from a temperature in kelvin
+#
+#    """
+#    return kelvin - 273.15
 
 
 def add_time_attrs(ds: xr.Dataset, date: dt.datetime) -> xr.Dataset:
@@ -535,20 +703,15 @@ def create_xr_point_dataset(
 class ICOSStation:
     def __init__(
         self,
-        station_id: str,
-        stations_cfg: dict,
+        stations_cfg: StationConfig,
     ):
-        if station_id not in stations_cfg:
-            raise KeyError(f"Station '{station_id}' not find.")
-
-        cfg = stations_cfg[station_id]
-        self.id = station_id
-        self.name = cfg["name"]
-        self.csv_path = f"/home/mliateni/Bureau/meriem/et-dataset/notebooks/ICOS/ICOSETC_{station_id}_METEO_L2/ICOSETC_{station_id}_METEO_L2.csv"  # noqa: E501
-        self.latitude = cfg["lat"]
-        self.longitude = cfg["lon"]
-        self.elevation = cfg["elevation"]
-        self.crs = CRS(cfg["crs"])
+        self.id = stations_cfg.id
+        self.name = stations_cfg.name
+        self.csv_path = f"ICOS/ICOSETC_{stations_cfg.id}_METEO_L2/ICOSETC_{stations_cfg.id}_METEO_L2.csv"  # noqa: E501
+        self.latitude = stations_cfg.lat
+        self.longitude = stations_cfg.lon
+        self.elevation = stations_cfg.elev
+        self.crs = CRS("EPSG:4326")
         self.roi_bounds: rio.coords.BoundingBox | None = None
         self.data: pd.DataFrame
 
