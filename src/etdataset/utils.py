@@ -12,6 +12,7 @@ import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import pyproj
 import rasterio as rio
 import skimage.morphology as skm
 import xarray as xr
@@ -288,3 +289,131 @@ def get_utm_crs_from_roi(roi: rio.coords.BoundingBox):
     is_northern = lat >= 0
     epsg = 32600 + utm_zone if is_northern else 32700 + utm_zone
     return CRS.from_epsg(epsg)
+
+
+def get_utm_crs_from_lat_lon(lat: float, lon: float) -> pyproj.CRS:
+    """
+    Description
+    -----------
+    Determines the appropriate UTM CRS based on the station's latitude and
+    longitude.
+
+    It creates an Area of Interest (AOI) around the point and
+    retrieves the corresponding UTM CRS metadata.
+
+    Parameters
+    ----------
+    lat : float
+        latitude
+    longitude : float
+        longitude
+
+    Returns
+    -------
+    pyproj.CRS
+        The UTM crs
+    """
+    # Query the PROJ database to obtain UTM CRS info that matches the point
+    info_utm = pyproj.database.query_utm_crs_info(
+        datum_name="WGS 84",
+        area_of_interest=pyproj.aoi.AreaOfInterest(
+            west_lon_degree=lon,
+            south_lat_degree=lat,
+            east_lon_degree=lon,
+            north_lat_degree=lat,
+        ),  # Thearea of interest reduces the CRS selection to exactly the
+        # UTM zone covering this location.
+    )[0]
+    return pyproj.CRS.from_epsg(info_utm.code)
+
+
+def create_bbox_from_lat_lon(
+    lat: float, lon: float, width_m: float, height_m: float, crs: CRS
+) -> rio.coords.BoundingBox:
+    """
+    Description
+    ----------
+    Creates a rectangular bounding box around the station's geographic
+    location with a specified width and height (in meters), returned UTM
+    coordinates and geographic (lat/lon) coordinates.
+
+    Parameters
+    ----------
+    width_m : float
+        width of the bounding box in meters.
+    height_m : float
+        height of the bounding box in meters.
+
+    Returns
+    -------
+    bbox_utm : rio.coords.BoundingBox
+        Bounding box in UTM coordinates.
+    utm_crs : pyproj.CRS
+        The UTM CRS used for the transformation.
+    bbox_lat_lon : rio.coords.BoundingBox
+        Bounding box transformed back to geographic coordinates
+    """
+    utm_crs = get_utm_crs_from_lat_lon(lat, lon)
+
+    # For the UTM bounding box
+    transformer_to_utm = pyproj.Transformer.from_crs(
+        crs, utm_crs, always_xy=True
+    )
+    x, y = transformer_to_utm.transform(lon, lat)
+
+    half_w, half_h = width_m / 2, height_m / 2
+    bbox_utm = rio.coords.BoundingBox(
+        left=x - half_w, bottom=y - half_h, right=x + half_w, top=y + half_h
+    )
+    # For the lat/lon bounding box
+    transformer_to_lat_lon = pyproj.Transformer.from_crs(
+        utm_crs, crs, always_xy=True
+    )
+    lon_min, lat_min = transformer_to_lat_lon.transform(
+        bbox_utm.left, bbox_utm.bottom
+    )
+    lon_max, lat_max = transformer_to_lat_lon.transform(
+        bbox_utm.right, bbox_utm.top
+    )
+    bbox_lat_lon = rio.coords.BoundingBox(
+        left=lon_min, bottom=lat_min, right=lon_max, top=lat_max
+    )
+
+    return bbox_utm, utm_crs, bbox_lat_lon
+
+
+def work_area_from_coord_point(
+    lat: float, lon: float, w: float, h: float, crs: CRS
+):
+    """
+    Description
+    ----------
+    Get the working area around the given lat/lon point with UTM coordinates and
+    geographic coordinates.
+
+    Parameters
+    ----------
+    lat : float
+        latitude
+    lon : float
+        longitude
+    w : float
+        width of the bounding box in meters.
+    h : float
+        height of the bounding box in meters.
+    crs : CRS
+        crs of the point in lat/lon
+
+    Returns
+    -------
+    dict:
+        - "utm" : UTM coordinates and CRS
+        - "lat/lon" : geographic coordinates and CRS
+    """
+    bbox_utm, utm_crs, bbox_lat_lon = create_bbox_from_lat_lon(
+        lat, lon, w, h, crs
+    )
+    return {
+        "utm": (bbox_utm, utm_crs),
+        "lat/lon": (bbox_lat_lon, crs),
+    }
