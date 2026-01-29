@@ -391,7 +391,6 @@ def download_icos_station(
 
 def get_station_location(
     stations: str | list[str],
-    save: bool = False,  # noqa: FBT001
 ) -> gpd.GeoDataFrame:
     """
     Description
@@ -420,12 +419,37 @@ def get_station_location(
 
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs=CRS.from_epsg(4326))
 
-    if save:
-        pckg_path = "stations_package.gpkg"
-        gdf.to_file(pckg_path, layer="stations", driver="GPKG")
-        logger.info(f"Stations package save : {pckg_path}")
-        return gdf
     return gdf
+
+
+def create_geopckg_from_gdf(gdf: gpd.GeoDataFrame, path: str | None = None):
+    """
+    Description
+    ----------
+    Create a geopackage of a GeoDataFrame
+    ICOS stations
+
+    Parameters
+    ----------
+    gdf : gpd.GeoDataFrame
+        GeoDataFrame of stations
+    path : str
+        Path where to csv the pckg
+    Returns
+    -------
+    """
+    if path is None:
+        file_path = os.path.join(os.getcwd(), "pckg")
+    else:
+        file_path = os.path.abspath(os.path.join(path, "pckg"))
+
+    os.makedirs(file_path, exist_ok=True)
+    pckg_name = "stations_package.gpkg"
+
+    pckg_path = os.path.join(file_path, pckg_name)
+
+    gdf.to_file(pckg_path, layer="stations", driver="GPKG")
+    logger.info(f"Stations package save : {pckg_path}")
 
 
 def read_csv_data(cfg: StationConfig, path: str | None = None) -> pd.DataFrame:
