@@ -15,6 +15,7 @@ from etdataset.icos import (
     filter_valid_data,
     get_csv_with_valid_icos_stations,
     get_stations_config,
+    read_csv_data,
     save_station_data,
 )
 from etdataset.logging import LoggerManager
@@ -56,16 +57,18 @@ def prepare_icos_stations(
         # for each stations, get it configuration (latitude, longitude,
         # elevation)
         cfg = get_stations_config(station_id)
-
+        # From the station's CSV, get its data
+        data = read_csv_data(cfg)
         # Keep only valid data
-        data = filter_valid_data(cfg)
+        data = filter_valid_data(data)
 
         # Compute dewpoint temperature with Air temperature and Relative
         # humidity
         td = compute_dewpoint_temp(data["TA"], data["RH"])
-
+        # add dewpoint temperature
+        data["TD"] = td
         # Save datas of station in csv
-        csv_saved = save_station_data(cfg, data, td, out_dir)
+        csv_saved = save_station_data(cfg, data, out_dir)
         csv_paths.append(csv_saved)
 
     logger.info(f"All stations are completed {csv_paths}")

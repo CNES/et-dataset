@@ -146,14 +146,15 @@ def get_stations_config(id_station: str) -> StationConfig:
 
     For each row, this function creates a StationConfig entry with:
         - id of the station
+        - name of the station
+        - country of the station
         - geographic coordinates
         - elevation
-        - CRS fixed to EPSG:4326 (WGS84)
 
     Parameters
     ----------
-    csv_path : str
-        Path to the CSV file containing stations informations.
+    id_station : str
+        IDs of ICOS station
 
     Returns
     -------
@@ -208,12 +209,15 @@ def _download_file(obj, path: str, id_station: str, cookies: dict):
 
     """
     filename = f"ICOSETC_{id_station}_METEO_L2.zip"
+    download_dir = os.path.abspath(path)
+    os.makedirs(download_dir, exist_ok=True)
+
+    file_path = os.path.join(download_dir, filename)
     # Do not download if the file already exists
-    if os.path.exists(os.path.join(path, filename)):
-        logger.info(
-            f"File {os.path.join(path, filename)} already exists. Skip download"
-        )
-        return os.path.join(path, filename)
+
+    if os.path.exists(file_path):
+        logger.info(f"File {file_path} already exists. Skip download")
+        return file_path
 
     # get the url for downloading
     hash_id = obj.uri.split("/")[-1]
@@ -222,21 +226,25 @@ def _download_file(obj, path: str, id_station: str, cookies: dict):
     response = requests.get(url, cookies=cookies)
 
     if response.status_code == 200:
-        with open(os.path.join(path, filename), "wb") as file:
+        os.makedirs(path, exist_ok=True)
+        with open(file_path, "wb") as file:
             file.write(response.content)
         logger.info(
             f"File of the station {id_station} :"
-            f"{filename} downloaded successfully"
+            f"{filename} downloaded successfully in {path}"
         )
-        return os.path.join(path, filename)
+        return file_path
     logger.error(
-        f"Failed to download file of the station {id_station}: {filename} withthe status code : {response.status_code}"  # noqa: E501
+        f"Failed to download file of the station {id_station}: {filename} with the status code : {response.status_code}"  # noqa: E501
     )
     return None
 
 
 def download_file(
-    data_objects, cookies: dict, id_station: str, path: str | None = None
+    data_objects,
+    cookies: dict,
+    id_station: str,
+    path: str | None = None,
 ):
     """
     Description
@@ -260,15 +268,15 @@ def download_file(
     str or None
 
     """
-    filename = f"ICOSETC_{id_station}_METEO_L2.zip"
-
     if cookies is None:
         raise ValueError("The autentification token is not provided")
+
+    filename = f"ICOSETC_{id_station}_METEO_L2.zip"
 
     if path is None:
         download_folder = os.path.join(os.getcwd(), "ICOS")
     else:
-        download_folder = path
+        download_folder = os.path.abspath(os.path.join(path, "ICOS"))
 
     os.makedirs(download_folder, exist_ok=True)
 
@@ -313,7 +321,8 @@ def download_file(
 
 
 def download_icos_station(
-    stations: list[str] | str = "all", output: str | None = None
+    stations: list[str] | str = "all",
+    output: str | None = None,
 ):
     """
     Description
@@ -419,30 +428,58 @@ def get_station_location(
     return gdf
 
 
-def filter_valid_data(cfg: StationConfig) -> pd.DataFrame:
+def read_csv_data(cfg: StationConfig, path: str | None = None) -> pd.DataFrame:
     """
     Description
     -----------
-    Filter invalid RH and TA datas in station's csv
+    Read station's csv
 
     Parameters
     -----------
     cfg : StationConfig
         Station configuration
+    path : str
+        base directory
 
     Return
     -----------
     data : pd.DataFrame
         Filtered dataframe
     """
+    if path is None:
+        path = os.getcwd()
+    csv_path = os.path.join(
+        path,
+        "ICOS",
+        f"ICOSETC_{cfg.id}_METEO_L2",
+        f"ICOSETC_{cfg.id}_METEO_L2.csv",
+    )
 
-    csv_path = f"ICOS/ICOSETC_{cfg.id}_METEO_L2/ICOSETC_{cfg.id}_METEO_L2.csv"
     usecols = [
         "TIMESTAMP_START",
         "TA",
         "RH",
     ]
+
     data = pd.read_csv(csv_path, usecols=usecols)
+    return data
+
+
+def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Description
+    -----------
+    Filter invalid RH and TA datas in station's data
+
+    Parameters
+    -----------
+    data : pd.DtaFrame
+
+    Return
+    -----------
+    filtered_data : pd.DataFrame
+        Filtered dataframe
+    """
 
     data["TIMESTAMP_START"] = pd.to_datetime(
         data["TIMESTAMP_START"], format="%Y%m%d%H%M"
@@ -455,6 +492,7 @@ def filter_valid_data(cfg: StationConfig) -> pd.DataFrame:
     return filtered_data
 
 
+# TO DO
 def compute_dewpoint_temp(
     ta: npt.ArrayLike, rh: npt.ArrayLike, f: float = 243.04, d: float = 17.625
 ) -> npt.NDArray:
@@ -513,7 +551,6 @@ def kelvin_to_celsius(kelvin: npt.ArrayLike) -> npt.NDArray:
 def save_station_data(
     cfg: StationConfig,
     data: pd.DataFrame,
-    td: np.ndarray,
     out_dir: str = "icos_data",
 ):
     """
@@ -528,12 +565,10 @@ def save_station_data(
     td : np.ndarray
         Dew point temperature array
     """
-    path = os.getcwd()
-    folder = os.path.join(path, out_dir)
+
+    folder = os.path.join(os.getcwd(), out_dir)
     os.makedirs(folder, exist_ok=True)
 
-    data = data.copy()
-    data["TD"] = td
     data = data.rename(columns={"TIMESTAMP_START": "time"})
     csv_path = os.path.join(folder, f"{cfg.id}_data.csv")
     data.to_csv(csv_path, index=False)
