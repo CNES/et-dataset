@@ -1,3 +1,12 @@
+#
+# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
+#
+
+"""
+Module for reading ICOS
+"""
+
 import datetime as dt
 import os
 import zipfile
