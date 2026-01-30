@@ -1,40 +1,73 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/dev/bin/python",
-    "editor.defaultFormatter": "charliermarsh.ruff",
-    "editor.formatOnPaste": true,
-    "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-      "source.fixAll": "explicit",
-      "source.organizeImports": "explicit"
+  "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/dev/bin/python",
+  "editor.defaultFormatter": "charliermarsh.ruff",
+  "editor.formatOnPaste": true,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  "notebook.formatOnSave.enabled": true,
+  "notebook.codeActionsOnSave": {
+    "notebook.source.fixAll": "explicit",
+    "notebook.source.organizeImports": "explicit"
+  },
+  "pylint.enabled": false,
+  "flake8.enabled": false,
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestPath": "${workspaceFolder}/.pixi/envs/dev/bin/pytest",
+  "python.testing.unittestEnabled": false,
+  "mypy-type-checker.args": [
+    "--ignore-missing-imports",
+    "--follow-imports=silent",
+    "--show-column-numbers"
+  ],
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.pixi/**": true
+  },
+  "ruff.enable": true,
+  "ruff.configuration": "./ruff.toml",
+  "python.analysis.extraPaths": [
+    "./.pixi/envs/dev/lib/"
+  ],
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.pythonProjects": [],
+  "cSpell.customDictionaries": {
+    "custom-dictionary-workspace": {
+      "name": "custom-dictionary-workspace",
+      "path": "${workspaceFolder:et-dataset}/.cspell/custom-dictionary-workspace.txt",
+      "addWords": true,
+      "scope": "workspace"
+    }
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "cSpell.ignoreWords": [],
+  "cSpell.dictionaries": [
+    "python"
+  ],
+  "cSpell.overrides": [
+    {
+      "filename": "*.py",
+      "includeRegExpList": [
+        "/#.*$/gm"
+      ]
     },
-    "notebook.formatOnSave.enabled": true,
-    "notebook.codeActionsOnSave": {
-      "notebook.source.fixAll": "explicit",
-      "notebook.source.organizeImports": "explicit"
-    },
-    "pylint.enabled": false,
-    "flake8.enabled": false,
-    "python.testing.pytestEnabled": true,
-    "python.testing.pytestPath": "${workspaceFolder}/.pixi/envs/dev/bin/pytest",
-    "python.testing.unittestEnabled": false,
-    "mypy-type-checker.args": [
-        "--ignore-missing-imports",
-        "--follow-imports=silent",
-        "--show-column-numbers"
-    ],
-    "files.watcherExclude": {
-        "**/.git/objects/**": true,
-        "**/.git/subtree-cache/**": true,
-        "**/.pixi/**": true
-    },
-    "ruff.enable": true,
-    "ruff.configuration": "./ruff.toml",
-    "python.analysis.extraPaths": [
-      "./.pixi/envs/dev/lib/"
-    ],
-    "python.testing.pytestArgs": [
-      "tests"
-    ],
-    "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": []
+    {
+      "filename": "*.ipynb",
+      "includeRegExpList": [
+        "/#.*$/gm",
+        "/([\"'])([^\"{]*)?(?:({[^}]*}[^\"{]*)*)?([\"']/gm"
+      ]
+    }
+  ],
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  }
 }
