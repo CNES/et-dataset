@@ -90,6 +90,29 @@ def read_era5_file(
     return era5_xrds
 
 
+def read_era5_files(
+    datetimes: list[dt.datetime], path: str | None = None
+) -> xr.Dataset:
+    unique_dates = sorted({d.date() for d in datetimes})
+    # One day
+    if len(unique_dates) == 1:
+        ds = read_era5_file(
+            dt.datetime.combine(unique_dates[0], dt.time()),
+            path=path,
+        )
+        return ds.sel(time=datetimes)
+
+    # many days
+    datasets = [
+        read_era5_file(dt.datetime.combine(d, dt.time()), path=path)
+        for d in unique_dates
+    ]
+
+    ds = xr.concat(datasets, dim="time", coords="minimal", compat="override")
+
+    return ds.sel(time=datetimes)
+
+
 def filter_dataset_by_datetimes(
     ds: xr.Dataset, list_dt: list[dt.datetime], name_column: str = "time"
 ) -> xr.Dataset:
@@ -268,7 +291,9 @@ def prepare_temperature_inputs(
 
 # TO DO : TYPE
 def get_ta_td_celsius_at_location(
-    data: xr.Dataset, x: float, y: float
+    data: xr.Dataset,
+    x: float,
+    y: float,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """
      Description
