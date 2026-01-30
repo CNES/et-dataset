@@ -72,11 +72,22 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/etdataset"]
 
-
 [tool.pytest.ini_options]
+addopts = ["-m", "not skip or not slow"]
+markers = [
+    "unit: mark a test as a unit test.",
+    "functional: mark a test a functional test.",
+    "end_to_end: mark a test as an end-to-end test.",
+    "notebooks: mark a test that runs notebooks.",
+    "slow: mark a test that is slow to run.",
+    "docs: mark a test for docs.",
+    "skip: mark a test that must be skipped.",
+    "require_test_data: mark a test that requires ETDATASET_TEST_DATA_PATH environment variable to be set to the test dataset folder",
+]
 filterwarnings = [
   "ignore",
   "default:::etdataset",
+    "ignore::DeprecationWarning:jupyter_client",
         ]
 testpaths=["tests"]
 
@@ -91,8 +102,8 @@ omit = [
 ]
 
 [tool.coverage.paths]
-et_dataset = ["src/etdataset", "*/et-dataset/src/etdataset"]
-tests = ["tests", "*/et-dataset/tests"]
+et_dataset = ["src/etdataset"]
+tests = ["tests"]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -102,7 +113,6 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-plugins = ["numpy.typing.mypy_plugin"]
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
