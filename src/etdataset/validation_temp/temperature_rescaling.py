@@ -13,9 +13,7 @@ from etdataset.era5 import (
     read,
     rescale_temperature_with_lapserate,
 )
-from etdataset.icos import (
-    kelvin_to_celsius,
-)
+from etdataset.icos import StationConfig, kelvin_to_celsius
 from etdataset.interpolation import create_grid_dataset
 from etdataset.logging import LoggerManager
 
@@ -108,8 +106,13 @@ def read_era5_files(
         for d in unique_dates
     ]
 
-    ds = xr.concat(datasets, dim="time", coords="minimal", compat="override")
-
+    ds = xr.concat(
+        datasets,
+        dim="time",
+        coords="minimal",
+        compat="override",
+        join="override",
+    )
     return ds.sel(time=datetimes)
 
 
@@ -231,6 +234,25 @@ def temperature_rescaling_constant_lapse_rate(
             logger.debug("Add dewpoint temperature: OK")
 
     return updated_data
+
+
+def get_ta_td_csv(
+    ds: xr.Dataset,
+    cfg: StationConfig,
+    path: str | None = None,
+    name_dir: str | None = None,
+):
+    if name_dir is None:
+        name_dir = "csv_l"
+
+    if path is None:
+        file_path = os.path.abspath(os.path.join(os.getcwd(), name_dir))
+    else:
+        file_path = os.path.abspath(os.path.join(path, name_dir))
+    os.makedirs(file_path, exist_ok=True)
+    df = ds.to_dataframe().reset_index()
+    df = df[["time", "ta", "tdp"]]
+    df.to_csv(os.path.join(file_path, f"{cfg.id}_csv.csv"), index=False)
 
 
 def prepare_temperature_inputs(
