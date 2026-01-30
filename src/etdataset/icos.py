@@ -571,14 +571,17 @@ def compute_dewpoint_temp(
     return tp
 
 
-def kelvin_to_celsius(kelvin: npt.ArrayLike) -> npt.NDArray:
+# TO DO : TYPE
+def kelvin_to_celsius(
+    kelvin: xr.DataArray,
+) -> xr.DataArray:
     """
     Description
     -----------
     Compute the temperature in celsius from a temperature in kelvin
 
     """
-    return np.array(kelvin) - 273.15
+    return kelvin - 273.15
 
 
 def save_station_data(
