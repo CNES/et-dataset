@@ -19,6 +19,16 @@ from scipy.io import savemat
 def get_row_col(xrds: xr.Dataset) -> tuple[int, int]:
     """
     Get number of rows and columns from a dataset
+
+    Parameters
+    ----------
+    xrds: xr.Dataset
+        Dataset
+
+    Returns
+    -------
+    row,col: tuple[int,int]
+        number of rows and columns
     """
     if len(xrds.data_vars) == 0:
         msg = "Datset empty"
@@ -46,7 +56,18 @@ def write_dataset(
     separate=False,
 ):
     """
-    Write dataset in one file or in separated files
+    Write the dataset to a TIFF file or to separated TIFF files
+
+    Parameters
+    ----------
+    xrds: xr.Dataset
+        Dataset
+    bands: list[str]
+        List of bands to write
+    directory: str
+        Output directory path
+    separate: bool
+        Write one or multiple files
     """
     row, col = get_row_col(xrds)
     if bands is None:
@@ -143,11 +164,76 @@ def write_dataset(
                 source_ds.set_band_description(1, band)
 
 
+def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
+    """
+    Write one band from a dataset to a TIFF file
+
+    Parameters
+    ----------
+    xrds: xr.Dataset
+        Dataset
+    band: str
+        Band to write
+    directory: str
+        Output directory path
+    """
+    row, col = get_row_col(xrds)
+    if xrds.attrs["vis"] == xrds.attrs["tir"]:
+        filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
+    else:
+        filename = (
+            f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
+            f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
+        )
+    if xrds.attrs.get("tile", None) is not None:
+        filename += f"_{xrds.attrs['tile']}"
+    filename += ".tif"
+    try:
+        dtype = xrds[band].dtype
+    except KeyError:
+        raise ValueError(f"Band {band} not in dataset")
+    # Get projection
+    if xrds.attrs.get("crs", None) is not None:
+        crs = xrds.attrs["crs"]
+        transform = xrds.attrs["transform"]
+    elif hasattr(xrds, "rio"):
+        crs = xrds.rio.crs
+        transform = xrds.rio.transform()
+    else:
+        raise AttributeError("No CRS is defined")
+    with rio.open(
+        os.path.join(directory, filename),
+        mode="w+",
+        driver="GTiff",
+        width=col,
+        height=row,
+        count=1,
+        dtype=dtype,
+        nodata=np.nan,
+        crs=crs,
+        transform=transform,
+    ) as source_ds:
+        source_ds.write_band(1, xrds[band].data)
+        source_ds.set_band_description(1, band)
+
+
 def export_matlab(
     xrds: xr.Dataset,
     bands: list[str] | None = None,
     directory: str = os.getcwd(),
 ):
+    """
+    Write the dataset to a matlab file
+
+    Parameters
+    ----------
+    xrds: xr.Dataset
+        Dataset
+    bands: list[str]
+        List of bands to write
+    directory: str
+        Output directory path
+    """
     if bands is None:
         bands = [str(b) for b in xrds.data_vars]
     else:
@@ -169,21 +255,53 @@ def export_matlab(
 
 
 def write_matches(res: pd.DataFrame, output: str = "matches.csv") -> None:
+    """
+    Write matches file
+
+    Parameters
+    ----------
+    res: pd.DataFrame
+        Matches results
+    output: str
+        Output file
+    """
     if len(res) > 0:
         res.to_csv(output, index=False)
 
 
 def write_results(res: pd.DataFrame, output: str = "results.csv") -> None:
+    """
+    Write results file
+
+    Parameters
+    ----------
+    res: pd.DataFrame
+        Results
+    output: str
+        Output file
+    """
     if len(res) > 0:
         res.to_csv(output, index=False)
 
 
-def write_to_tif(xrds: xr.Dataset, filename=str):
+def write_to_tif(
+    xrds: xr.Dataset, bands: list[str] | None = None, filename=str
+):
     """
-    Write data to tif
+    Write the dataset to TIFF file
+
+    Parameters
+    ----------
+    xrds: xr.Dataset
+        Dataset
+    filename: str
+        File path
     """
     row, col = get_row_col(xrds)
-    bands = list(xrds.data_vars)
+    if bands is None:
+        bands = [str(b) for b in xrds.data_vars]
+    else:
+        bands = [i for i in bands if i in xrds.data_vars]
     # Get projection
     if xrds.attrs.get("crs", None) is not None:
         crs = xrds.attrs["crs"]
@@ -213,9 +331,16 @@ def write_to_tif(xrds: xr.Dataset, filename=str):
 
 def write_to_netcdf(xrds: xr.Dataset, filename=str):
     """
-    Write to NETCDF format
+    Write the dataset to NETCDF file
+
+    Parameters
+    ----------
+    xrds: xr.Dataset
+        Dataset
+    filename: str
+        File path
     """
-    # Create encoding dictionnary
+    # Create encoding dictionary
     for variable in list(xrds.keys()):
         xrds[variable].encoding.update(
             {
@@ -295,7 +420,7 @@ def write_dataset_to_netcdf(
     if xrds.attrs.get("tile", None) is not None:
         filename += f"_{xrds.attrs['tile']}"
     filename += ".nc"
-    # Create encoding dictionnary
+    # Create encoding dictionary
     for variable in list(xrds.keys()):
         xrds[variable].encoding.update(
             {
@@ -393,9 +518,7 @@ def write_et_single_date(data: xr.Dataset, path: str | None = None) -> None:
 
 def write_daily_explanatory(data: xr.Dataset, path: str | None = None) -> None:
     """
-    Description
-    -----------
-    Create .tif file from a daily explanatory variable dataset
+    Write .tif file from a daily explanatory variable dataset
 
     Parameters
     ----------
