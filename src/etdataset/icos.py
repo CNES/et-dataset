@@ -52,6 +52,15 @@ class StationConfig:
     elev: float
 
 
+#####################################
+##                                 ##
+##                                 ##
+##   Get available ICOS datas      ##
+##                                 ##
+##                                 ##
+#####################################
+
+
 def get_csv_with_valid_icos_stations(update: bool = False):  # noqa: FBT001
     """
     Description
@@ -147,6 +156,42 @@ def filter_stations_by_country_code(country_code: str):
     return data_filtered
 
 
+def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Description
+    -----------
+    Filter invalid RH and TA datas in station's data
+
+    Parameters
+    -----------
+    data : pd.DtaFrame
+
+    Return
+    -----------
+    filtered_data : pd.DataFrame
+        Filtered dataframe
+    """
+
+    data["TIMESTAMP_START"] = pd.to_datetime(
+        data["TIMESTAMP_START"], format="%Y%m%d%H%M"
+    )
+
+    # Select only valid mesures
+    filtered_data = data[
+        (data["TA"] != -9999) & (data["RH"] != -9999)
+    ].reset_index(drop=True)
+    return filtered_data
+
+
+#####################################
+##                                 ##
+##                                 ##
+##    Get metadatas of a station   ##
+##                                 ##
+##                                 ##
+#####################################
+
+
 def get_stations_config(id_station: str) -> StationConfig:
     """
     Description
@@ -180,10 +225,43 @@ def get_stations_config(id_station: str) -> StationConfig:
     return StationConfig(id=id_station, **station)
 
 
+def get_station_location(
+    stations: str | list[str],
+) -> gpd.GeoDataFrame:
+    """
+    Description
+    ----------
+    Create a geopandas DataFrame of all the given
+    ICOS stations
+
+    Parameters
+    ----------
+    stations : str | list[str]
+        the given ICOS stations
+    save : bool = False
+        save or not the geodataframe into a geopackage file
+    Returns
+    -------
+    gdf : GeoDataFrame
+    """
+    if isinstance(stations, str):
+        stations = [stations]
+    csv_path = get_csv_with_valid_icos_stations()
+    df = pd.read_csv(csv_path, usecols=["id", "name", "lat", "lon", "elev"])
+    df = df[df["id"].isin(stations)]
+    geometry = [
+        Point(row["lon"], row["lat"], row["elev"]) for _, row in df.iterrows()
+    ]
+
+    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs=CRS.from_epsg(4326))
+
+    return gdf
+
+
 #####################################
 ##                                 ##
 ##                                 ##
-##   DOWNLOAD ICOS STATIONS FILE   ##
+##   Download icos stations file   ##
 ##                                 ##
 ##                                 ##
 #####################################
@@ -398,67 +476,13 @@ def download_icos_station(
     logger.info(f"All the stations are downloaded {ids}")
 
 
-def get_station_location(
-    stations: str | list[str],
-) -> gpd.GeoDataFrame:
-    """
-    Description
-    ----------
-    Create a geopandas DataFrame of all the given
-    ICOS stations
-
-    Parameters
-    ----------
-    stations : str | list[str]
-        the given ICOS stations
-    save : bool = False
-        save or not the geodataframe into a geopackage file
-    Returns
-    -------
-    gdf : GeoDataFrame
-    """
-    if isinstance(stations, str):
-        stations = [stations]
-    csv_path = get_csv_with_valid_icos_stations()
-    df = pd.read_csv(csv_path, usecols=["id", "name", "lat", "lon", "elev"])
-    df = df[df["id"].isin(stations)]
-    geometry = [
-        Point(row["lon"], row["lat"], row["elev"]) for _, row in df.iterrows()
-    ]
-
-    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs=CRS.from_epsg(4326))
-
-    return gdf
-
-
-def create_geopckg_from_gdf(gdf: gpd.GeoDataFrame, path: str | None = None):
-    """
-    Description
-    ----------
-    Create a geopackage of a GeoDataFrame
-    ICOS stations
-
-    Parameters
-    ----------
-    gdf : gpd.GeoDataFrame
-        GeoDataFrame of stations
-    path : str
-        Path where to csv the pckg
-    Returns
-    -------
-    """
-    if path is None:
-        file_path = os.path.join(os.getcwd(), "pckg")
-    else:
-        file_path = os.path.abspath(os.path.join(path, "pckg"))
-
-    os.makedirs(file_path, exist_ok=True)
-    pckg_name = "stations_package.gpkg"
-
-    pckg_path = os.path.join(file_path, pckg_name)
-
-    gdf.to_file(pckg_path, layer="stations", driver="GPKG")
-    logger.info(f"Stations package save : {pckg_path}")
+#####################################
+##                                 ##
+##                                 ##
+##   Read icos stations csv file   ##
+##                                 ##
+##                                 ##
+#####################################
 
 
 def read_csv_data(cfg: StationConfig, path: str | None = None) -> pd.DataFrame:
@@ -498,31 +522,80 @@ def read_csv_data(cfg: StationConfig, path: str | None = None) -> pd.DataFrame:
     return data
 
 
-def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
+#####################################
+##                                 ##
+##                                 ##
+##         Save ICOS data          ##
+##                                 ##
+##                                 ##
+#####################################
+
+
+def create_geopckg_from_gdf(gdf: gpd.GeoDataFrame, path: str | None = None):
     """
     Description
-    -----------
-    Filter invalid RH and TA datas in station's data
+    ----------
+    Create a geopackage of a GeoDataFrame
+    ICOS stations
 
     Parameters
-    -----------
-    data : pd.DtaFrame
+    ----------
+    gdf : gpd.GeoDataFrame
+        GeoDataFrame of stations
+    path : str
+        Path where to csv the pckg
+    Returns
+    -------
+    """
+    if path is None:
+        file_path = os.path.join(os.getcwd(), "pckg")
+    else:
+        file_path = os.path.abspath(os.path.join(path, "pckg"))
 
-    Return
-    -----------
-    filtered_data : pd.DataFrame
-        Filtered dataframe
+    os.makedirs(file_path, exist_ok=True)
+    pckg_name = "stations_package.gpkg"
+
+    pckg_path = os.path.join(file_path, pckg_name)
+
+    gdf.to_file(pckg_path, layer="stations", driver="GPKG")
+    logger.info(f"Stations package save : {pckg_path}")
+
+
+def save_station_data(
+    cfg: StationConfig,
+    data: pd.DataFrame,
+    out_dir: str = "icos_data",
+):
+    """
+    Save ICOS station data with dew point temperature to CSV.
+
+    Parameters
+    ----------
+    cfg : StationConfig
+        Station configuration
+    data : pd.DataFrame
+        DataFrame with TIMESTAMP_START, TA, RH
+    td : np.ndarray
+        Dew point temperature array
     """
 
-    data["TIMESTAMP_START"] = pd.to_datetime(
-        data["TIMESTAMP_START"], format="%Y%m%d%H%M"
-    )
+    folder = os.path.join(os.getcwd(), out_dir)
+    os.makedirs(folder, exist_ok=True)
 
-    # Select only valid mesures
-    filtered_data = data[
-        (data["TA"] != -9999) & (data["RH"] != -9999)
-    ].reset_index(drop=True)
-    return filtered_data
+    data = data.rename(columns={"TIMESTAMP_START": "time"})
+    csv_path = os.path.join(folder, f"{cfg.id}_data.csv")
+    data.to_csv(csv_path, index=False)
+
+    return csv_path
+
+
+#########################################
+##                                     ##
+##                                     ##
+## Calculations related to temperature ##
+##                                     ##
+##                                     ##
+#########################################
 
 
 # TO DO
@@ -582,34 +655,6 @@ def kelvin_to_celsius(
 
     """
     return kelvin - 273.15
-
-
-def save_station_data(
-    cfg: StationConfig,
-    data: pd.DataFrame,
-    out_dir: str = "icos_data",
-):
-    """
-    Save ICOS station data with dew point temperature to CSV.
-
-    Parameters
-    ----------
-    cfg : StationConfig
-        Station configuration
-    data : pd.DataFrame
-        DataFrame with TIMESTAMP_START, TA, RH
-    td : np.ndarray
-        Dew point temperature array
-    """
-
-    folder = os.path.join(os.getcwd(), out_dir)
-    os.makedirs(folder, exist_ok=True)
-
-    data = data.rename(columns={"TIMESTAMP_START": "time"})
-    csv_path = os.path.join(folder, f"{cfg.id}_data.csv")
-    data.to_csv(csv_path, index=False)
-
-    return csv_path
 
 
 #############################################################################################
