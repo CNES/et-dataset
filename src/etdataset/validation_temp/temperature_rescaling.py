@@ -77,6 +77,7 @@ def generate_datetime(
     return datetimes
 
 
+# TO DO : TYPE
 def prepare_temperature_inputs(
     data: xr.Dataset,
     era5_data: xr.Dataset,
@@ -292,7 +293,18 @@ def temperature_rescaling_constant_lapse_rate(
     """
     Description
     -----------
-    Apply constant lapse rate corrections and add temperature variables.
+    Rescale ERA5 temperature variables using a constant lapse rate.
+
+    ERA5 temperatures are originally computed at the ERA5 elevation level.
+
+    -> In a first step, the temperatures are adjusted to a fixed reference
+    elevation using a constant lapse rate.
+
+
+    -> In a second step, if a target DEM is provided, the temperatures are
+    further rescaled from the reference elevation to the DEM elevation.
+
+    The resulting temperature variables are added to the updated dataset.
 
     Parameters
     ----------
@@ -356,7 +368,8 @@ def get_ta_td_celsius_at_location(
     """
      Description
     -----------
-    Get Air temperature and dewpoint temperature at a location from data
+    Get Air temperature and dewpoint temperature at a specified location f
+    from data
 
      Parameters
      ----------
