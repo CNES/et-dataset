@@ -1,6 +1,7 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import datetime as dt
 import os
+from typing import Any
 
 import rasterio as rio
 import xarray as xr
@@ -19,6 +20,15 @@ from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
 G_CST = 9.80665
+
+
+#########################################
+##                                     ##
+##                                     ##
+##           Prepare Inputs            ##
+##                                     ##
+##                                     ##
+#########################################
 
 
 def generate_datetime(
@@ -67,11 +77,85 @@ def generate_datetime(
     return datetimes
 
 
+def prepare_temperature_inputs(
+    data: xr.Dataset,
+    era5_data: xr.Dataset,
+    dataset: ERA5Dataset = ERA5Dataset.ERA5,
+) -> tuple[Any | None, xr.DataArray | None, xr.Dataset]:
+    """
+    Description
+    -----------
+    Prepare DEM, ERA5 DEM and copy of dataset for temperature rescaling.
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Data (e.g : grid or dem)
+    era5_data : xr.Dataset
+        Era5 data for one day
+    dataset: ERA5Dataset
+        ERA5 Dataset used for download
+
+    Return
+    -----------
+    dem : xr.DataArray
+        dem
+    era5_dem : xr.DataArray
+        ERA5 dem
+    updated_data : xr.Dataset
+        Updated data
+    """
+    dem = data.get("height", None)
+    crs = data.rio.crs
+
+    if dem is not None:
+        dem = dem.rio.write_crs(crs)
+
+    logger.info(f"Dem = {dem}")
+
+    # Compute ERA5 DEM
+    if (
+        dataset == ERA5Dataset.ERA5
+        and ERA5Var.GEOPOTENTIAL.key in era5_data.data_vars
+    ):
+        era5_dem = era5_data[ERA5Var.GEOPOTENTIAL.key] / G_CST
+        logger.warning(
+            "DEM is missing in ERA5 data: No variables 'height' in the dataset"
+        )
+    elif dataset == ERA5Dataset.ERA5LAND:
+        era5_dem = compute_egm96_height(era5_data)
+        logger.debug("Compute EGM96 height")
+    else:
+        era5_dem = None
+
+    updated_data = data.copy()
+
+    return dem, era5_dem, updated_data
+
+
 def read_era5_file(
     datetime: dt.datetime,
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
     path: str | None = None,
-):
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    For a given date and dataset of ERA5, read the file and return a dataset.
+
+    Parameters
+    -----------
+    datetime : dt.datetime
+        A date
+    dataset : ERA5Dataset
+        Dataset
+    path : str
+        Path to ERA5 file
+
+    Returns
+    -------
+    era5_xrds : xr.Dataset
+    """
     date = datetime.date()
     if path is None:
         path = os.getcwd()
@@ -91,6 +175,24 @@ def read_era5_file(
 def read_era5_files(
     datetimes: list[dt.datetime], path: str | None = None
 ) -> xr.Dataset:
+    """
+    Description
+    -----------
+    For a given list of datetime and a given dataset of ERA5, read all the files
+    and return a merged dataset.
+
+    Parameters
+    -----------
+    datetimes : list[dt.datetime]
+        List of dates
+    path : str
+        Path to ERA5 files
+
+    Returns
+    -------
+    ds : xr.Dataset
+        Merged dataset
+    """
     unique_dates = sorted({d.date() for d in datetimes})
     # One day
     if len(unique_dates) == 1:
@@ -171,6 +273,15 @@ def get_era5_grid(
     return grid
 
 
+#########################################
+##                                     ##
+##                                     ##
+##      Temperature rescaling          ##
+##                                     ##
+##                                     ##
+#########################################
+
+
 def temperature_rescaling_constant_lapse_rate(
     updated_data: xr.Dataset,
     dem: xr.DataArray | None,
@@ -236,81 +347,6 @@ def temperature_rescaling_constant_lapse_rate(
     return updated_data
 
 
-def get_ta_td_csv(
-    ds: xr.Dataset,
-    cfg: StationConfig,
-    path: str | None = None,
-    name_dir: str | None = None,
-):
-    if name_dir is None:
-        name_dir = "csv_l"
-
-    if path is None:
-        file_path = os.path.abspath(os.path.join(os.getcwd(), name_dir))
-    else:
-        file_path = os.path.abspath(os.path.join(path, name_dir))
-    os.makedirs(file_path, exist_ok=True)
-    df = ds.to_dataframe().reset_index()
-    df = df[["time", "ta", "tdp"]]
-    df.to_csv(os.path.join(file_path, f"{cfg.id}_csv.csv"), index=False)
-
-
-def prepare_temperature_inputs(
-    data: xr.Dataset,
-    era5_data: xr.Dataset,
-    dataset: ERA5Dataset = ERA5Dataset.ERA5,
-) -> tuple[xr.DataArray | None, xr.DataArray | None, xr.Dataset]:
-    """
-    Description
-    -----------
-    Prepare DEM, ERA5 DEM and copy of dataset for temperature rescaling.
-
-    Parameters
-    ----------
-    data: xr.Dataset
-        Data (e.g : grid or dem)
-    era5_data : xr.Dataset
-        Era5 data for one day
-    dataset: ERA5Dataset
-        ERA5 Dataset used for download
-
-    Return
-    -----------
-    dem : xr.DataArray
-        dem
-    era5_dem : xr.DataArray
-        ERA5 dem
-    updated_data : xr.Dataset
-        Updated data
-    """
-    dem = data.get("height", None)
-    crs = data.rio.crs
-
-    if dem is not None:
-        dem = dem.rio.write_crs(crs)
-
-    logger.info(f"Dem = {dem}")
-
-    # Compute ERA5 DEM
-    if (
-        dataset == ERA5Dataset.ERA5
-        and ERA5Var.GEOPOTENTIAL.key in era5_data.data_vars
-    ):
-        era5_dem = era5_data[ERA5Var.GEOPOTENTIAL.key] / G_CST
-        logger.warning(
-            "DEM is missing in ERA5 data: No variables 'height' in the dataset"
-        )
-    elif dataset == ERA5Dataset.ERA5LAND:
-        era5_dem = compute_egm96_height(era5_data)
-        logger.debug("Compute EGM96 height")
-    else:
-        era5_dem = None
-
-    updated_data = data.copy()
-
-    return dem, era5_dem, updated_data
-
-
 # TO DO : TYPE
 def get_ta_td_celsius_at_location(
     data: xr.Dataset,
@@ -345,3 +381,49 @@ def get_ta_td_celsius_at_location(
         ),
     )
     return ta, td
+
+
+#########################################
+##                                     ##
+##                                     ##
+##            cfSave results             ##
+##                                     ##
+##                                     ##
+#########################################
+
+
+def save_ta_td_csv(
+    ds: xr.Dataset,
+    cfg: StationConfig,
+    path: str | None = None,
+    name_dir: str | None = None,
+):
+    """
+    Description
+    -----------
+    Save Air Temperature (TA) and Dewpoint Temperature (TDP) timeseries into a
+    csv file
+
+    Parameters
+    ----------
+    ds: xr.Dataset
+        Data to save
+    cfg : StationConfig
+        Current station configuration
+    path: str
+        Path to save th csv file
+    name_dir : str
+        Name of the directory
+
+    """
+    if name_dir is None:
+        name_dir = "csv"
+
+    if path is None:
+        file_path = os.path.abspath(os.path.join(os.getcwd(), name_dir))
+    else:
+        file_path = os.path.abspath(os.path.join(path, name_dir))
+    os.makedirs(file_path, exist_ok=True)
+    df = ds.to_dataframe().reset_index()
+    df = df[["time", "ta", "tdp"]]
+    df.to_csv(os.path.join(file_path, f"{cfg.id}_csv.csv"), index=False)
