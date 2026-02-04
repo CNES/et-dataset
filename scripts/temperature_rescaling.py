@@ -16,18 +16,20 @@ from pyproj import CRS
 
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
-from etdataset.era5 import ERA5Dataset, ERA5Var
+from etdataset.era5 import ERA5Dataset
 from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
 from etdataset.logging import LoggerManager
 from etdataset.utils import (
     work_area_from_coord_point,
 )
 from etdataset.validation_temp.temperature_rescaling import (
-    generate_datetime,
-    get_era5_grid,
+    create_era5_sub_dataset,
+    filter_dataset_by_hours,
+    generate_dates,
+    generate_hours,
     get_ta_td_celsius_at_location,
     prepare_temperature_inputs,
-    read_era5_files,
+    read_era5_file,
     save_ta_td_csv,
     temperature_rescaling_constant_lapse_rate,
 )
@@ -36,90 +38,70 @@ logger = LoggerManager.get_logger(__name__)
 
 
 def run_stations_process(
-    era5_data: xr.Dataset,
+    start_date: dt.date,
+    end_date: dt.date,
+    step_date: int,
     station: str,
+    list_hours: list[dt.time],
     mnt_path: str,
     output: str,
 ):  # Get metadats of the station
+    logger.info(f"Current station : {station}")
     cfg = get_stations_config(station)
+    for d in generate_dates(start_date, end_date, step_date):
+        logger.info(f"Current date : {d}")
+        era5_xrds = read_era5_file(
+            d,
+            ERA5Dataset.ERA5,
+            "/home/mliateni/Bureau/meriem/et-dataset/notebooks/out",
+        )
+        era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
-    # FOR ERA5 GRID #########################################################
-    # get a roi around the station
-    bounds, crs_bounds = work_area_from_coord_point(
-        cfg.lat, cfg.lon, 50000, 50000, CRS.from_epsg(4326)
-    )["lat/lon"]
-    # create a grid of era5 data
-    grid = get_era5_grid(bounds, crs_bounds, 0.25)
-    # get dem (the grid), era5 dem (height of era5 data) and updated data
-    dem, era5_dem, updated_data = prepare_temperature_inputs(
-        data=grid, era5_data=era5_data, dataset=ERA5Dataset.ERA5
-    )
-    # rescale the era5 grid
-    updated = temperature_rescaling_constant_lapse_rate(
-        updated_data,
-        dem,
-        era5_data,
-        era5_dem,
-        variables=[
-            ERA5Var.TEMPERATURE,
-            ERA5Var.DEWPOINT_TEMPERATURE,
-        ],
-    )
-    # get ta and td in celsius at station location
-    ta, td = get_ta_td_celsius_at_location(updated, cfg.lon, cfg.lat)
-    ds_era5_grid = xr.Dataset(
-        {
-            "ta": ta,
-            "tdp": td,
-        }
-    )
-    # save data as csv
-    save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_grid")
+        # FOR ERA5 data only ###################################################
+        era5_sub = create_era5_sub_dataset(era5_filtered)
+        # get ta and td in celsius at station location
+        ta, td = get_ta_td_celsius_at_location(era5_sub, cfg)
+        logger.info(f"TA:{ta} and TD :{td}")
+        ds_era5_grid = xr.Dataset(
+            {
+                "ta": ta,
+                "tdp": td,
+            }
+        )
+        # save data as csv
+        save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_grid")
 
-    # FOR ERA5 RESCALED ########################################################
-    # get a roi around the station
-    roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
-        cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
-    )["utm"]
-    # get dem from the roi
-    dem = get_dem_from_roi(
-        roi_bbox=roi_bbox_utm,
-        roi_crs=roi_crs_utm,
-        base_dir=mnt_path,
-        resolution=60,
-    )
-    dem, era5_dem, updated_data = prepare_temperature_inputs(
-        data=dem,
-        era5_data=era5_data,
-        dataset=ERA5Dataset.ERA5,
-    )
-    updated = temperature_rescaling_constant_lapse_rate(
-        updated_data,
-        dem,
-        era5_data,
-        era5_dem,
-        variables=[
-            ERA5Var.TEMPERATURE,
-            ERA5Var.DEWPOINT_TEMPERATURE,
-        ],
-    )
-
-    x, y = (
-        work_area_from_coord_point(cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326))[
-            "utm"
-        ][0].left,
-        work_area_from_coord_point(cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326))[
-            "utm"
-        ][0].bottom,
-    )
-    ta, td = get_ta_td_celsius_at_location(updated, x, y)
-    ds_era5_grid = xr.Dataset(
-        {
-            "ta": ta,
-            "tdp": td,
-        }
-    )
-    save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_rescaled")
+        # FOR ERA5 RESCALED ####################################################
+        # get a roi around the station
+        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+            cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
+        )["utm"]
+        # get dem from the roi
+        dem = get_dem_from_roi(
+            roi_bbox=roi_bbox_utm,
+            roi_crs=roi_crs_utm,
+            base_dir=mnt_path,
+            resolution=60,
+        )
+        new_dem, era5_dem, updated_data = prepare_temperature_inputs(
+            data=dem,
+            era5_data=era5_filtered,
+            dataset=ERA5Dataset.ERA5,
+        )
+        updated = temperature_rescaling_constant_lapse_rate(
+            updated_data,
+            new_dem,
+            era5_filtered,
+            era5_dem,
+        )
+        ta, td = get_ta_td_celsius_at_location(updated, cfg)
+        ds_era5_grid = xr.Dataset(
+            {
+                "ta": ta,
+                "tdp": td,
+            }
+        )
+        save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_rescaled")
 
 
 def generate_timeseries_for_stations_multiprocess(
@@ -134,10 +116,7 @@ def generate_timeseries_for_stations_multiprocess(
     stations: list[str] | str = "all",
 ):
     # download_date_by_date(start_date, end_date, ERA5Dataset.ERA5, output="out")  # noqa: E501
-    list_date = generate_datetime(
-        start_date, end_date, step_day, hour_start, hour_end, hour_step
-    )
-    era5_xrds = read_era5_files(list_date, "out")
+    list_hours = generate_hours(hour_start, hour_end, hour_step)
 
     # Station
     csv_path = get_csv_with_valid_icos_stations()
@@ -159,7 +138,15 @@ def generate_timeseries_for_stations_multiprocess(
     for station_id in ids:
         p = Process(
             target=run_stations_process,
-            args=(era5_xrds, station_id, mnt_path, output),
+            args=(
+                start_date,
+                end_date,
+                step_day,
+                station_id,
+                list_hours,
+                mnt_path,
+                output,
+            ),
         )
         procs.append(p)
         p.start()
