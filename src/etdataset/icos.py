@@ -573,8 +573,16 @@ def save_station_data(
 
     folder = os.path.join(os.getcwd(), out_dir)
     os.makedirs(folder, exist_ok=True)
-
-    data = data.rename(columns={"TIMESTAMP_START": "time"})
+    rename_map = {
+        "TIMESTAMP_START": "time",
+        "TA": "ta",
+        "TD": "tdp",
+        "RH": "rh",
+    }
+    data = data.rename(
+        columns={k: v for k, v in rename_map.items() if k in data.columns}
+    )
+    # data = data.rename(columns={"TIMESTAMP_START": "time"})
     csv_path = os.path.join(folder, f"{cfg.id}_data.csv")
     data.to_csv(csv_path, index=False)
 

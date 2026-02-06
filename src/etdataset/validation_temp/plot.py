@@ -6,41 +6,443 @@ Functions for plotting
 """
 # Skip this file with mypy
 
+import os
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 import plotly.graph_objects as go
+import xarray as xr
 
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
 
 
+#########################################
+##                                     ##
+##                                     ##
+##        Prepare Inputs csv           ##
+##                                     ##
+##                                     ##
+#########################################
+
+
+def list_csv_files(folder: str) -> list[str]:
+    """
+    List all CSV files in a given folder
+
+    Parameters
+    ----------
+    folder : str
+        Path to the directory
+
+    Returns
+    -------
+    list[str]
+        List of full paths to CSV files found in the folder
+    """
+    return [
+        os.path.join(folder, f)
+        for f in os.listdir(folder)
+        if f.lower().endswith(".csv")
+    ]
+
+
+#########################################
+##                                     ##
+##                                     ##
+##           Filter datas              ##
+##                                     ##
+##                                     ##
+#########################################
+
+
+def filter_icos_on_era5_hours(
+    df_icos: pd.DataFrame,
+    df_era5: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Filter ICOS data to keep only:
+    - observations at full hours (minute == 0)
+    - timestamps that are also present in ERA5 data
+
+    Parameters
+    ----------
+    df_icos : pd.DataFrame
+        ICOS observations containing a 'time' column
+    df_era5 : pd.DataFrame
+        ERA5 data containing a 'time' column
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered ICOS DataFrame with ERA5 hourly timestamps.
+    """
+    df_i = df_icos.copy()
+    df_i["time"] = pd.to_datetime(df_i["time"])
+
+    df_e = df_era5.copy()
+    df_e["time"] = pd.to_datetime(df_e["time"])
+
+    era5_hours = set(df_e["time"].unique())
+
+    mask = (df_i["time"].dt.minute == 0) & (df_i["time"].isin(era5_hours))
+    return df_i[mask]
+
+
+def filter_files_by_station(
+    files: list[str],
+    stations: list[str] | str = "all",
+) -> list[str]:
+    """
+    Filter a list of file paths by station names.
+
+    Parameters
+    ----------
+    files : list[str]
+        List of file paths.
+    stations : list[str] | str, default "all"
+        Station names to keep.
+        - "all": keep all files
+        - list of station names: keep only files starting with these names
+
+    Returns
+    -------
+    list[str]
+        Filtered list of file paths.
+    """
+    if stations == "all":
+        return files
+
+    if isinstance(stations, str):
+        stations = [stations]
+
+    stations = [s.lower() for s in stations]
+
+    selected = []
+    for f in files:
+        filename = os.path.basename(f).lower()
+        if any(filename.startswith(st + "_") for st in stations):
+            selected.append(f)
+
+    return selected
+
+
+#########################################
+##                                     ##
+##                                     ##
+##                 warnings            ##
+##                                     ##
+##                                     ##
+#########################################
+
+
+def warn_missing_stations(
+    stations: list[str] | str,
+    era5_files: list[str],
+    era5r_files: list[str],
+    icos_files: list[str],
+):
+    """
+    Log warnings for stations missing in one or more data sources
+
+    Parameters
+    ----------
+    stations : list[str] | str
+        Stations to check, or "all" to disable warnings
+    era5_files : list[str]
+        List of ERA5 CSV files.
+    era5r_files : list[str]
+        List of ERA5 rescaled CSV files
+    icos_files : list[str]
+        List of ICOS CSV files
+
+    Returns
+    -------
+    None
+    """
+    if stations == "all":
+        return
+
+    if isinstance(stations, str):
+        stations = [stations]
+
+    def extract(files):
+        return {os.path.basename(f).split("_")[0].lower() for f in files}
+
+    s_era5 = extract(era5_files)
+    s_era5r = extract(era5r_files)
+    s_icos = extract(icos_files)
+
+    for s in stations:
+        s_l = s.lower()
+        missing = []
+        if s_l not in s_era5:
+            missing.append("ERA5")
+        if s_l not in s_era5r:
+            missing.append("ERA5_rescaled")
+        if s_l not in s_icos:
+            missing.append("ICOS")
+
+        if missing:
+            logger.warning(
+                f" Warning: station '{s}'missing in {', '.join(missing)}"
+            )
+
+
+#########################################
+##                                     ##
+##                                     ##
+##           Load Data                 ##
+##                                     ##
+##                                     ##
+#########################################
+def load_csv_data_icos(csv_dir: Path):
+    """
+    Load ICOS CSV files from a directory into a dictionary.
+
+    Parameters
+    ----------
+    csv_dir : Path
+        Directory containing ICOS CSV files
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Dictionary mapping station name to DataFrame
+    """
+    stations = {}
+
+    for csv_file in csv_dir.glob("*_data.csv"):
+        station_name = csv_file.stem.split("_")[0].split("-")[1]
+        df = pd.read_csv(csv_file, parse_dates=["time"])
+        stations[station_name] = df
+
+    return stations
+
+
+def load_csv_files(files: list[str]) -> dict[str, pd.DataFrame]:
+    """
+    Load multiple CSV files into a dictionary of DataFrame
+
+    Parameters
+    ----------
+    files : list[str]
+        List of CSV file paths
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Dictionary mapping filename to DataFrame
+    """
+    data = {}
+    for f in files:
+        key = os.path.splitext(os.path.basename(f))[0]
+        data[key] = pd.read_csv(f)
+    return data
+
+
+def load_all_data(
+    era5_folder: str,
+    era5_rescaled_folder: str,
+    icos_folder: str,
+    stations: list[str] | str = "all",
+) -> dict[str, dict[str, pd.DataFrame]]:
+    """
+    Load all ERA5, ERA5 rescaled and ICOS data, optionally filtered by station
+
+    Parameters
+    ----------
+    era5_folder : str
+        Path to ERA5 CSV files
+    era5_rescaled_folder : str
+        Path to ERA5 rescaled CSV files
+    icos_folder : str
+        Path to ICOS CSV files
+    stations : list[str] | str, default "all"
+        Stations to load
+
+    Returns
+    -------
+    dict[str, dict[str, pd.DataFrame]]
+
+    """
+    era5_files = list_csv_files(era5_folder)
+    era5r_files = list_csv_files(era5_rescaled_folder)
+    icos_files = list_csv_files(icos_folder)
+
+    warn_missing_stations(
+        stations,
+        era5_files,
+        era5r_files,
+        icos_files,
+    )
+
+    era5_files = filter_files_by_station(era5_files, stations)
+    era5r_files = filter_files_by_station(era5r_files, stations)
+    icos_files = filter_files_by_station(icos_files, stations)
+
+    return {
+        "era5": load_csv_files(era5_files),
+        "era5_rescaled": load_csv_files(era5r_files),
+        "icos": load_csv_files(icos_files),
+    }
+
+
+#########################################
+##                                     ##
+##                                     ##
+##          Build timeseries           ##
+##                                     ##
+##                                     ##
+#########################################
+
+
+def build_station_timeseries(
+    data: dict,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict[str, pd.DataFrame]:
+    """
+    Build merged time series per station from ERA5, ERA5 rescaled and ICOS data
+
+    Parameters
+    ----------
+    data : dict
+        Dictionary returned by 'load_all_data'
+    start : str | None, optional
+        Start date for filtering
+    end : str | None, optional
+        End date for filtering
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Dictionary of station name to merged DataFrame
+    """
+    start_date = pd.to_datetime(start) if start else None
+    end_date = pd.to_datetime(end) if end else None
+
+    stations = {}
+
+    all_keys = (
+        list(data["icos"].keys())
+        + list(data["era5"].keys())
+        + list(data["era5_rescaled"].keys())
+    )
+    station_names = {k.split("_")[0] for k in all_keys}
+
+    for station in station_names:
+        #  ERA5  #################################################
+        df_era5 = None
+        for k, df in data["era5"].items():
+            if k.startswith(station):
+                df_era5 = df.copy()
+                df_era5["time"] = pd.to_datetime(df_era5["time"])
+                df_era5 = df_era5.add_suffix("_era5")
+                df_era5 = df_era5.rename(columns={"time_era5": "time"})
+                break
+
+        if df_era5 is None or df_era5.empty:
+            continue
+
+        # Filtered ICOS ############################################
+        df_icos = None
+        for k, df in data["icos"].items():
+            if k.startswith(station):
+                df_icos = filter_icos_on_era5_hours(df, df_era5)
+                df_icos = df_icos.add_suffix("_icos")
+                df_icos = df_icos.rename(columns={"time_icos": "time"})
+                break
+
+        if df_icos is None or df_icos.empty:
+            continue
+
+        dfs = [df_era5, df_icos]
+
+        #  ERA5 rescaled ##############################################
+        for k, df in data["era5_rescaled"].items():
+            if k.startswith(station):
+                df_r = df.copy()
+                df_r["time"] = pd.to_datetime(df_r["time"])
+                df_r = df_r.add_suffix("_era5_rescaled")
+                df_r = df_r.rename(columns={"time_era5_rescaled": "time"})
+                dfs.append(df_r)
+                break
+
+        # merge ######################################################
+        df_station = dfs[0]
+        for df_next in dfs[1:]:
+            df_station = pd.merge(
+                df_station,
+                df_next,
+                on="time",
+                how="inner",
+            )
+
+        if start_date is not None:
+            df_station = df_station[df_station["time"] >= start_date]
+        if end_date is not None:
+            df_station = df_station[df_station["time"] <= end_date]
+
+        if not df_station.empty:
+            stations[station] = df_station.sort_values("time")
+
+    return stations
+
+
+#########################################
+##                                     ##
+##                                     ##
+##           Plots                     ##
+##                                     ##
+##                                     ##
+#########################################
+
+
 def plot_variable(
-    stations: dict,
+    stations: dict[str, pd.DataFrame],
     var: str,
-    colors: dict,
     start: str | None = None,
     end: str | None = None,
 ):
+    """
+    Plot a variable from ICOS, ERA5 and ERA5 rescaled for all stations
+
+    Parameters
+    ----------
+    stations : dict[str, pd.DataFrame]
+        Station time series data from 'build_station_timeseries'
+    var : str
+        Variable name to plot
+    start : str | None, optional
+        Start date
+    end : str | None, optional
+        End date
+
+    Returns
+    -------
+    """
     start_date = pd.to_datetime(start) if start else None
     end_date = pd.to_datetime(end) if end else None
 
     fig = go.Figure()
 
     for station_name, df in stations.items():
-        df_v = df.sort_values("time")
-
-        if start_date is not None:
-            df_t = df_v[df_v["time"] >= start_date]
-        if end_date is not None:
-            df_t = df_v[df_v["time"] <= end_date]
-
         if df.empty:
             continue
 
-        # ---------- ICOS ----------
+        df_t = df.copy()
+
+        if start_date is not None:
+            df_t = df_t[df_t["time"] >= start_date]
+        if end_date is not None:
+            df_t = df_t[df_t["time"] <= end_date]
+
+        if df_t.empty:
+            continue
+
         fig.add_trace(
             go.Scatter(
                 x=df_t["time"],
@@ -48,166 +450,51 @@ def plot_variable(
                 name=f"{station_name} ICOS",
                 legendgroup=station_name,
                 legendgrouptitle_text=f"Station {station_name}",
-                line={"color": colors["icos"], "dash": "solid"},
-                mode="lines+markers",
             )
         )
 
-        # ---------- ERA5 ----------
         fig.add_trace(
             go.Scatter(
                 x=df_t["time"],
                 y=df_t[f"{var}_era5"],
                 name=f"{station_name} ERA5",
                 legendgroup=station_name,
-                line={"color": colors["era5"], "dash": "dash"},
-                mode="lines+markers",
+                line={"dash": "dash"},
             )
         )
 
-        # ---------- ERA5 resampled ----------
         fig.add_trace(
             go.Scatter(
                 x=df_t["time"],
-                y=df_t[f"{var}_era5_proj"],
-                name=f"{station_name} ERA5 resampled",
+                y=df_t[f"{var}_era5_rescaled"],
+                name=f"{station_name} ERA5 rescaled",
                 legendgroup=station_name,
-                line={"color": colors["era5_sampled"], "dash": "dot"},
-                mode="lines+markers",
+                line={"dash": "dot"},
             )
         )
 
-    if var == "Ta":
-        title = "Air temperature of ICOS stations"
-    elif var == "Tdp":
-        title = "Dew point temperature of ICOS stations"
-    else:
-        title = f"{var} ICOS stations"
-
     fig.update_layout(
-        title=title,
+        title=f"{var} ICOS stations",
         xaxis_title="Time",
         yaxis_title=f"{var} (°C)",
         hovermode="x unified",
         template="plotly",
-        showlegend=True,
     )
 
     return fig
 
 
-def load_csv_data_timeseries(csv_dir: Path):
-    stations = {}
-
-    for csv_file in csv_dir.glob("*_timeseries.csv"):
-        station_name = csv_file.stem.split("_")[0].split("-")[1]
-        df = pd.read_csv(csv_file, parse_dates=["time"])
-        stations[station_name] = df
-
-    return stations
-
-
-def plot_ta_tdp_csv(
-    csv_dir,
-    start: str | None = None,
-    end: str | None = None,
-):
-    stations = load_csv_data_timeseries(csv_dir)
-
-    color_ta = {
-        "icos": "#1f77b4",
-        "era5": "#32b332",
-        "era5_sampled": "#9543bb",
-    }
-
-    color_tdp = {
-        "icos": "#ff9137",
-        "era5": "#d62d10",
-        "era5_sampled": "#a76223",
-    }
-
-    fig_ta = plot_variable(stations, "Ta", color_ta, start, end)
-    fig_tdp = plot_variable(stations, "Tdp", color_tdp, start, end)
-
-    fig_ta.show()
-    fig_tdp.show()
-
-
-def load_csv_data_lr(csv_dir: Path):
-    stations = {}
-
-    for csv_file in csv_dir.glob("*_lapse_rate.csv"):
-        station_name = csv_file.stem.split("_")[0].split("-")[1]
-        df = pd.read_csv(csv_file, parse_dates=["time"])
-        stations[station_name] = df
-
-    return stations
-
-
-def plot_lr_csv(csv_dir: Path, start: str, end: str):
-    stations = load_csv_data_lr(csv_dir)
-
-    fig_ta = go.Figure()
-    fig_tdp = go.Figure()
-
-    for station_name, df in stations.items():
-        if start:
-            df_f = df[df["time"] >= pd.to_datetime(start)]
-        if end:
-            df_f = df[df["time"] <= pd.to_datetime(end)]
-
-        fig_ta.add_trace(
-            go.Scatter(
-                x=df_f["time"],
-                y=df_f["lapse_rate_ta"],
-                mode="lines+markers",
-                name=f"Station {station_name}",
-            )
-        )
-        fig_tdp.add_trace(
-            go.Scatter(
-                x=df_f["time"],
-                y=df_f["lapse_rate_tdp"],
-                mode="lines+markers",
-                name=f"Station {station_name}",
-            )
-        )
-
-    fig_ta.update_layout(
-        title={"text": "Standart atmospheric Lapse Rate of ICOS Stations"},
-        xaxis_title="Time",
-        yaxis_title="Lapse Rate (K.m-1)",
-        plot_bgcolor="rgb(230, 230, 230)",
-        showlegend=True,
-        template="plotly",
-    )
-    fig_tdp.update_layout(
-        title={"text": "Dew point Lapse Rate of ICOS Stations"},
-        xaxis_title="Time",
-        yaxis_title="Lapse Rate (K.m-1)",
-        plot_bgcolor="rgb(230, 230, 230)",
-        showlegend=True,
-        template="plotly",
-    )
-    fig_ta.add_hline(
-        y=-0.0065,
-        line_dash="dash",
-        line_color="black",
-        annotation_text="Theoretical value",
-    )
-    fig_tdp.add_hline(
-        y=-0.0052,
-        line_dash="dash",
-        line_color="black",
-        annotation_text="Theoretical value",
-    )
-    fig_ta.show()
-    fig_tdp.show()
-
-
 def plot_station_map_with_gpkg(csv_path: str = "stations_package.gpkg"):
     """
-    Plot station locations on a map with data from gpkg
+    Plot station locations on an interactive map using a GeoPackage file.
+
+    Parameters
+    ----------
+    csv_path : str, default "stations_package.gpkg"
+        Path to the GeoPackage file
+
+    Returns
+    -------
     """
     stations_gdf = gpd.read_file(csv_path, layer="stations")
     m = stations_gdf.explore(
@@ -223,6 +510,18 @@ def plot_station_map_with_gpkg(csv_path: str = "stations_package.gpkg"):
 
 
 def plot_station_map(gdf: gpd.GeoDataFrame):
+    """
+    Plot station locations on an interactive map from a GeoDataFrame.
+
+    Parameters
+    ----------
+    gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing station geometries and attributes.
+
+    Returns
+    -------
+
+    """
     m = gdf.explore(
         column="elev",
         tooltip="name",
@@ -238,10 +537,26 @@ def plot_station_map(gdf: gpd.GeoDataFrame):
 def plot_ta_tdp_icos(
     stations: dict,
     var: str,
-    colors: dict,
     start: str | None = None,
     end: str | None = None,
 ):
+    """
+    Plot ICOS air temperature or dew point temperature for all stations.
+
+    Parameters
+    ----------
+    stations : dict[str, pd.DataFrame]
+        ICOS station data
+    var : str
+        Variable to plot ('ta' or 'tdp')
+    start : str | None, optional
+        Start date
+    end : str | None, optional
+        End date
+
+    Returns
+    -------
+    """
     start_date = pd.to_datetime(start) if start else None
     end_date = pd.to_datetime(end) if end else None
 
@@ -270,13 +585,13 @@ def plot_ta_tdp_icos(
                 name=f"{station_name} ICOS",
                 legendgroup=station_name,
                 legendgrouptitle_text=f"Station {station_name}",
-                line={"color": colors["icos"], "dash": "solid"},
+                line={"dash": "solid"},
                 mode="lines+markers",
             )
         )
-    if var == "Ta":
+    if var == "ta":
         title = "Air temperature of ICOS stations"
-    elif var == "Tdp":
+    elif var == "tdp":
         title = "Dew point temperature of ICOS stations"
     else:
         title = f"{var} ICOS stations"
@@ -293,34 +608,84 @@ def plot_ta_tdp_icos(
     return fig
 
 
-def load_csv_data_icos(csv_dir: Path):
-    stations = {}
-
-    for csv_file in csv_dir.glob("*_data.csv"):
-        station_name = csv_file.stem.split("_")[0].split("-")[1]
-        df = pd.read_csv(csv_file, parse_dates=["time"])
-        stations[station_name] = df
-
-    return stations
-
-
 def plot_temp_icos(
     csv_dir,
     start: str | None = None,
     end: str | None = None,
 ):
+    """
+    Plot ICOS air temperature and dew point temperature time series.
+
+    Parameters
+    ----------
+    csv_dir : str or Path
+        Directory containing ICOS CSV files
+    start : str | None, optional
+        Start date.
+    end : str | None, optional
+        End date
+
+    Returns
+    -------
+    """
     stations = load_csv_data_icos(Path(csv_dir))
 
-    color_ta = {
-        "icos": "#1f77b4",
-    }
-
-    color_tdp = {
-        "icos": "#8124ac",
-    }
-
-    fig_ta = plot_ta_tdp_icos(stations, "TA", color_ta, start, end)
-    fig_tdp = plot_ta_tdp_icos(stations, "TD", color_tdp, start, end)
+    fig_ta = plot_ta_tdp_icos(stations, "ta", start, end)
+    fig_tdp = plot_ta_tdp_icos(stations, "tdp", start, end)
 
     fig_ta.show()
     fig_tdp.show()
+
+
+def plot_temp_vs_height_with_lvpr(ds: xr.Dataset):
+    """
+    Plot vertical temperature profiles as a function of altitude from ERA5
+    pressure-level data.
+
+    Each curve represents a time step. Altitude is derived from geopotential
+    (z / g), and pressure levels are associated with each point via hover
+    information.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+
+    Returns
+    -------
+    None
+        Display an interactive Plotly figure.
+    """
+
+    fig = go.Figure()
+
+    pressure = ds.pressure_level.values
+
+    for t_idx, t_val in enumerate(ds.time.values):
+        fig.add_trace(
+            go.Scatter(
+                x=ds.t.isel(time=t_idx).values,
+                y=ds.height.isel(time=t_idx).values,
+                mode="lines+markers",
+                name=str(t_val),
+                marker={"size": 7},
+                line={"width": 2},
+                customdata=pressure,
+                hovertemplate=(
+                    "T = %{x:.2f} K<br>"
+                    "Height = %{y:.0f} m<br>"
+                    "Pressure = %{customdata:.0f} hPa"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+    fig.update_layout(
+        title="ERA5 temperature-elevation vertical profiles",
+        xaxis_title="Temperature (K)",
+        yaxis_title="Height (m)",
+        template="plotly_white",
+        hovermode="closest",
+        legend_title="Time",
+    )
+
+    fig.show()
