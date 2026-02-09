@@ -73,7 +73,7 @@ def write_dataset(
     if bands is None:
         bands = [str(b) for b in xrds.data_vars]
     else:
-        bands = [i for i in bands if i in xrds.data_vars]
+        bands = [str(b) for b in bands if b in xrds.data_vars]
     if (
         xrds.attrs.get("vis", None) is not None
         and xrds.attrs.get("tir", None) is not None
@@ -178,13 +178,45 @@ def write_band(xrds: xr.Dataset, band: str, directory: str = os.getcwd()):
         Output directory path
     """
     row, col = get_row_col(xrds)
-    if xrds.attrs["vis"] == xrds.attrs["tir"]:
-        filename = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
-    else:
+    if (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        if xrds.attrs["vis"] == xrds.attrs["tir"]:
+            filename = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}"
+            )
+        else:
+            filename = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}_"
+                f"{xrds.attrs['tir']}_"
+                f"{xrds.attrs['tir_date']:%Y%m%d}"
+                f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+            )
+    elif (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is None
+    ):
         filename = (
-            f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
-            f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
+            f"{xrds.attrs['vis']}_"
+            f"{xrds.attrs['vis_date']:%Y%m%d}"
+            f"T{xrds.attrs['vis_time']:%H%M%S%z}"
         )
+    elif (
+        xrds.attrs.get("vis", None) is None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        filename = (
+            f"{xrds.attrs['tir']}_"
+            f"{xrds.attrs['tir_date']:%Y%m%d}"
+            f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+        )
+    else:
+        filename = "data"
     if xrds.attrs.get("tile", None) is not None:
         filename += f"_{xrds.attrs['tile']}"
     filename += ".tif"
@@ -237,14 +269,46 @@ def export_matlab(
     if bands is None:
         bands = [str(b) for b in xrds.data_vars]
     else:
-        bands = [i for i in bands if i in xrds.data_vars]
-    if xrds.attrs["vis"] == xrds.attrs["tir"]:
-        suffix = f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}"
-    else:
+        bands = [b for b in bands if b in xrds.data_vars]
+    if (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        if xrds.attrs["vis"] == xrds.attrs["tir"]:
+            suffix = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}"
+            )
+        else:
+            suffix = (
+                f"{xrds.attrs['vis']}_"
+                f"{xrds.attrs['vis_date']:%Y%m%d}"
+                f"T{xrds.attrs['vis_time']:%H%M%S%z}_"
+                f"{xrds.attrs['tir']}_"
+                f"{xrds.attrs['tir_date']:%Y%m%d}"
+                f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+            )
+    elif (
+        xrds.attrs.get("vis", None) is not None
+        and xrds.attrs.get("tir", None) is None
+    ):
         suffix = (
-            f"{xrds.attrs['vis']}_{xrds.attrs['vis_date']:%Y%m%d}_"
-            f"{xrds.attrs['tir']}_{xrds.attrs['tir_date']:%Y%m%d}"
+            f"{xrds.attrs['vis']}_"
+            f"{xrds.attrs['vis_date']:%Y%m%d}"
+            f"T{xrds.attrs['vis_time']:%H%M%S%z}"
         )
+    elif (
+        xrds.attrs.get("vis", None) is None
+        and xrds.attrs.get("tir", None) is not None
+    ):
+        suffix = (
+            f"{xrds.attrs['tir']}_"
+            f"{xrds.attrs['tir_date']:%Y%m%d}"
+            f"T{xrds.attrs['tir_time']:%H%M%S%z}"
+        )
+    else:
+        suffix = "data"
     if xrds.attrs.get("tile", None) is not None:
         suffix += f"_{xrds.attrs['tile']}"
 
@@ -252,21 +316,6 @@ def export_matlab(
         file_path = os.path.join(directory, suffix + f"_{band}.mat")
         mdic = {"data": xrds[band].data, "label": band}
         savemat(file_path, mdic)
-
-
-def write_matches(res: pd.DataFrame, output: str = "matches.csv") -> None:
-    """
-    Write matches file
-
-    Parameters
-    ----------
-    res: pd.DataFrame
-        Matches results
-    output: str
-        Output file
-    """
-    if len(res) > 0:
-        res.to_csv(output, index=False)
 
 
 def write_results(res: pd.DataFrame, output: str = "results.csv") -> None:
@@ -284,9 +333,7 @@ def write_results(res: pd.DataFrame, output: str = "results.csv") -> None:
         res.to_csv(output, index=False)
 
 
-def write_to_tif(
-    xrds: xr.Dataset, bands: list[str] | None = None, filename=str
-):
+def write_to_tif(xrds: xr.Dataset, filename=str):
     """
     Write the dataset to TIFF file
 
@@ -298,10 +345,6 @@ def write_to_tif(
         File path
     """
     row, col = get_row_col(xrds)
-    if bands is None:
-        bands = [str(b) for b in xrds.data_vars]
-    else:
-        bands = [i for i in bands if i in xrds.data_vars]
     # Get projection
     if xrds.attrs.get("crs", None) is not None:
         crs = xrds.attrs["crs"]
@@ -317,14 +360,14 @@ def write_to_tif(
         driver="GTiff",
         width=col,
         height=row,
-        count=len(bands),
+        count=len(xrds.data_vars),
         dtype=rio.dtypes.float32,
         nodata=np.nan,
         crs=crs,
         transform=transform,
     ) as source_ds:
-        source_ds.colorinterp = [ColorInterp.gray for _ in bands]
-        for i, band in enumerate(bands, start=1):
+        source_ds.colorinterp = [ColorInterp.gray for _ in xrds.data_vars]
+        for i, band in enumerate(xrds.data_vars, start=1):
             source_ds.write_band(i, xrds[band].data)
             source_ds.set_band_description(i, band)
 
@@ -359,7 +402,8 @@ def write_to_netcdf(xrds: xr.Dataset, filename=str):
         crs = xrds.rio.crs
     xrds.attrs.clear()
     # Write crs
-    xrds = xrds.rio.write_crs(crs)  # write crs if necessary
+    if crs is not None:
+        xrds = xrds.rio.write_crs(crs)  # write crs if necessary
     # Save to netCDF4
     xrds.to_netcdf(filename)
 
@@ -433,122 +477,7 @@ def write_dataset_to_netcdf(
         )
     xrds.attrs.clear()
     # Write crs
-    xrds = xrds.rio.write_crs(crs)  # write crs if necessary
+    if crs is not None:
+        xrds = xrds.rio.write_crs(crs)  # write crs if necessary
     # Save to netCDF4
     xrds.to_netcdf(os.path.join(directory, filename))
-
-
-def write_daily_radiation(data: xr.Dataset, path: str | None = None) -> None:
-    """
-    Description
-    -----------
-    Create .tif file from a daily radiation dataset
-
-    Parameters
-    ----------
-    data: xr.Dataset
-        Daily radaition dataset
-    path: str
-        Directory path to store the .tif file
-    """
-    if path is None:
-        path = os.getcwd()
-    ts_path = os.path.join(path, "timeseries/daily_radiation")
-    os.makedirs(ts_path, exist_ok=True)
-    date = data.attrs["vis_date"]
-    filename = os.path.join(ts_path, f"radiation_{date.strftime('%Y%m%d')}.tif")
-    row, col = get_row_col(data)
-    band = "daily_radiation"
-    with rio.open(
-        filename,
-        mode="w+",
-        driver="GTiff",
-        width=col,
-        height=row,
-        count=1,
-        dtype=rio.dtypes.float32,
-        nodata=np.nan,
-        crs=data.rio.crs,
-        transform=data.rio.transform(),
-    ) as source_ds:
-        source_ds.colorinterp = [ColorInterp.gray]
-        source_ds.write_band(1, data[band].data)
-        source_ds.set_band_description(1, band)
-
-
-def write_et_single_date(data: xr.Dataset, path: str | None = None) -> None:
-    """
-    Description
-    -----------
-    Create .tif file from a daily evapotranspiration dataset with flags
-
-    Parameters
-    ----------
-    data: xr.Dataset
-        Daily radaition dataset
-    path: str
-        Directory to store the .tif file
-    """
-    if path is None:
-        path = os.getcwd()
-    ts_path = os.path.join(path, "timeseries/et")
-    os.makedirs(ts_path, exist_ok=True)
-    date = data.attrs["vis_date"]
-    file_name = os.path.join(
-        ts_path, f"et_single_date_{date.strftime('%Y%m%d')}.tif"
-    )
-    row, col = get_row_col(data)
-    bands = list(data.data_vars)
-    with rio.open(
-        file_name,
-        mode="w+",
-        driver="GTiff",
-        width=col,
-        height=row,
-        count=2,
-        dtype=rio.dtypes.float32,
-        nodata=np.nan,
-        crs=data.rio.crs,
-        transform=data.rio.transform(),
-    ) as source_ds:
-        for i, band in enumerate(bands, start=1):
-            source_ds.write_band(i, data[band].data)
-            source_ds.set_band_description(i, band)
-
-
-def write_daily_explanatory(data: xr.Dataset, path: str | None = None) -> None:
-    """
-    Write .tif file from a daily explanatory variable dataset
-
-    Parameters
-    ----------
-    data: xr.Dataset
-        Daily explanatory variables dataset
-    path: str
-        Directory path to store the .tif file
-    """
-    if path is None:
-        path = os.getcwd()
-    ts_path = os.path.join(path, "explanatory_variables")
-    os.makedirs(ts_path, exist_ok=True)
-    date = data.attrs["vis_date"]
-    file_name = os.path.join(
-        ts_path, f"explanatory_{date.strftime('%Y%m%d')}.tif"
-    )
-    row, col = get_row_col(data)
-    bands = list(data.data_vars)
-    with rio.open(
-        file_name,
-        mode="w+",
-        driver="GTiff",
-        width=col,
-        height=row,
-        count=4,
-        dtype=rio.dtypes.float32,
-        nodata=np.nan,
-        crs=data.rio.crs,
-        transform=data.rio.transform(),
-    ) as source_ds:
-        for i, band in enumerate(bands, start=1):
-            source_ds.write_band(i, data[band].data)
-            source_ds.set_band_description(i, band)

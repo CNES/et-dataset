@@ -26,7 +26,6 @@ from etdataset.utils import (
 from etdataset.writer import (
     export_matlab,
     write_dataset,
-    write_matches,
     write_results,
 )
 
@@ -218,7 +217,7 @@ def cli_select(args: SelectArgs) -> None:
     # Write results
     logger.info(f"Number of products in {args.coll1} = {len(products1)}")
     logger.info(f"Number of products in {args.coll2} = {len(products2)}")
-    write_matches(matches, os.path.join(args.output, "matches.csv"))
+    write_results(matches, os.path.join(args.output, "matches.csv"))
     write_results(
         products1, os.path.join(args.output, f"products_{args.coll1}.csv")
     )
