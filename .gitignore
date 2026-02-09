@@ -24,7 +24,7 @@ data/
 *.csv
 !notebooks/products.csv
 !notebooks/landsat_products.csv
-!notebooks/stations_meteoL2.csv
+!src/etdataset/data/stations_meteoL2.csv
 *.mat
 *.nc
 *.zip
