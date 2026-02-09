@@ -43,8 +43,10 @@ class ProductReader:
     """
 
     path: str
-    bb: rio.coords.BoundingBox
-    crs: CRS
+    bb: rio.coords.BoundingBox | None = None
+    crs: CRS | None = None
+    _bb: rio.coords.BoundingBox = field(init=False, repr=False)
+    _crs: CRS = field(init=False, repr=False)
     date: datetime.date = field(init=False)
     time: datetime.time = field(init=False)
     resolution: float = field(default=RESOLUTION)
@@ -55,7 +57,7 @@ class ProductReader:
         """
         # Apply name mapping
         renamed = data.rename_vars(name_mapping)
-        # Remove any variable not listeed in tir_band_mapping
+        # Remove any variable not listed in tir_band_mapping
         for var in renamed.data_vars:
             if var not in name_mapping.values():
                 renamed = renamed.drop(var)
@@ -130,13 +132,17 @@ class LandsatReader(ProductReader):
         # Create an instance of Landsat8 from the product path
         self.ds = landsat.Landsat(self.path)
         if self.bb is None:
-            self.bb = self.ds.bounds
+            self._bb = self.ds.bounds
+        else:
+            self._bb = self.bb
         if self.crs is None:
-            self.crs = self.ds.crs
+            self._crs = self.ds.crs
+        else:
+            self._crs = self.crs
         self.date = self.ds.date
         self.time = self.ds.time
         # Snap bbox
-        self.bb = utils.bb_snap(self.bb, align=self.resolution)
+        self._bb = utils.bb_snap(self._bb, align=self.resolution)
 
     def compute_albedo(self, data: xr.Dataset) -> xr.DataArray:
         """
@@ -177,8 +183,8 @@ class LandsatReader(ProductReader):
                 landsat.Landsat.B7,
             ],
             resolution=self.resolution,
-            crs=str(self.crs),
-            bounds=self.bb,
+            crs=str(self._crs),
+            bounds=self._bb,
             algorithm=resampling,
         )
         if ls_xr is None:
@@ -188,12 +194,12 @@ class LandsatReader(ProductReader):
         ls_xr.attrs["transform"] = affine.Affine(
             self.resolution,
             0.0,
-            self.bb.left,
+            self._bb.left,
             0.0,
             -self.resolution,
-            self.bb.top,
+            self._bb.top,
         )
-        # Add capteur name
+        # Add sensor name
         ls_xr.attrs["vis"] = "Landsat"
         # Add acquisition date
         ls_xr.attrs["vis_date"] = self.ds.date
@@ -263,8 +269,8 @@ class LandsatReader(ProductReader):
                 landsat.Landsat.ST_EMIS,
             ],
             resolution=self.resolution,
-            crs=str(self.crs),
-            bounds=self.bb,
+            crs=str(self._crs),
+            bounds=self._bb,
             algorithm=resampling,
         )
         if ls_xr is None:
@@ -274,10 +280,10 @@ class LandsatReader(ProductReader):
         ls_xr.attrs["transform"] = affine.Affine(
             self.resolution,
             0.0,
-            self.bb.left,
+            self._bb.left,
             0.0,
             -self.resolution,
-            self.bb.top,
+            self._bb.top,
         )
         # Add capteur name
         ls_xr.attrs["tir"] = "Landsat"
@@ -401,11 +407,14 @@ class HLSReader(ProductReader):
             self.ds = hls.HLSSentinel2(self.path)
         # Metadata
         if self.bb is None:
-            self.bb = self.ds.bounds
+            self._bb = self.ds.bounds
+        else:
+            self._bb = self.bb
         if self.crs is None:
-            self.crs = self.ds.crs
-        self.bb = utils.bb_snap(self.bb, align=self.resolution)
-        self.crs = self.ds.crs
+            self._crs = self.ds.crs
+        else:
+            self._crs = self.crs
+        self._bb = utils.bb_snap(self._bb, align=self.resolution)
         self.date = self.ds.date
         self.time = self.ds.time
 
@@ -437,8 +446,8 @@ class HLSReader(ProductReader):
         hls_xr = self.ds.read_as_xarray(
             self.params.value["bands"],
             resolution=self.resolution,
-            crs=str(self.crs),
-            bounds=self.bb,
+            crs=str(self._crs),
+            bounds=self._bb,
             algorithm=resampling,
         )
         if hls_xr is None:
@@ -487,10 +496,10 @@ class HLSReader(ProductReader):
         hls_xr.attrs["transform"] = affine.Affine(
             self.resolution,
             0.0,
-            self.bb.left,
+            self._bb.left,
             0.0,
             -self.resolution,
-            self.bb.top,
+            self._bb.top,
         )
         # Add capteur name
         hls_xr.attrs["vis"] = self.params.name
@@ -540,12 +549,15 @@ class Sentinel2Reader(ProductReader):
         # Create an instance of Sentinel2 from the product path
         self.ds = sentinel2.Sentinel2(self.path)
         if self.bb is None:
-            self.bb = self.ds.bounds
+            self._bb = self.ds.bounds
+        else:
+            self._bb = self.bb
         if self.crs is None:
             self.crs = self.ds.crs
+        else:
+            self._crs = self.crs
         # Snap bbox
-        self.bb = utils.bb_snap(self.bb, align=self.resolution)
-        self.crs = self.ds.crs
+        self._bb = utils.bb_snap(self._bb, align=self.resolution)
         self.date = self.ds.date
         self.time = self.ds.time
 
@@ -586,14 +598,14 @@ class Sentinel2Reader(ProductReader):
                 sentinel2.Sentinel2.B12,
             ],
             resolution=self.resolution,
-            crs=str(self.crs),
-            bounds=self.bb,
+            crs=str(self._crs),
+            bounds=self._bb,
             algorithm=resampling,
         )
 
         # Filter pixels
-        # https://labo.obs-mip.fr/multitemp/sentinel-2/ \
-        # theias-sentinel-2-l2a-product-format/#English
+        # https://labo.obs-mip.fr/multitemp/sentinel-2/theias-
+        # sentinel-2-l2a-product-format/#English
         # Retrieve mask
         s2_xr = s2_xr.assign(
             {
@@ -629,7 +641,7 @@ class Sentinel2Reader(ProductReader):
         # Compute NDVI
         s2_xr["ndvi"] = compute_ndvi(s2_xr)
         # Compute LAI with exponential relation between NDVI and LAI
-        # Cf. https://src.koda.cnrs.fr/activites-ia-cesbio/ds-cb/ \
+        # Cf. https://src.koda.cnrs.fr/activites-ia-cesbio/ds-cb/
         # blob/master/Jordi_PPL/bmci_slides.pdf
         s2_xr["lai"] = compute_lai_from_ndvi(s2_xr, 0.119, 3.457, -0.062)
 
@@ -643,12 +655,12 @@ class Sentinel2Reader(ProductReader):
         s2_xr.attrs["transform"] = affine.Affine(
             self.resolution,
             0.0,
-            self.bb.left,
+            self._bb.left,
             0.0,
             -self.resolution,
-            self.bb.top,
+            self._bb.top,
         )
-        # Add capteur name
+        # Add sensor name
         s2_xr.attrs["vis"] = "Sentinel2"
         # Add acquisition date
         s2_xr.attrs["vis_date"] = self.date
@@ -690,12 +702,15 @@ class EcostressReader(ProductReader):
         # Create an instance of Ecostress from the product path
         self.ds = ecostress_v2.EcostressV2(self.path)
         if self.bb is None:
-            self.bb = self.ds.bounds
+            self._bb = self.ds.bounds
+        else:
+            self._bb = self.bb
         if self.crs is None:
-            self.crs = self.ds.crs
+            self._crs = self.ds.crs
+        else:
+            self._crs = self.crs
         # Snap bbox
-        self.bb = utils.bb_snap(self.bb, align=self.resolution)
-        self.crs = self.ds.crs
+        self._bb = utils.bb_snap(self._bb, align=self.resolution)
         self.date = self.ds.date
         self.time = self.ds.time
 
@@ -719,8 +734,8 @@ class EcostressReader(ProductReader):
         eco_xr = self.ds.read_as_xarray(
             [ecostress_v2.EcostressV2.LST, ecostress_v2.EcostressV2.EMIS],
             resolution=self.resolution,
-            crs=str(self.crs),
-            bounds=self.bb,
+            crs=str(self._crs),
+            bounds=self._bb,
             algorithm=resampling,
         )
         if eco_xr is None:
@@ -772,12 +787,12 @@ class EcostressReader(ProductReader):
         eco_xr.attrs["transform"] = affine.Affine(
             self.resolution,
             0.0,
-            self.bb.left,
+            self._bb.left,
             0.0,
             -self.resolution,
-            self.bb.top,
+            self._bb.top,
         )
-        # Add capteur name
+        # Add sensor name
         eco_xr.attrs["tir"] = "Ecostress"
         # Add acquisition date
         eco_xr.attrs["tir_date"] = self.date
