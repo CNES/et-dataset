@@ -10,7 +10,9 @@ __pycache__/
 # Notebooks
 .ipynb_checkpoints/
 out/
+out_*/
 download/
+prepare_landsat_*.ipynb
 
 # Data
 *.tif
@@ -21,8 +23,16 @@ download/
 *.nc
 *.zip
 *.zarr/
+
+# Package data
 !src/etdataset/data/geopotential_era5.nc
 !src/etdataset/data/geopotential_era5land.zarr/
+
+# Test data
+!tests/data/**/
+# Re-allow specific file types
+!tests/data/**/*.csv
+
 
 # pixi environments
 .pixi/
