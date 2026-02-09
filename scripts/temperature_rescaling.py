@@ -1,6 +1,12 @@
-#######################
-# Prepare Landsat data
-#######################
+#
+# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales /
+#            Université Paul Sabatier (UT3)
+#
+
+
+"""
+Air Temperature and Dew point Temperature rescaling
+"""
 
 # Imports
 import argparse
@@ -53,7 +59,7 @@ def run_stations_process(
         era5_xrds = read_era5_file(
             d,
             ERA5Dataset.ERA5,
-            "/home/mliateni/Bureau/meriem/et-dataset/notebooks/out",
+            "out",
         )
         era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
