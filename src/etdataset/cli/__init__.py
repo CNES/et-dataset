@@ -128,10 +128,10 @@ def cli_create(args: CreateArgs) -> None:
     )
     logger.debug("Create dataset: OK")
 
-    # Add auxilary data
+    # Add auxiliary data
     if args.aux:
         data = add_aux(data=data)
-        logger.debug("Add auxilary data: OK")
+        logger.debug("Add auxiliary data: OK")
 
     # Write dataset
     if data is not None:
@@ -290,7 +290,7 @@ def cli_download(args: DownloadArgs) -> None:
 
     try:
         products = read_product_list(args.list, 4326)
-    # TODO: Correct catch blid exception
+    # TODO: Correct catch blind exception
     except Exception as e:  # noqa
         raise CLIException(f"Error while reading product list: {e}")
 
@@ -309,7 +309,7 @@ def cli_download_aux(args: DownloadAuxArgs) -> None:
 
     try:
         products = read_product_list(args.list, 4326)
-    # TODO: Correct catch blid exception
+    # TODO: Correct catch blind exception
     except Exception as e:  # noqa
         raise CLIException(f"Error while reading product list: {e}")
 
