@@ -11,8 +11,8 @@ import os
 import tempfile
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, time
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from time import sleep
 
@@ -22,7 +22,6 @@ import rasterio as rio
 import xarray as xr
 from pyproj import CRS
 
-from etdataset.dem import compute_egm96_height
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
@@ -67,7 +66,6 @@ class ERA5Dataset(DatasetInfo, Enum):
             "total_column_water",
             "total_precipitation",
             "total_column_water_vapour",
-            "geopotential",
         ],
     )
     ERA5LAND = (
@@ -160,58 +158,6 @@ class ERA5Var(ERA5DataInfo, Enum):
         return super()._missing_(value)
 
 
-class DataVar(ERA5DataInfo, Enum):
-    """
-    ERA5 variables
-    """
-
-    DEWPOINT_TEMPERATURE = ("tp", "2m dewpoint temperature", "K")
-    TEMPERATURE = ("ta", "2m air temperature", "K")
-    SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY = (
-        "rsd",
-        "Surface solar radiation downward, clear sky",
-        "J m-2",
-    )
-    SURFACE_SOLAR_RADIATION_DOWNWARD = (
-        "rsd",
-        "Surface solar radiation downwards",
-        "J m-2",
-    )
-    SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY = (
-        "rld",
-        "Surface thermal radiation downward, clear sky",
-        "J m-2",
-    )
-    SURFACE_THERMAL_RADIATION_DOWNWARD = (
-        "rld",
-        "Surface thermal radiation downwards",
-        "J m-2",
-    )
-    TOTAL_COLUMN_OZONE = ("tco3", "Total column ozone", "kg m-2")
-    TOTAL_COLUMN_WATER_VAPOR = ("tcwv", "Total column water vapour", "kg m-2")
-    TOTAL_EVAPORATION = ("e", "Total evaporation", "m")
-
-    @classmethod
-    def from_key(cls, key):
-        """
-        Create enum from a key value
-        """
-        for value in cls:
-            if value.key == key:
-                return value
-        raise ValueError(f"No variable found with key {key}")
-
-    @classmethod
-    def _missing_(cls, value):
-        """
-        Overload the missing method to call from_key method
-        if enum is instanciated with a string
-        """
-        if isinstance(value, str):
-            return cls.from_key(value)
-        return super()._missing_(value)
-
-
 def read(product: str) -> xr.Dataset:
     """
     Description
@@ -246,8 +192,48 @@ def read(product: str) -> xr.Dataset:
     return xr.open_dataset(product)
 
 
+@lru_cache
+def get_era5_dem() -> xr.DataArray:
+    """
+    Get DEM for ERA5
+
+    Returns
+    -------
+    dem: xr.DataArray
+        ERA5 DEM
+    """
+    data = xr.open_dataarray(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "geopotential_era5.nc",
+        )
+    )
+    return data / G_CST
+
+
+@lru_cache
+def get_era5land_dem() -> xr.DataArray:
+    """
+    Get DEM for ERA5Land
+
+    Returns
+    -------
+    dem: xr.DataArray
+        ERA5 DEM
+    """
+    data = xr.open_dataarray(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "geopotential_era5land.zarr",
+        )
+    )
+    return data / G_CST
+
+
 def interpolate_time(
-    data: xr.Dataset, date: datetime, variables: list[ERA5Var] | None = None
+    data: xr.Dataset, date: dt.datetime, variables: list[ERA5Var] | None = None
 ) -> xr.Dataset:
     """
     Description
@@ -385,40 +371,6 @@ def interpolate_ozone(
     )
 
 
-def interpolate_evaporation(
-    data: xr.DataArray,
-    dem: xr.DataArray,
-) -> xr.DataArray:
-    """
-    Description
-    -----------
-    This method interpolates evaporation on a new grid.
-
-    The reference-level evaporation is projected
-    from the original geographic coordinate system (i.e. WGS84 for ERA5)
-    onto the projection coordinate system of the destination DEM
-    using bilinear interpolation.
-
-    No elevation correction is performed.
-
-    Parameters
-    ----------
-    data: xr.DataArray
-        Data to project
-    dem:  xr.DataArray
-        Grid used for the projection
-
-    Return
-    ------
-    projected: xr.DataArray
-        Data projected
-    """
-    return data.rio.reproject_match(
-        dem,
-        resampling=rio.enums.Resampling.bilinear,
-    )
-
-
 def interpolate_tcvw(
     data: xr.DataArray,
     dem: xr.DataArray,
@@ -462,41 +414,6 @@ def interpolate_radiation(
     Description
     -----------
     This method interpolates radiation data on a new grid.
-
-    The reference-level ozone is projected
-    from the original geographic coordinate system (i.e. WGS84 for ERA5)
-    onto the projection coordinate system of the destination DEM
-    using bilinear interpolation.
-
-    No slope/aspect correction is performed.
-
-    Parameters
-    ----------
-    data: xr.DataArray
-        Data to project
-    dem:  xr.DataArray
-        Grid used for the projection
-
-    Return
-    ------
-    projected: xr.DataArray
-        Data projected
-    """
-    # Project into the coordinate system of the destination DEM
-    return data.rio.reproject_match(
-        dem,
-        resampling=rio.enums.Resampling.nearest,
-    )
-
-
-def interpolate_explanatory(
-    data: xr.DataArray,
-    dem: xr.DataArray,
-) -> xr.DataArray:
-    """
-    Description
-    -----------
-    This method interpolates explanatory variable data on a new grid.
 
     The reference-level ozone is projected
     from the original geographic coordinate system (i.e. WGS84 for ERA5)
@@ -575,7 +492,7 @@ def _download(dataset: str, request: dict, target: str) -> None:
 
 
 def download(
-    date: datetime,
+    date: dt.datetime,
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
     variables: list[str] | None = None,
     path: str | None = None,
@@ -606,7 +523,7 @@ def download(
         era5_path,
         f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
     )
-    # Skio download if file already exists
+    # Skip download if file already exists
     if os.path.exists(filename):
         logger.info(f"File {filename} already exits. Skip download.")
         return
@@ -669,7 +586,7 @@ def rescale_temperature_with_lapserate(
     era5_data: xr.DataArray
         Data to rescaled
     era5_dem: xr.DataArray
-        DEM correspodning to data to rescaled
+        DEM corresponding to data to rescaled
     lapse_rate: float
         Lapse rate
     key: str
@@ -695,6 +612,7 @@ def rescale_temperature_with_lapserate(
         dst_dem=dem,
         lapse_rate=lapse_rate,
     )
+    data.attrs.clear()
     data.attrs["standard_name"] = key
     data.attrs["long_name"] = description
     data.attrs["name"] = key
@@ -741,6 +659,7 @@ def rescale_radiation(
         )
         / radiation_factor
     )
+    data.attrs.clear()
     data.attrs["standard_name"] = key
     data.attrs["long_name"] = description
     data.attrs["name"] = key
@@ -834,8 +753,15 @@ def add(
     # Read data
     era5_xrds = read(product=product_path)
     logger.debug("Read ERA5 product:OK")
+    era5_xrds = era5_xrds[[var.key for var in variables]]
+    logger.debug(f"Variables : {list(era5_xrds.data_vars)}")
     # Process accumulated variables for ERA5land dataset
-    if dataset == ERA5Dataset.ERA5LAND:
+    if (
+        dataset == ERA5Dataset.ERA5LAND
+        and ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key in era5_xrds.data_vars
+        and ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key
+        in era5_xrds.data_vars
+    ):
         era5_xrds[ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key] = era5_xrds[
             ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key
         ].diff(dim="time")
@@ -845,19 +771,21 @@ def add(
     # Interpolate time
     era5_xrds = interpolate_time(data=era5_xrds, date=date)
     logger.debug("Interpolate ERA5 product:OK")
-    # Check DEM
-    if (
-        dataset == ERA5Dataset.ERA5
-        and ERA5Var.GEOPOTENTIAL.key in era5_xrds.data_vars
-    ):
-        era5_dem = era5_xrds[ERA5Var.GEOPOTENTIAL.key] / G_CST
-        logger.warning(
-            "DEM is missing in ERA5 data: No variables 'height' in the dataset"
-        )
+    # Add DEM
+    if dataset == ERA5Dataset.ERA5:
+        era5_dem = get_era5_dem()
+        era5_dem = xr.DataArray(
+            era5_dem.data,
+            dims=era5_xrds.dims,
+            coords=era5_xrds.coords,
+        ).rio.write_crs(CRS(4326))
     elif dataset == ERA5Dataset.ERA5LAND:
-        # Compute height
-        era5_dem = compute_egm96_height(era5_xrds)
-        logger.debug("Compute EGM96 height")
+        era5_dem = get_era5land_dem()
+        era5_dem = xr.DataArray(
+            era5_dem.data,
+            dims=era5_xrds.dims,
+            coords=era5_xrds.coords,
+        ).rio.write_crs(CRS(4326))
     else:
         era5_dem = None
     ##########
@@ -964,6 +892,7 @@ def add(
             data=era5_xrds[ERA5Var.TOTAL_COLUMN_OZONE.key],
             dem=dst.rio.write_crs(crs),  # transfer crs attribute
         )
+        updated_data[f"tco3_{dataset.key}"].attrs.clear()
         updated_data[f"tco3_{dataset.key}"].attrs["standard_name"] = "tco3"
         updated_data[f"tco3_{dataset.key}"].attrs["long_name"] = (
             "Total column ozone"
@@ -974,269 +903,6 @@ def add(
             "Total column ozone"
         )
         logger.debug("Add total_column_ozone :OK")
-    # Clean
-    if temp_dir is not None:
-        temp_dir.cleanup()  # Manually delete the directory
-    return updated_data
-
-
-def add_et(
-    data: xr.Dataset,
-    path: str | None = None,
-) -> xr.Dataset:
-    """
-    Description
-    -----------
-    Add only the ERA5-Land "Total evaporation" product to the dataset
-
-    Parameters
-    ----------
-    data: xr.Dataset
-        Data
-    path: str
-        Directory where ERA5-Land data have been downloaded data
-    """
-    ##############
-    # Check inputs
-    ##############
-    dataset = ERA5Dataset.ERA5LAND
-    if data.attrs.get("vis_date", None) is None:
-        raise ValueError("Vis date attribute is missing in dataset")
-    if len(data.data_vars) == 0:
-        raise ValueError("Dataset is empty")
-    # Extract data
-    date = dt.datetime.combine(data.attrs["vis_date"], time(12, 0))
-    if data.rio.crs is None:
-        if data.attrs.get("crs") is not None:
-            crs = data.attrs["crs"]
-            data = data.rio.write_crs(crs)
-        raise ValueError("crs attribute is missing in dataset")
-    crs = data.rio.crs
-    temp_dir = None
-    # Download data if necessary
-    if path is None:
-        # Download data
-        logger.debug("Download ERA5 data")
-        # Create a temp directory
-        temp_dir = tempfile.TemporaryDirectory()
-        path = temp_dir.name
-        logger.debug(f"Temp dir: {path}")
-        # Download files
-        download(date=date, dataset=dataset, path=path)
-    logger.debug("Check data")
-    ##############
-    # Prepare data
-    ###############
-    # ERA5-Land data path
-    product_path = os.path.join(
-        path,
-        "ERA5_data",
-        f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
-    )
-    logger.debug(f"Product path: {product_path}")
-    if not os.path.isfile(product_path):
-        raise OSError(f"ERA5 data not found: {product_path}")
-    # Read data
-    era5_xrds = read(product=product_path)
-    logger.debug("Read ERA5 product:OK")
-    # Process "total_evaporation" variable
-    dataset = ERA5Dataset.ERA5LAND
-    era5_xrds[ERA5Var.TOTAL_EVAPORATION.key] = era5_xrds[
-        ERA5Var.TOTAL_EVAPORATION.key
-    ].min(dim="time", skipna=False)  # Min selected due to daily accumulation
-    ##########
-    # Add data
-    ##########
-    # Copy data
-    updated_data = data.copy()
-    updated_data.attrs = data.attrs.copy()
-    #############
-    # Total Evaporation
-    #############
-    # Add evaporation
-    dst = next(iter(data.data_vars.values()))
-    updated_data[f"e_{dataset.key}"] = interpolate_evaporation(
-        data=era5_xrds[ERA5Var.TOTAL_EVAPORATION.key],
-        dem=dst.rio.write_crs(crs),  # transfer crs attribute
-    )
-    updated_data[f"e_{dataset.key}"] = (
-        -updated_data[f"e_{dataset.key}"] * 1000
-    )  # Convert m to mm, invert sign for upward flux
-    updated_data[f"e_{dataset.key}"].attrs["standard_name"] = "e"
-    updated_data[f"e_{dataset.key}"].attrs["long_name"] = "Total evaporation"
-    updated_data[f"e_{dataset.key}"].attrs["name"] = "e"
-    updated_data[f"e_{dataset.key}"].attrs["unit"] = "mm"
-    updated_data[f"e_{dataset.key}"].attrs["description"] = "Total evaporation"
-    logger.debug("Add total_evaporation :OK")
-    # Clean
-    if temp_dir is not None:
-        temp_dir.cleanup()  # Manually delete the directory
-    return updated_data
-
-
-def add_explanatory(
-    data: xr.Dataset,
-    path: str | None = None,
-) -> xr.Dataset:
-    """
-    Description
-    -----------
-    Add the ERA5-Land regression model explanatory variables to the dataset.
-
-     Parameters
-     ----------
-     data: xr.Dataset
-         Data
-     path: str
-         Directory where ERA5-Land data have been downloaded data
-    """
-    ##############
-    # Check inputs
-    ##############
-    dataset = ERA5Dataset.ERA5LAND
-    if data.attrs.get("vis_date", None) is None:
-        raise ValueError("Vis date attribute is missing in dataset")
-    if len(data.data_vars) == 0:
-        raise ValueError("Dataset is empty")
-    # Extract data
-    date = dt.datetime.combine(data.attrs["vis_date"], time(12, 0))
-    if data.rio.crs is None:
-        if data.attrs.get("crs") is not None:
-            crs = data.attrs["crs"]
-            data = data.rio.write_crs(crs)
-        raise ValueError("crs attribute is missing in dataset")
-    crs = data.rio.crs
-    temp_dir = None
-    # Download data if necessary
-    if path is None:
-        # Download data
-        logger.debug("Download ERA5 data")
-        # Create a temp directory
-        temp_dir = tempfile.TemporaryDirectory()
-        path = temp_dir.name
-        logger.debug(f"Temp dir: {path}")
-        # Download files
-        download(date=date, dataset=dataset, path=path)
-    logger.debug("Check data")
-    ##############
-    # Prepare data
-    ###############
-    # ERA5-Land data path
-    product_path = os.path.join(
-        path,
-        "ERA5_data",
-        f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
-    )
-    logger.debug(f"Product path: {product_path}")
-    if not os.path.isfile(product_path):
-        raise OSError(f"ERA5 data not found: {product_path}")
-    # Read data
-    era5_xrds = read(product=product_path)
-    logger.debug("Read ERA5 product:OK")
-    # Process "total_precipitation" variable
-    dataset = ERA5Dataset.ERA5LAND
-    era5_xrds[ERA5Var.TOTAL_PRECIPITATION.key] = era5_xrds[
-        ERA5Var.TOTAL_PRECIPITATION.key
-    ].max(dim="time", skipna=False)  # Max selected due to daily accumulation
-    # Process "surface_runoff" variable
-    dataset = ERA5Dataset.ERA5LAND
-    era5_xrds[ERA5Var.SURFACE_RUNOFF.key] = era5_xrds[
-        ERA5Var.SURFACE_RUNOFF.key
-    ].max(dim="time", skipna=False)  # Max selected due to daily accumulation
-    # Process "skin reservoir content" variable
-    dataset = ERA5Dataset.ERA5LAND
-    era5_xrds[ERA5Var.SKIN_RESERVOIR_CONTENT.key] = era5_xrds[
-        ERA5Var.SKIN_RESERVOIR_CONTENT.key
-    ].max(dim="time", skipna=False)
-    # Process "skin reservoir content" variable
-    dataset = ERA5Dataset.ERA5LAND
-    era5_xrds[ERA5Var.SOIL_WATER_LEVEL1.key] = era5_xrds[
-        ERA5Var.SOIL_WATER_LEVEL1.key
-    ].mean(dim="time", skipna=False)
-    ##########
-    # Add data
-    ##########
-    # Copy data
-    updated_data = data.copy()
-    updated_data.attrs = data.attrs.copy()
-    #############
-    # Total Precipitation
-    #############
-    # Add precipitation
-    dst = next(iter(data.data_vars.values()))
-    updated_data[f"tp_{dataset.key}"] = interpolate_explanatory(
-        data=era5_xrds[ERA5Var.TOTAL_PRECIPITATION.key],
-        dem=dst.rio.write_crs(crs),  # transfer crs attribute
-    )
-    updated_data[f"tp_{dataset.key}"] = (
-        updated_data[f"tp_{dataset.key}"] * 1000
-    )  # Convert m to mm
-    updated_data[f"tp_{dataset.key}"].attrs["standard_name"] = "tp"
-    updated_data[f"tp_{dataset.key}"].attrs["long_name"] = "Total precipitation"
-    updated_data[f"tp_{dataset.key}"].attrs["name"] = "tp"
-    updated_data[f"tp_{dataset.key}"].attrs["unit"] = "mm"
-    updated_data[f"tp_{dataset.key}"].attrs["description"] = (
-        "Total precipitation"
-    )
-    logger.debug("Add total_precipitation :OK")
-    #############
-    # Surface Runoff
-    #############
-    # Add runoff
-    dst = next(iter(data.data_vars.values()))
-    updated_data[f"sro_{dataset.key}"] = interpolate_explanatory(
-        data=era5_xrds[ERA5Var.SURFACE_RUNOFF.key],
-        dem=dst.rio.write_crs(crs),  # transfer crs attribute
-    )
-    updated_data[f"sro_{dataset.key}"] = (
-        updated_data[f"sro_{dataset.key}"] * 1000
-    )  # Convert m to mm
-    updated_data[f"sro_{dataset.key}"].attrs["standard_name"] = "sro"
-    updated_data[f"sro_{dataset.key}"].attrs["long_name"] = "Surface runoff"
-    updated_data[f"sro_{dataset.key}"].attrs["name"] = "sro"
-    updated_data[f"sro_{dataset.key}"].attrs["unit"] = "mm"
-    updated_data[f"sro_{dataset.key}"].attrs["description"] = "Surface Runoff"
-    logger.debug("Add surface_runoff :OK")
-    #############
-    # Skin Reservoir Content
-    #############
-    # Add skin reservoir content
-    dst = next(iter(data.data_vars.values()))
-    updated_data[f"src_{dataset.key}"] = interpolate_explanatory(
-        data=era5_xrds[ERA5Var.SKIN_RESERVOIR_CONTENT.key],
-        dem=dst.rio.write_crs(crs),  # transfer crs attribute
-    )
-    updated_data[f"src_{dataset.key}"] = (
-        updated_data[f"src_{dataset.key}"] * 1000
-    )  # Convert m to mm
-    updated_data[f"src_{dataset.key}"].attrs["standard_name"] = "src"
-    updated_data[f"src_{dataset.key}"].attrs["long_name"] = (
-        "Skin reservoir content"
-    )
-    updated_data[f"src_{dataset.key}"].attrs["name"] = "src"
-    updated_data[f"src_{dataset.key}"].attrs["unit"] = "mm"
-    updated_data[f"src_{dataset.key}"].attrs["description"] = (
-        "Skin reservoir content"
-    )
-    #############
-    # Soil Water Level 1
-    #############
-    # Add soil water
-    dst = next(iter(data.data_vars.values()))
-    updated_data[f"swvl1_{dataset.key}"] = interpolate_explanatory(
-        data=era5_xrds[ERA5Var.SOIL_WATER_LEVEL1.key],
-        dem=dst.rio.write_crs(crs),  # transfer crs attribute
-    )
-    updated_data[f"swvl1_{dataset.key}"].attrs["standard_name"] = "swvl1"
-    updated_data[f"swvl1_{dataset.key}"].attrs["long_name"] = (
-        "Soil water level 1"
-    )
-    updated_data[f"swvl1_{dataset.key}"].attrs["name"] = "swvl1"
-    updated_data[f"swvl1_{dataset.key}"].attrs["unit"] = "m-3 m3"
-    updated_data[f"swvl1_{dataset.key}"].attrs["description"] = (
-        "Soil water level 1"
-    )
-    logger.debug("Add volumetric_soil_water_layer_1 :OK")
     # Clean
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
@@ -1286,80 +952,3 @@ def download_date_by_date(
             t.to_pydatetime(), ERA5Dataset.ERA5LAND, variables, path=output
         )
     return time
-
-
-def create_daily_et_dataset(
-    date: dt.datetime, grid: xr.Dataset, path: str | None = None
-) -> xr.Dataset:
-    """
-    Description
-    -----------
-    - Read the "Total evaporation" product
-    (contained in the ERA5-Land .zip repertory) as dataset,
-    projecting data on a given ROI
-    - Add a "flags" variable (1 for nan value, 0 otherwise)
-
-    Parameters
-    ----------
-    date: datetime.datetime
-        Date
-    grid: xr.Dataset
-        grid centered on the ROI
-    path: str
-        Directory path where ERA5-Land data have been downloaded
-
-    Return
-    ------
-    dst_rad: xr.Dataset
-        Daily evapotranspiration dataset with flags
-    """
-    # Read as dataset
-    if path is None:
-        path = os.getcwd()
-    grid.attrs["vis_date"] = date.date()
-    dst = add_et(grid, path=path)
-    # Add "flags" variable
-    dst["flags"] = dst[f"e_{ERA5Dataset.ERA5LAND.key}"].isnull().astype(int)
-    dst = dst.rename_vars({f"e_{ERA5Dataset.ERA5LAND.key}": "et"})
-    return dst[["et", "flags"]]
-
-
-def create_daily_explanatory_dataset(
-    date: dt.datetime, grid: xr.Dataset, path: str | None = None
-) -> xr.Dataset:
-    """
-    Description
-    -----------
-    Read the regression model explanatory products
-    (contained in the ERA5-Land .zip repertory) as dataset,
-    projecting data on a given ROI
-
-    Parameters
-    ----------
-    date: datetime.datetime
-        Date
-    grid: xr.Dataset
-        grid centered on the ROI
-    path: str
-        Directory path where ERA5-Land data have been downloaded
-
-    Return
-    ------
-    xr.Dataset
-        Daily explanatory variable products
-    """
-    # Read as dataset
-    if path is None:
-        path = os.getcwd()
-    grid.attrs["vis_date"] = date.date()
-    dst = add_explanatory(grid, path=path)
-    # Add "flags" variable
-    dst = dst.rename_vars(
-        {
-            f"tp_{ERA5Dataset.ERA5LAND.key}": "tp",
-            f"sro_{ERA5Dataset.ERA5LAND.key}": "sro",
-            f"src_{ERA5Dataset.ERA5LAND.key}": "src",
-            f"swvl1_{ERA5Dataset.ERA5LAND.key}": "sw",
-        }
-    )
-    return dst[["tp", "sro", "src", "sw"]]

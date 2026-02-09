@@ -11,11 +11,11 @@ from pyproj import CRS
 from sensorsio import utils
 
 from etdataset import era5, msg
-from etdataset.era5 import (
+from etdataset.era5 import download_date_by_date as download_et
+from etdataset.et import (
     create_daily_et_dataset,
     create_daily_explanatory_dataset,
 )
-from etdataset.era5 import download_date_by_date as download_et
 from etdataset.interpolation import create_grid_dataset
 from etdataset.logging import LoggerManager
 from etdataset.msg import create_daily_radiation_dataset
@@ -26,12 +26,9 @@ from etdataset.selection import filter_with_roi, select_products
 from etdataset.utils import (
     check_mgrs_format,
     get_bbox_from_mgrs_tile,
-    get_utm_bbox_from_roi,
 )
 from etdataset.writer import (
-    write_daily_explanatory,
-    write_daily_radiation,
-    write_et_single_date,
+    write_to_tif,
 )
 
 logger = LoggerManager.get_logger(__name__)
@@ -168,14 +165,10 @@ def add_aux(
     updated_data = msg.add(data=data, path=path)
     updated_data = era5.add(
         data=updated_data,
-        dataset=era5.ERA5Dataset.ERA5LAND,
-        variables=[era5.ERA5Var.TEMPERATURE, era5.ERA5Var.DEWPOINT_TEMPERATURE],
-        path=path,
-    )
-    updated_data = era5.add(
-        data=updated_data,
         dataset=era5.ERA5Dataset.ERA5,
         variables=[
+            era5.ERA5Var.TEMPERATURE,
+            era5.ERA5Var.DEWPOINT_TEMPERATURE,
             era5.ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY,
             era5.ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY,
         ],
@@ -294,7 +287,7 @@ def select(
     max_cloud_cover: float = 20,
     min_roi_overlap: float = 40,
     min_product_overlap: float = 40,
-    only_best_match: bool = False,  # noqa
+    only_best_match: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Select products
@@ -434,12 +427,17 @@ def download_aux(
         )
 
 
-def prepare_daily_radiation(
-    start_date: str, end_date: str, roi_path: str, output: str | None = None
+def prepare_daily_radiation_timeseries(
+    start_date: str,
+    end_date: str,
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    resolution: float = 3000,
+    output: str | None = None,
 ) -> None:
     """
-    Description
-    -----------
+    Prepare daily radiation data on a ROI over a period of time
+
     For each day from a start to a end date:
     - Download MSG data,
     - Read it a dataset projected on a given ROI
@@ -452,11 +450,15 @@ def prepare_daily_radiation(
         Start date (YYYY-MM-DD)
     end_date: str
         End date (YYYY-MM-DD)
-    roi_path: str
-        Path of the region of interest in Shapefile format
+    roi_bbox: rio.coords.BoundingBox
+        ROI bounding box
+    roi_crs: CRS
+        ROI Coordinate Reference System
+    resolution: float
+        Resolution
     path: str
         Directory path to store .tif files
-        default: current directory)
+        (default: current directory)
     """
     # Check
     min_date = parse_date(start_date)
@@ -465,35 +467,62 @@ def prepare_daily_radiation(
         output = os.getcwd()
     if max_date < min_date:
         raise APIException("End date must be more recent than start date")
-    if not os.path.isfile(roi_path):
-        raise FileNotFoundError(f"File not found {roi_path}")
     if not os.path.isdir(output):
         logger.debug(f"Create output path: {output}")
         os.makedirs(output, exist_ok=True)
     # Run
-    roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
-    grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
-    date_list = download_radiation(
-        min_date, max_date, roi_bbox, roi_crs, output
+    grid = create_grid_dataset(
+        bounds=roi_bbox, crs=roi_crs, resolution=resolution
     )
+
+    date_list = download_radiation(
+        min_date, max_date, roi_bbox, roi_crs, output, daily_only=True
+    )
+    ts_path = os.path.join(output, "timeseries/daily_radiation")
+    os.makedirs(ts_path, exist_ok=True)
+    logger.info("Process dates for daily radiation...")
     for date in date_list:
-        dst = create_daily_radiation_dataset(date.to_pydatetime(), grid, output)
-        write_daily_radiation(dst, output)
+        date_dt = date.to_pydatetime()
+        dst = create_daily_radiation_dataset(
+            date=date_dt, grid=grid, path=output
+        )
+        filename = os.path.join(
+            ts_path, f"radiation_{date_dt.strftime('%Y%m%d')}.tif"
+        )
+        write_to_tif(dst, filename)
+    logger.info("Process dates for daily radiation: OK")
 
 
-def prepare_et_single_date(
-    start_date: str, end_date: str, roi_path: str, output: str | None = None
+def prepare_daily_et_timeseries(
+    start_date: str,
+    end_date: str,
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    resolution: float = 3000,
+    output: str | None = None,
+    extra_variables: bool = False,
 ) -> None:
     """
-    Description
-    -----------
+    Prepare daily ET timeseries for a period over a ROI
+
     For each day from a start to a end date:
+
     - Download ERA5-Land,
     - Read it as a dataset:
+
         - projecting on a given ROI with a resolution of 3km per pixel,
         - keeping only the evapotranspiration variable,
         - adding a "flags" (0-1) variable.
+        - adding extra ERA5 variables
+
     - Create a corresponding et single date .tif file.
+    - If download_radiation_data is activated:
+
+        - Download MSG data,
+        - Read it a dataset projected on a given ROI
+          with a resolution of 3km per pixel
+        - Create a corresponding daily radiation .tif file.
+
 
     Parameters
     ----------
@@ -501,10 +530,20 @@ def prepare_et_single_date(
         Start date (YYYY-MM-DD)
     end_date: str
         End date (YYYY-MM-DD)
-    roi_path: str
-        Path of the region of interest in Shapefile format
+    roi_bbox: rio.coords.BoundingBox
+        ROI bounding box
+    roi_crs: CRS
+        ROI Coordinate Reference System
+    resolution: float
+        Resolution
     output: str
         Directory path to store .tif files (default: current directory)
+    add_radation: bool
+        Boolean to activate radiation data download and processing
+        over the period
+    extra_variables: bool
+        Boolean to activate extra ERA5land variables download and processing
+        over the period
     """
     # Check
     min_date = parse_date(start_date)
@@ -513,71 +552,44 @@ def prepare_et_single_date(
         output = os.getcwd()
     if max_date < min_date:
         raise APIException("End date must be more recent than start date")
-    if not os.path.isfile(roi_path):
-        raise FileNotFoundError(f"File not found {roi_path}")
     if not os.path.isdir(output):
         logger.debug(f"Create output path: {output}")
         os.makedirs(output, exist_ok=True)
-    # Run
-    roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
-    grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
-    date_list = download_et(min_date, max_date, ["total_evaporation"], output)
-    for date in date_list:
-        dst = create_daily_et_dataset(date.to_pydatetime(), grid, output)
-        write_et_single_date(dst, output)
-
-
-def prepare_daily_explanatory(
-    start_date: str, end_date: str, roi_path: str, output: str | None = None
-) -> None:
-    """
-    Description
-    -----------
-    For each day from a start to a end date:
-    - Download ERA5-Land regression model explanatory products,
-    - Read it as a dataset, projecting on a given ROI
-    with a resolution of 3km per pixel,
-    - Create a corresponding explanatory_YYYYMMDD.tif file.
-
-    Parameters
-    ----------
-    start_date: str
-        Start date (YYYY-MM-DD)
-    end_date: str
-        End date (YYYY-MM-DD)
-    roi_path: str
-        Path of the region of interest in Shapefile format
-    output: str
-        Directory path to store .tif files (default: current directory)
-    """
-    # Check
-    min_date = parse_date(start_date)
-    max_date = parse_date(end_date)
-    if output is None:
-        output = os.getcwd()
-    if max_date < min_date:
-        raise APIException("End date must be more recent than start date")
-    if not os.path.isfile(roi_path):
-        raise FileNotFoundError(f"File not found {roi_path}")
-    if not os.path.isdir(output):
-        logger.debug(f"Create output path: {output}")
-        os.makedirs(output, exist_ok=True)
-    # Run
-    roi_bbox, roi_crs = get_utm_bbox_from_roi(roi_path)
-    grid = create_grid_dataset(roi_bbox, roi_crs, 3000)
-    date_list = download_et(
-        min_date,
-        max_date,
-        [
-            "total_precipitation",
-            "surface_runoff",
-            "skin_reservoir_content",
-            "volumetric_soil_water_layer_1",
-        ],
-        output,
+    # Initialization
+    variables = ["total_evaporation"]
+    extra_vars = [
+        "total_precipitation",
+        "surface_runoff",
+        "skin_reservoir_content",
+        "volumetric_soil_water_layer_1",
+    ]
+    if extra_variables:
+        variables += extra_vars
+    # Create grid
+    grid = create_grid_dataset(
+        bounds=roi_bbox, crs=roi_crs, resolution=resolution
     )
+    # Create dates
+    date_list = download_et(min_date, max_date, variables, output)
+    # Create output paths
+    et_path = os.path.join(output, "timeseries/et")
+    os.makedirs(et_path, exist_ok=True)
+    extra_path = os.path.join(output, "timeseries/extra")
+    if extra_variables:
+        os.makedirs(extra_path, exist_ok=True)
+    # Loop over the period
+    logger.info("Process dates for evapotranspiration...")
     for date in date_list:
-        dst = create_daily_explanatory_dataset(
-            date.to_pydatetime(), grid, output
+        date_dt = date.to_pydatetime()
+        dst = create_daily_et_dataset(date_dt, grid, output)
+        et_filename = os.path.join(
+            et_path, f"et_single_date_{date.strftime('%Y%m%d')}.tif"
         )
-        write_daily_explanatory(dst, output)
+        write_to_tif(dst, et_filename)
+        if extra_variables:
+            extra_dst = create_daily_explanatory_dataset(date_dt, grid, output)
+            extra_filename = os.path.join(
+                extra_path, f"extra_{date.strftime('%Y%m%d')}.tif"
+            )
+            write_to_tif(extra_dst, extra_filename)
+    logger.info("Process dates for evapotranspiration: OK")

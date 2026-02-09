@@ -374,6 +374,7 @@ def download(
     date: dt.datetime,
     latlon_bbox: rio.coords.BoundingBox,
     path: str | None = None,
+    daily_only: bool = False,
 ) -> None:
     """
     Description
@@ -388,6 +389,8 @@ def download(
         Bounding box in lat/lon coordinates
     path: str
         Directory to download data (Default current directory)
+    daily_only: bool
+        Only download daily product
     """
     if os.environ.get("LSASAF_USER", None) is None:
         raise ValueError("LSASAF_USER not provided")
@@ -414,46 +417,47 @@ def download(
         fmt=MSGFormat.NETCDF,
         path=product_path,
     )
-    # If date argument is a date
-    if type(date) is dt.date:
-        for product in [
-            MSGProduct.SURFACE_SOLAR_RADIATION_DOWNWARD,
-            MSGProduct.SURFACE_THERMAL_RADIATION_DOWNWARD,
-        ]:
-            time = pd.date_range(
-                date.strftime("%Y-%m-%d"),
-                freq=product.freq,
-                end=(date + pd.Timedelta("1day")).strftime("%Y-%m-%d"),
-            )
-            for t in time:
-                _download(
-                    satellite=satellite,
-                    product=product,
-                    date=t,
-                    fmt=MSGFormat.NETCDF,
-                    path=product_path,
-                )
-    elif type(date) is dt.datetime:
-        for product in [
-            MSGProduct.SURFACE_SOLAR_RADIATION_DOWNWARD,
-            MSGProduct.SURFACE_THERMAL_RADIATION_DOWNWARD,
-        ]:
-            previous = find_previous_date(product, date)
-            # TODO: Correct type
-            for t in [  # type: ignore
-                previous - pd.Timedelta(product.freq),
-                previous,
-                previous + pd.Timedelta(product.freq),
+    if not daily_only:
+        # If date argument is a date
+        if type(date) is dt.date:
+            for product in [
+                MSGProduct.SURFACE_SOLAR_RADIATION_DOWNWARD,
+                MSGProduct.SURFACE_THERMAL_RADIATION_DOWNWARD,
             ]:
-                _download(
-                    satellite=satellite,
-                    product=product,
-                    date=t,
-                    fmt=MSGFormat.NETCDF,
-                    path=product_path,
+                time = pd.date_range(
+                    date.strftime("%Y-%m-%d"),
+                    freq=product.freq,
+                    end=(date + pd.Timedelta("1day")).strftime("%Y-%m-%d"),
                 )
-    else:
-        raise MSGException(f"Unknown format for date {date}")
+                for t in time:
+                    _download(
+                        satellite=satellite,
+                        product=product,
+                        date=t,
+                        fmt=MSGFormat.NETCDF,
+                        path=product_path,
+                    )
+        elif type(date) is dt.datetime:
+            for product in [
+                MSGProduct.SURFACE_SOLAR_RADIATION_DOWNWARD,
+                MSGProduct.SURFACE_THERMAL_RADIATION_DOWNWARD,
+            ]:
+                previous = find_previous_date(product, date)
+                # TODO: Correct type
+                for t in [  # type: ignore
+                    previous - pd.Timedelta(product.freq),
+                    previous,
+                    previous + pd.Timedelta(product.freq),
+                ]:
+                    _download(
+                        satellite=satellite,
+                        product=product,
+                        date=t,
+                        fmt=MSGFormat.NETCDF,
+                        path=product_path,
+                    )
+        else:
+            raise MSGException(f"Unknown format for date {date}")
 
 
 def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
@@ -894,6 +898,7 @@ def download_date_by_date(
     roi_bbox: rio.BoundingBox,
     roi_crs: CRS,
     output: str | None = None,
+    daily_only: bool = True,
 ) -> pd.DatetimeIndex:
     """import datetime as dt
     Description
@@ -912,6 +917,8 @@ def download_date_by_date(
         ROI CRS
     output: str
         Directory path to store data
+    daily_only: bool
+        Only download daily product
 
     Return
     ------
@@ -923,7 +930,7 @@ def download_date_by_date(
     )
     time = xr.date_range(date1, freq="1D", end=date2)
     for t in time:
-        download(t.to_pydatetime(), roi_bbox_latlon, output)
+        download(t.to_pydatetime().date(), roi_bbox_latlon, output, daily_only)
     return time
 
 
