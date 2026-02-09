@@ -19,6 +19,7 @@ from etdataset.reader import (
 )
 
 
+@pytest.mark.functional
 @pytest.mark.requires_test_data
 def test_landsat_reader():
     """
@@ -33,6 +34,7 @@ def test_landsat_reader():
     assert reader
 
 
+@pytest.mark.functional
 @pytest.mark.requires_test_data
 def test_ecostress_reader():
     """
@@ -47,6 +49,7 @@ def test_ecostress_reader():
     assert reader
 
 
+@pytest.mark.functional
 @pytest.mark.requires_test_data
 def test_sentinel2_reader():
     """
@@ -61,6 +64,7 @@ def test_sentinel2_reader():
     assert reader
 
 
+@pytest.mark.functional
 @pytest.mark.requires_test_data
 def test_hlsl_reader():
     """
@@ -75,6 +79,7 @@ def test_hlsl_reader():
     assert reader
 
 
+@pytest.mark.functional
 @pytest.mark.requires_test_data
 def test_hlss_reader():
     """
@@ -98,6 +103,7 @@ class ReaderParams:
     product_path: str
 
 
+@pytest.mark.functional
 @pytest.mark.requires_test_data
 @pytest.mark.parametrize(
     "parameters",
@@ -147,6 +153,7 @@ def test_get_product_reader(parameters: ReaderParams):
     assert reader
 
 
+@pytest.mark.functional
 def test_get_product_reader_error():
     """
     Test get_product_reader method

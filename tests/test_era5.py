@@ -33,6 +33,7 @@ def get_era5land_product() -> str:
     )
 
 
+@pytest.mark.unit
 def test_era5var_instantiate():
     """
     Test ERA5Var
@@ -45,7 +46,8 @@ def test_era5var_instantiate():
         var = era5.ERA5Var("toto")
 
 
-@pytest.mark.requires_test_data
+@pytest.mark.functional
+@pytest.mark.require_test_data
 def test_era5land_instantiate():
     """
     Test ERA5Data class instantiation
@@ -67,6 +69,7 @@ def test_era5land_instantiate():
     )
 
 
+@pytest.mark.functional
 @pytest.mark.requires_test_data
 def test_era5_instantiate():
     """
