@@ -1,29 +1,30 @@
 # Custom Dictionary Words
 
 # Mission
-trishna
-landsat
-sentinel2
+earthdata
+ecostress
 hlsl
 hlslandsat
 hlss
 hlssentinel
-ecostress
+landsat
+sentinel2
 theia
-earthdata
+trishna
 
 # Provider
 usgs
 
 # Variables
 latlon
+swir
+ndvi
+lai
 
 # Python package
 earthaccess
-sensorsio
-rioxarray
-
-mgrs
 gpkg
 lste
-latlon
+mgrs
+rioxarray
+sensorsio
