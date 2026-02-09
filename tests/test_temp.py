@@ -67,8 +67,6 @@ def test_interpolate_temparture():
 
 
 # TEST GENERATE DATES
-
-
 def test_generate_dates():
     start = dt.date(2024, 1, 1)
     end = dt.date(2024, 1, 5)

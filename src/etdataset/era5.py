@@ -616,6 +616,10 @@ def download(
             "month": date.month,
             "day": date.day,
             "pressure_level": [
+                "700",
+                "725",
+                "750",
+                "775",
                 "800",
                 "825",
                 "850",

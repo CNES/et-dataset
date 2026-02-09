@@ -4,7 +4,7 @@
 #
 
 """
-Module for reading ICOS
+Module for ICOS
 """
 
 import os

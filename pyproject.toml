@@ -25,6 +25,7 @@ dependencies = [
   "pandas",
   "pyproj",
   "shapely",
+  "icoscp_core",
   "psutil",
   "fiona",
   "tqdm",
