@@ -166,7 +166,7 @@ select = [
   "F901",
   "FA100",
   "FA102",
-  "FBT001",
+  #"FBT001", Boolean-typed positional argument in function definition
   #"FBT002", boolean-default-value-positional-argument
   "FLY002",
   "G001",
