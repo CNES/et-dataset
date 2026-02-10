@@ -1,12 +1,10 @@
-#
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales /
-#            Université Paul Sabatier (UT3)
-#
+#!/usr/bin/env python
 
+# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 
-"""
-Air Temperature and Dew point Temperature rescaling
-"""
+#######################
+# Air Temperature and Dew point Temperature rescaling
+#######################
 
 # Imports
 import argparse
