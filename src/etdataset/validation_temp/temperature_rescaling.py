@@ -323,8 +323,10 @@ def temperature_rescaling_constant_lapse_rate(
         ERA5 Data
     era5_dem: xr.DataArray
         ERA5 Data
-    ta: ERA5Var
-    tdp :ERA5Var
+    lr_ta: float
+        Lapse rate for air temperature
+    lr_tdp : float
+        Lapse rate for dew point temperature
 
     Return
     -----------
