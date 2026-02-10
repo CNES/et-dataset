@@ -11,11 +11,13 @@ __pycache__/
 .ipynb_checkpoints/
 out/
 download/
-rasters_COP30/
+COP-DEM_GLO-30-DGED_S2_tiles/
 ICOS/
 mnt/
-csv/
 data/
+method_1/
+icos_data/
+test_*.ipynb
 
 # Data
 *.tif

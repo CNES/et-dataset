@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 import argparse
 import logging

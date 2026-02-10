@@ -154,8 +154,9 @@ def test_filter_dataset_by_hours():
     filtered = temperature_rescaling.filter_dataset_by_hours(ds, date, times)
 
     assert len(filtered.time) == 2
-    assert filtered.time.values[0].hour == 0
-    assert filtered.time.values[1].hour == 6
+    hours = filtered.time.dt.hour.values
+    assert hours[0] == 0
+    assert hours[1] == 6
 
 
 def test_filter_dataset_missing_time_coord():

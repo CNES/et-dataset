@@ -8,6 +8,7 @@ import datetime as dt
 import os
 from collections.abc import Generator
 
+import pandas as pd
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
@@ -224,7 +225,8 @@ def filter_dataset_by_hours(
     list_dt = [dt.datetime.combine(date, t) for t in times]
     if name_column not in ds.coords:
         raise ValueError(f"'{name_column}' is not a coordinate in the dataset")
-
+    ds = ds.copy()
+    ds[name_column] = pd.to_datetime(ds[name_column].values)
     return ds.sel({name_column: list_dt})
 
 
@@ -373,7 +375,7 @@ def get_xy_dims(ds: xr.Dataset) -> dict[str, str]:
     Description
     -----------
     Determine the names of the spatial dimensions for interpolation in an
-    xarray Dataset.
+    xarray Dataset
 
     This function looks the dataset's dimensions.
     It supports datasets with dimensions
