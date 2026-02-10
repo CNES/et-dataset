@@ -1,4 +1,9 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
+
+"""
+Module for temperature rescaling
+"""
+
 import datetime as dt
 import os
 from collections.abc import Generator
