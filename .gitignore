@@ -12,6 +12,12 @@ __pycache__/
 out/
 out_*/
 download/
+COP-DEM_GLO-30-DGED_S2_tiles/
+ICOS/
+mnt/
+data/
+icos_data/
+test_*.ipynb
 prepare_landsat_*.ipynb
 
 # Data
@@ -19,6 +25,7 @@ prepare_landsat_*.ipynb
 *.csv
 !notebooks/products.csv
 !notebooks/landsat_products.csv
+!src/etdataset/data/stations_meteoL2.csv
 *.mat
 *.nc
 *.zip

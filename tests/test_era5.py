@@ -1,7 +1,7 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 #
 """
-This module contains tests for ERA5 and ERA5-land data driver
+This module contains tests for ERA5, ERA5-land and ERA5 pressure data driver
 """
 
 import os
@@ -33,6 +33,30 @@ def get_era5land_product() -> str:
     )
 
 
+def get_era5pressure_product() -> str:
+    """
+    Retrieve ERA5 pressure product path
+    """
+    return os.path.join(
+        os.environ["ETDATASET_TEST_DATA_PATH"],
+        "era5",
+        "download_era5_pressure_2023-03-03.zip",
+    )
+
+
+@pytest.mark.unit
+def test_era5pressurevar_instantiate():
+    """
+    Test ERA5pressureVar
+    """
+    var = era5.ERA5pressureVar.from_key("t")
+    assert var.key == "t"
+    var = era5.ERA5pressureVar("t")
+    assert var.key == "t"
+    with pytest.raises(ValueError):
+        var = era5.ERA5pressureVar("toto")
+
+
 @pytest.mark.unit
 def test_era5var_instantiate():
     """
@@ -50,7 +74,7 @@ def test_era5var_instantiate():
 @pytest.mark.require_test_data
 def test_era5land_instantiate():
     """
-    Test ERA5Data class instantiation
+    Test ERA5landData class instantiation
     """
     era5_ds = era5.read(get_era5land_product())
 
@@ -95,3 +119,15 @@ def test_era5_instantiate():
             "z",
         ]
     )
+
+
+@pytest.mark.functional
+@pytest.mark.require_test_data
+def test_era5pressure_instantiate():
+    """
+    Test ERA5pressureData class instantiation
+    """
+    era5_ds = era5.read(get_era5pressure_product())
+
+    assert era5_ds
+    assert sorted(era5_ds.data_vars) == sorted(["t", "z", "r"])

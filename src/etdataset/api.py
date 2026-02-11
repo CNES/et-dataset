@@ -11,6 +11,9 @@ from pyproj import CRS
 from sensorsio import utils
 
 from etdataset import era5, msg
+from etdataset.era5 import (
+    ERA5Dataset,
+)
 from etdataset.era5 import download_date_by_date as download_et
 from etdataset.et import (
     create_daily_et_dataset,
@@ -34,6 +37,7 @@ from etdataset.writer import (
 logger = LoggerManager.get_logger(__name__)
 
 RESOLUTION = 60
+G_CST = 9.80665
 
 
 class APIException(Exception):
@@ -570,7 +574,9 @@ def prepare_daily_et_timeseries(
         bounds=roi_bbox, crs=roi_crs, resolution=resolution
     )
     # Create dates
-    date_list = download_et(min_date, max_date, variables, output)
+    date_list = download_et(
+        min_date, max_date, ERA5Dataset.ERA5LAND, variables, output
+    )
     # Create output paths
     et_path = os.path.join(output, "timeseries/et")
     os.makedirs(et_path, exist_ok=True)
