@@ -5,9 +5,13 @@ import argparse
 import datetime as dt
 import os
 
-from etdataset.api import prepare_daily_radiation, prepare_et_single_date
+from etdataset.api import (
+    prepare_daily_et_timeseries,
+    prepare_daily_radiation_timeseries,
+)
 from etdataset.cli import CLIException
 from etdataset.logging import LoggerManager
+from etdataset.utils import get_utm_bbox_from_roi
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -81,14 +85,26 @@ def prepare_timeseries() -> None:
         os.makedirs(args.output, exist_ok=True)
 
     # Run
+    resolution = 3000
+    roi_bbox, roi_crs = get_utm_bbox_from_roi(args.roi)
     # Prepare daily radiation files
-    prepare_daily_radiation(
-        args.start_date, args.end_date, args.roi, args.output
+    prepare_daily_radiation_timeseries(
+        start_date=args.start_date,
+        end_date=args.end_date,
+        roi_bbox=roi_bbox,
+        roi_crs=roi_crs,
+        resolution=resolution,
+        output=args.output,
     )
 
     # Prepare et single dat files
-    prepare_et_single_date(
-        args.start_date, args.end_date, args.roi, args.output
+    prepare_daily_et_timeseries(
+        start_date=args.start_date,
+        end_date=args.end_date,
+        roi_bbox=roi_bbox,
+        roi_crs=roi_crs,
+        resolution=resolution,
+        output=args.output,
     )
 
 

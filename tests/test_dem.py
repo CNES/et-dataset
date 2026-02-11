@@ -4,6 +4,7 @@ import os
 from unittest import TestCase
 
 import numpy as np
+import pytest
 
 from etdataset.dem import (
     get_dem_from_tile,
@@ -21,6 +22,8 @@ def get_test_data_path() -> str:
     )
 
 
+@pytest.mark.functional
+@pytest.mark.require_test_data
 def test_get_dem_from_tile() -> None:
     """
     Test get_dem_from_tile() method
@@ -32,12 +35,14 @@ def test_get_dem_from_tile() -> None:
     assert dem.crs == "EPSG:32632"
     TestCase().assertDictEqual({"x": 60, "y": 60}, dem.resolution)
     np.testing.assert_array_equal(
-        sorted(dem.data_vars), ["aspect", "height", "slope"]
+        sorted([str(v) for v in dem.data_vars]), ["aspect", "height", "slope"]
     )
     for v in dem.data_vars:
         assert not np.isnan(np.sum(dem[v].data))
 
 
+@pytest.mark.functional
+@pytest.mark.require_test_data
 def test_get_elevation_from_tile() -> None:
     """
     Test get_dem_from_tile() method
@@ -50,6 +55,8 @@ def test_get_elevation_from_tile() -> None:
     assert not np.isnan(np.sum(dem.data))
 
 
+@pytest.mark.functional
+@pytest.mark.require_test_data
 def test_get_dem_from_tiles() -> None:
     """
     Test get_dem_from_tiles() method
@@ -61,7 +68,7 @@ def test_get_dem_from_tiles() -> None:
     assert dem.crs == "EPSG:32632"
     TestCase().assertDictEqual({"x": 60, "y": 60}, dem.resolution)
     np.testing.assert_array_equal(
-        sorted(dem.data_vars), ["aspect", "height", "slope"]
+        sorted([str(v) for v in dem.data_vars]), ["aspect", "height", "slope"]
     )
     for v in dem.data_vars:
         assert not np.isnan(np.sum(dem[v].data))
@@ -73,7 +80,7 @@ def test_get_dem_from_tiles() -> None:
     assert dem.crs == "EPSG:32632"
     TestCase().assertDictEqual({"x": 60, "y": 60}, dem.resolution)
     np.testing.assert_array_equal(
-        sorted(dem.data_vars), ["aspect", "height", "slope"]
+        sorted([str(v) for v in dem.data_vars]), ["aspect", "height", "slope"]
     )
     for v in dem.data_vars:
         assert not np.isnan(np.sum(dem[v].data))

@@ -26,7 +26,6 @@ from etdataset.utils import (
 from etdataset.writer import (
     export_matlab,
     write_dataset,
-    write_matches,
     write_results,
 )
 
@@ -129,10 +128,10 @@ def cli_create(args: CreateArgs) -> None:
     )
     logger.debug("Create dataset: OK")
 
-    # Add auxilary data
+    # Add auxiliary data
     if args.aux:
         data = add_aux(data=data)
-        logger.debug("Add auxilary data: OK")
+        logger.debug("Add auxiliary data: OK")
 
     # Write dataset
     if data is not None:
@@ -218,7 +217,7 @@ def cli_select(args: SelectArgs) -> None:
     # Write results
     logger.info(f"Number of products in {args.coll1} = {len(products1)}")
     logger.info(f"Number of products in {args.coll2} = {len(products2)}")
-    write_matches(matches, os.path.join(args.output, "matches.csv"))
+    write_results(matches, os.path.join(args.output, "matches.csv"))
     write_results(
         products1, os.path.join(args.output, f"products_{args.coll1}.csv")
     )
@@ -291,7 +290,7 @@ def cli_download(args: DownloadArgs) -> None:
 
     try:
         products = read_product_list(args.list, 4326)
-    # TODO: Correct catch blid exception
+    # TODO: Correct catch blind exception
     except Exception as e:  # noqa
         raise CLIException(f"Error while reading product list: {e}")
 
@@ -310,7 +309,7 @@ def cli_download_aux(args: DownloadAuxArgs) -> None:
 
     try:
         products = read_product_list(args.list, 4326)
-    # TODO: Correct catch blid exception
+    # TODO: Correct catch blind exception
     except Exception as e:  # noqa
         raise CLIException(f"Error while reading product list: {e}")
 

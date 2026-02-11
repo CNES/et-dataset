@@ -53,7 +53,7 @@ class StationConfig:
 #####################################
 
 
-def get_csv_with_valid_icos_stations(update: bool = False):  # noqa: FBT001
+def get_csv_with_valid_icos_stations(update: bool = False):
     """
     Description
     ----------

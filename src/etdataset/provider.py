@@ -3,7 +3,7 @@
 #             Université Paul Sabatier (UT3)
 #
 """
-Manage provider for THEIA, EarthData and earthExplorer
+Manage provider for EarthData and earthExplorer (USGS)
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ class Provider:
         min_date: str,
         max_date: str,
         tile_ids: str | None = None,
-        bbox_latlon: rio.coords.BoundingBox | None = None,
+        latlon_bbox: rio.coords.BoundingBox | None = None,
         max_cloud_cover: float = 20,
     ) -> gpd.GeoDataFrame:
         """
@@ -85,7 +85,7 @@ class Provider:
         self, products: pd.DataFrame, local_path: str = os.getcwd()
     ) -> None:
         """
-        Download produtcs from catalog
+        Download products from catalog
         """
 
 
@@ -310,7 +310,7 @@ class TheiaProvider(Provider):
         self, products: pd.DataFrame, local_path: str = os.getcwd()
     ) -> None:
         """
-        Download produtcs from catalog
+        Download products from catalog
         """
         logger.debug(
             f"List of products to download: {products['Product_name'].values}"
@@ -507,7 +507,7 @@ class EarthDataProvider(Provider):
         self, products: pd.DataFrame, local_path: str = os.getcwd()
     ) -> None:
         """
-        Download produtcs from catalog
+        Download products from catalog
         """
         logger.debug(
             f"List of products to download: {products['Product_name'].values}"
@@ -708,8 +708,7 @@ class LandsatProvider(Provider):
                 raise RequestException("401 Unauthorized")
             if httpStatusCode == 400:
                 raise RequestException("Error Code " + httpStatusCode)
-        # TODO: Catc blin exception
-        except Exception as e:  # noqa
+        except RequestException as e:
             raise RequestException(e)
         response.close()
 
@@ -950,7 +949,7 @@ class LandsatProvider(Provider):
         self, products: pd.DataFrame, local_path: str = os.getcwd()
     ) -> None:
         """
-        Download produtcs from catalog
+        Download products from catalog
         """
         logger.debug(
             f"List of products to download: {products['Product_name'].values}"
@@ -971,6 +970,10 @@ def get_provider(collection: Collection) -> Provider:
     """
     Get the provider from a collection
     """
+    if not isinstance(collection, Collection):
+        raise TypeError(
+            "No valid collection provided: {list(Collection.__members__)}"
+        )
     logger.debug(f"Collection: {collection}")
     logger.debug(f"Provider: {collection.value}")
     return collection.value()

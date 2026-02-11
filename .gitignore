@@ -10,14 +10,15 @@ __pycache__/
 # Notebooks
 .ipynb_checkpoints/
 out/
+out_*/
 download/
 COP-DEM_GLO-30-DGED_S2_tiles/
 ICOS/
 mnt/
 data/
-method_1/
 icos_data/
 test_*.ipynb
+prepare_landsat_*.ipynb
 
 # Data
 *.tif
@@ -28,6 +29,17 @@ test_*.ipynb
 *.mat
 *.nc
 *.zip
+*.zarr/
+
+# Package data
+!src/etdataset/data/geopotential_era5.nc
+!src/etdataset/data/geopotential_era5land.zarr/
+
+# Test data
+!tests/data/**/
+# Re-allow specific file types
+!tests/data/**/*.csv
+
 
 # pixi environments
 .pixi/

@@ -1,0 +1,50 @@
+{
+  "shape": [
+    1801,
+    3600
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        256,
+        256
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "numcodecs.zstd",
+      "configuration": {
+        "level": 15
+      }
+    }
+  ],
+  "attributes": {
+    "units": "m**2 s**-2",
+    "long_name": "Geopotential",
+    "standard_name": "geopotential",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
