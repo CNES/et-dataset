@@ -21,6 +21,7 @@ dependencies = [
   "cdsapi",
   "cftime",
   "geopandas",
+  "icoscp_core",
   "numpy",
   "pandas",
   "pyproj",
