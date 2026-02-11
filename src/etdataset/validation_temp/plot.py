@@ -643,8 +643,7 @@ def plot_temp_vs_height_with_lvpr(ds: xr.Dataset):
     pressure-level data.
 
     Each curve represents a time step. Altitude is derived from geopotential
-    (z / g), and pressure levels are associated with each point via hover
-    information.
+    (z / g), and pressure levels are associated with each point
 
     Parameters
     ----------

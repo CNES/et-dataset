@@ -230,8 +230,6 @@ def get_station_location(
     ----------
     stations : str | list[str]
         the given ICOS stations
-    save : bool = False
-        save or not the geodataframe into a geopackage file
     Returns
     -------
     gdf : GeoDataFrame
@@ -559,6 +557,8 @@ def save_station_data(
     out_dir: str = "icos_data",
 ):
     """
+    Description
+    -----------
     Save ICOS station data with dew point temperature to CSV.
 
     Parameters
@@ -598,7 +598,6 @@ def save_station_data(
 #########################################
 
 
-# TO DO : TYPE
 def compute_dewpoint_temp(
     ta: npt.ArrayLike, rh: npt.ArrayLike, f: float = 243.04, d: float = 17.625
 ) -> npt.NDArray:
@@ -644,7 +643,6 @@ def compute_dewpoint_temp(
     return tp
 
 
-# TO DO : TYPE
 def kelvin_to_celsius(
     kelvin: xr.DataArray,
 ) -> xr.DataArray:
@@ -652,6 +650,5 @@ def kelvin_to_celsius(
     Description
     -----------
     Compute the temperature in celsius from a temperature in kelvin
-
     """
     return kelvin - 273.15

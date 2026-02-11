@@ -65,7 +65,7 @@ def run_stations_process(
         era5_sub = create_era5_sub_dataset(era5_filtered)
         # get ta and td in celsius at station location
         ta, td = get_ta_td_celsius_at_location(era5_sub, cfg)
-        logger.info(f"TA:{ta} and TD :{td}")
+        # logger.info(f"TA:{ta} and TD :{td}")
         ds_era5_grid = xr.Dataset(
             {
                 "ta": ta,

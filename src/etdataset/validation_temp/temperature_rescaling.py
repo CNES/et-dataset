@@ -71,7 +71,6 @@ def generate_dates(
         cur_date += dt.timedelta(days=day_step)
 
 
-# TO DO : TYPE
 def prepare_temperature_inputs(
     data: xr.Dataset,
     era5_data: xr.Dataset,
@@ -106,7 +105,7 @@ def prepare_temperature_inputs(
     if dem is not None:
         dem = dem.rio.write_crs(crs)
 
-    logger.info(f"Dem = {dem}")
+    # logger.info(f"Dem = {dem}")
 
     # Compute ERA5 DEM
     if (
@@ -174,16 +173,16 @@ def generate_hours(
     """
     Description
     -----------
-
+    Generate hours between two hours with a given step.
 
     Parameters
     -----------
     hour_start : int
-        Dataset to filter
+        Start hour
     hour_end : int
-        List of datetimes
+        End hour
     hour_step : int
-        Name of the datetime column of the dataset
+        Hour step
 
     Returns
     -------
@@ -295,7 +294,6 @@ def get_era5_grid(
 #########################################
 
 
-# to do
 def temperature_rescaling_constant_lapse_rate(
     updated_data: xr.Dataset,
     dem: xr.DataArray | None,

@@ -61,7 +61,7 @@ def prepare_icos_stations(
         # elevation)
         cfg = get_stations_config(station_id)
         # From the station's CSV, get its data
-        data = read_csv_data(cfg)
+        data = read_csv_data(cfg, data_dir)
         # Keep only valid data
         data = filter_valid_data(data)
 
@@ -104,7 +104,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--data_dir",
         type=str,
         help="Downloaded ICOS data directory path",
-        default="ICOS",
+        default=os.getcwd(),
         required=False,
     )
     parser.add_argument(
