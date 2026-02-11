@@ -25,7 +25,6 @@ dependencies = [
   "pandas",
   "pyproj",
   "shapely",
-  "icoscp_core",
   "psutil",
   "fiona",
   "tqdm",
@@ -116,12 +115,13 @@ module = [
     "sensorsio.*",
     "shapely.*",
     "theia_picker.*",
+    "icoscp_core.*",
     "cdsapi",
     "pytest",
         ]
 ignore_missing_imports = true
 
-[tool.pixi.project]
+[tool.pixi.workspace]
 channels = ["conda-forge"]
 platforms = ["linux-64","win-64","osx-64", "osx-arm64"]
 
