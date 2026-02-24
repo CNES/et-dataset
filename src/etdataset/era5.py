@@ -529,7 +529,7 @@ def _download(dataset: str, request: dict, target: str) -> None:
 
 def download(
     date: dt.datetime,
-    dataset,
+    dataset: ERA5Dataset,
     variables: list[str] | None = None,
     path: str | None = None,
 ) -> None:

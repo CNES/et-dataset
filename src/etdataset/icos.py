@@ -652,3 +652,16 @@ def kelvin_to_celsius(
     Compute the temperature in celsius from a temperature in kelvin
     """
     return kelvin - 273.15
+
+
+def celsius_to_kelvin(
+    celsius: xr.DataArray | npt.ArrayLike,
+) -> xr.DataArray | npt.NDArray:
+    """
+    Description
+    -----------
+    Compute the temperature in kelvin from a temperature in celsius
+    """
+    if isinstance(celsius, xr.DataArray):
+        return celsius + 273.15
+    return np.array(celsius) + 273.15

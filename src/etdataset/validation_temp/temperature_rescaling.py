@@ -8,19 +8,28 @@ import datetime as dt
 import os
 from collections.abc import Generator
 
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
+from sklearn.metrics import r2_score
 
 from etdataset.dem import compute_egm96_height
 from etdataset.era5 import (
     ERA5Dataset,
+    ERA5pressureVar,
     ERA5Var,
     read,
     rescale_temperature_with_lapserate,
 )
-from etdataset.icos import StationConfig, kelvin_to_celsius
+from etdataset.icos import (
+    StationConfig,
+    celsius_to_kelvin,
+    compute_dewpoint_temp,
+    kelvin_to_celsius,
+)
 from etdataset.interpolation import create_grid_dataset
 from etdataset.logging import LoggerManager
 from etdataset.utils import work_area_from_coord_point
@@ -105,8 +114,6 @@ def prepare_temperature_inputs(
     if dem is not None:
         dem = dem.rio.write_crs(crs)
 
-    # logger.info(f"Dem = {dem}")
-
     # Compute ERA5 DEM
     if (
         dataset == ERA5Dataset.ERA5
@@ -119,6 +126,15 @@ def prepare_temperature_inputs(
     elif dataset == ERA5Dataset.ERA5LAND:
         era5_dem = compute_egm96_height(era5_data)
         logger.debug("Compute EGM96 height")
+    elif (
+        dataset == ERA5Dataset.ERA5PRESSURE
+        and ERA5pressureVar.GEOPOTENTIAL.key in era5_data.data_vars
+    ):
+        era5_dem = era5_data[ERA5pressureVar.GEOPOTENTIAL.key] / G_CST
+        era5_dem = era5_dem.squeeze("pressure_level")
+        logger.warning(
+            "DEM is missing in ERA5 data: No variables 'height' in the dataset"
+        )
     else:
         era5_dem = None
 
@@ -196,6 +212,9 @@ def generate_hours(
     return [dt.time(hour=h) for h in hours]
 
 
+# FILTERS
+
+
 def filter_dataset_by_hours(
     ds: xr.Dataset,
     date: dt.date,
@@ -227,6 +246,82 @@ def filter_dataset_by_hours(
     ds = ds.copy()
     ds[name_column] = pd.to_datetime(ds[name_column].values)
     return ds.sel({name_column: list_dt})
+
+
+def filter_dataset_by_location(
+    ds: xr.Dataset,
+    latitude: float,
+    longitude: float,
+) -> xr.Dataset:
+    """
+    Filter an xarray Dataset to retain only the specified latitude and longitude
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset.
+    latitude : float
+        Latitude's location to keep
+    longitude : float
+        Longitude's location to keep
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset filtered to include only the requested location
+
+    """
+
+    return ds.sel(latitude=latitude, longitude=longitude, method="nearest")
+
+
+def filter_dataset_by_pressure_levels(
+    ds: xr.Dataset,
+    pressure_levels: str | list[str],
+    pressure_dim: str = "pressure_level",
+) -> xr.Dataset:
+    """
+    Filter an xarray Dataset to retain only the specified pressure level(s).
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset.
+    pressure_levels : str or list of str
+        Pressure level(s) to keep. Values must match the dataset's
+        pressure coordinate labels (e.g., "500" or ["1000", "850", "500"]).
+    pressure_dim : str, default "pressure_level"
+        Name of the pressure dimension or coordinate in the dataset.
+    Returns
+    -------
+    xr.Dataset
+        Dataset filtered to include only the requested pressure level(s).
+
+    Raises
+    ------
+    ValueError
+        If the specified pressure dimension or coordinate does not exist.
+    """
+
+    if pressure_dim not in ds.dims and pressure_dim not in ds.coords:
+        raise ValueError(
+            f"The dimension/coordinate '{pressure_dim}' does not exist in the\
+              dataset."
+        )
+
+    if isinstance(pressure_levels, str):
+        pressure_levels = [pressure_levels]
+
+    pressure_levels_sorted = sorted(
+        pressure_levels,
+        key=lambda x: float(x),
+        reverse=True,  # highest pressure first
+    )
+
+    ds_sel = ds.sel({pressure_dim: pressure_levels_sorted}, method="nearest")
+
+    ds_sel = ds_sel.sortby(ds_sel[pressure_dim].astype(float), ascending=False)
+    return ds_sel
 
 
 def create_era5_sub_dataset(era5_xrds: xr.Dataset) -> xr.Dataset:
@@ -288,6 +383,110 @@ def get_era5_grid(
 #########################################
 ##                                     ##
 ##                                     ##
+##       Dewpoint Temperature          ##
+##                                     ##
+##                                     ##
+#########################################
+def get_saturation_vapor_pressure(
+    t: npt.ArrayLike, a: float = 611.21, b: float = 17.502, c: float = 240.97
+) -> npt.NDArray:
+    """
+    Description
+    -----------
+    Compute saturation vapor pressure (Pa) at a temperature t (°C):
+
+                es = a * exp(b*t/(c+t))
+
+    from "A Meteorological Distribution System for High-Resolution
+    Terrestrial Modeling (MicroMet)", Journal of Hydrometeorology,
+    by G.E. Liston, K. Elder
+
+    - For water : a = 611.21 Pa, b = 17.502, c = 240.97°C
+    - For ice : a = 611.15 Pa, b = 22.452, c = 272.55°C
+
+    Parameters
+    ----------
+    t : npt.ArrayLike
+        Temperature (in °C)
+    a : float
+    b : float
+    c : float
+
+    Return
+    -----------
+    npt.NDArray
+    Saturation vapor pressure at temperature t
+    """
+    return a * np.exp(b * np.array(t) / (c + np.array(t)))
+
+
+def compute_vapor_pressure(rh: npt.ArrayLike, es: npt.ArrayLike) -> npt.NDArray:
+    """
+    Description
+    -----------
+    Compute actual vapor pressure (Pa):
+
+                RH = 100 * e / es
+    it gives:
+                e = RH * es / 100
+
+    from "A Meteorological Distribution System for High-Resolution
+    Terrestrial Modeling (MicroMet)", Journal of Hydrometeorology,
+    by G.E. Liston, K. Elder
+
+    Parameters
+    ----------
+    rh : npt.ArrayLike
+        Relative humidity (in %)
+    es : npt.ArrayLike
+        Saturation vapor pressure (Pa)
+
+    Return
+    -----------
+    npt.NDArray
+    Vapor pressure (Pa)
+    """
+    return np.array(rh) * np.array(es) / 100
+
+
+def compute_dewpoint_temp_from_e(
+    e: npt.ArrayLike, a: float = 611.21, b: float = 17.502, c: float = 240.97
+):
+    """
+    Description
+    -----------
+    Compute dewpoint temperature from vapor pressure (e):
+
+                td = c * ln(e/a)/(b - ln(e/a))
+
+    from "A Meteorological Distribution System for High-Resolution
+    Terrestrial Modeling (MicroMet)", Journal of Hydrometeorology,
+    by G.E. Liston, K. Elder
+
+    - For water : a = 611.21 Pa, b = 17.502, c = 240.97°C
+    - For ice : a = 611.15 Pa, b = 22.452, c = 272.55°C
+
+    Parameters
+    ----------
+    e: npt.ArrayLike
+        Vapor pressure (Pa)
+    a : float
+    b : float
+    c : float
+
+    Return
+    -----------
+    npt.NDArray
+    Dewpoint temperature (in °C)
+    """
+    num = c * np.log(np.array(e) / a)
+    den = b - np.log(np.array(e) / a)
+    return num / den
+
+
+#########################################
+##                                     ##
+##                                     ##
 ##      Temperature rescaling          ##
 ##                                     ##
 ##                                     ##
@@ -299,8 +498,8 @@ def temperature_rescaling_constant_lapse_rate(
     dem: xr.DataArray | None,
     era5_data: xr.Dataset,
     era5_dem: xr.DataArray | None,
-    lr_ta: float = -0.0065,
-    lr_tdp: float = -0.0052,
+    lr_ta: npt.ArrayLike | float = -0.0065,
+    lr_tdp: npt.ArrayLike | float = -0.0052,
 ) -> xr.Dataset:
     """
     Description
@@ -507,3 +706,546 @@ def save_ta_td_csv(
     fichier_exist = os.path.exists(file_name)
 
     df.to_csv(file_name, mode="a", header=not fichier_exist, index=False)
+
+
+##########################################################################
+#################  Variable lapse rate ###################################
+##########################################################################
+
+# MONTHLY LAPSE RATE
+LAPSE_RATE_BY_MONTH = {
+    1: -0.0044,
+    2: -0.0059,
+    3: -0.0071,
+    4: -0.0078,
+    5: -0.0081,
+    6: -0.0082,
+    7: -0.0081,
+    8: -0.0081,
+    9: -0.0077,
+    10: -0.0068,
+    11: -0.0065,
+    12: -0.0047,
+}
+VAPOR_PRESSURE_BY_MONTH = {
+    1: 0.00041,
+    2: 0.00042,
+    3: 0.0004,
+    4: 0.00039,
+    5: 0.00038,
+    6: 0.00036,
+    7: 0.00033,
+    8: 0.00033,
+    9: 0.00036,
+    10: 0.00037,
+    11: 0.00040,
+    12: 0.00040,
+}
+
+
+def get_lapse_rate_monthly(dt: dt.date) -> float:
+    return LAPSE_RATE_BY_MONTH[dt.month]
+
+
+def get_vapor_pressure_monthly(dt: dt.date) -> float:
+    return VAPOR_PRESSURE_BY_MONTH[dt.month]
+
+
+def compute_dewpoint_lr(
+    coeff: float | npt.ArrayLike, b: float = 17.502, c: float = 240.97
+) -> float | npt.NDArray[np.float64]:
+    arr = np.asarray(coeff, dtype=float)
+    result = -arr * c / b
+
+    if arr.ndim == 0:
+        return float(result)
+    return result
+
+
+def vapor_pressure_model(z, em0, am, z0):
+    return em0 * np.exp(-am * (z - z0))
+
+
+# LAPSE RATE EVERY DAY
+def compute_lapse_rate_from_2_levels(
+    ds: xr.Dataset,
+    temperature_var: str = "t",
+    height_var: str = "z",
+    level_dim: str = "pressure_level",
+) -> xr.DataArray:
+    """
+    Compute time-dependent lapse rate between two pressure levels.
+
+    The lapse rate is computed as:
+        (T_high - T_low) / (Z_high - Z_low)
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing exactly two pressure levels.
+        Must include temperature and height variables.
+    temperature_var : str
+        Name of temperature variable.
+    height_var : str
+        Name of height variable.
+    level_dim : str
+        Name of pressure level dimension.
+
+    Returns
+    -------
+    xr.DataArray
+        Lapse rate as a function of time.
+    """
+
+    if ds.sizes[level_dim] != 2:
+        raise ValueError("Dataset must contain exactly two pressure levels.")
+
+    t = ds[temperature_var]
+    z = ds[height_var] / G_CST
+
+    # Assume level index 0 = low, 1 = high
+    t_low = t.isel({level_dim: 0})
+    t_high = t.isel({level_dim: 1})
+
+    z_low = z.isel({level_dim: 0})
+    z_high = z.isel({level_dim: 1})
+
+    lapse_rate = (t_high - t_low) / (z_high - z_low)
+
+    lapse_rate.name = "lapse_rate"
+    lapse_rate.attrs["units"] = "°C m-1"
+    lapse_rate.attrs["description"] = (
+        "Temperature lapse rate between two pressure levels"
+    )
+
+    return lapse_rate
+
+
+def compute_lapse_rate_n_levels(
+    ds: xr.Dataset,
+    temperature_var: str = "t",
+    height_var: str = "z",
+    level_dim: str = "pressure_level",
+) -> xr.DataArray:
+    """
+    Compute time-dependent lapse rate between all adjacent pressure levels.
+
+    The lapse rate is computed between consecutive vertical levels:
+        (T[i+1] - T[i]) / (Z[i+1] - Z[i])
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing multiple pressure levels.
+        Must include temperature and geopotential variables.
+    temperature_var : str
+        Name of temperature variable.
+    height_var : str
+        Name of geopotential variable.
+    level_dim : str
+        Name of pressure level dimension.
+    g : float
+        Gravitational acceleration used to convert geopotential to height.
+
+    Returns
+    -------
+    xr.DataArray
+        Lapse rate with dimensions:
+            (time, layer)
+
+        where "layer" represents the interval between two adjacent
+        pressure levels.
+    """
+
+    if ds.sizes[level_dim] < 2:
+        raise ValueError("At least two pressure levels are required.")
+
+    # Ensure physical ordering: high pressure (low altitude) first
+    ds = ds.sortby(ds[level_dim].astype(float), ascending=False)
+
+    t = ds[temperature_var]
+    z = ds[height_var] / G_CST  # convert geopotential to height (m)
+
+    # Compute vertical differences
+    dT = t.diff(level_dim)
+    dZ = z.diff(level_dim)
+
+    lapse_rate = dT / dZ
+
+    lapse_rate.name = "lapse_rate"
+    lapse_rate.attrs["units"] = "°C m-1"
+    lapse_rate.attrs["description"] = (
+        "Temperature lapse rate between adjacent pressure levels"
+    )
+
+    return lapse_rate
+
+
+def interpolate_temperature_variant(
+    src_temp: xr.DataArray,
+    src_dem: xr.DataArray,
+    dst_dem: xr.DataArray,
+    lapse_rate: xr.DataArray,
+) -> xr.DataArray:
+    """
+    Interpolate temperature on a new DEM using a potentially time- and
+    space-varying lapse rate.
+
+    Parameters
+    ----------
+    src_temp : xr.DataArray
+        Temperature on source grid (dims: time, lat, lon)
+    src_dem : xr.DataArray
+        Elevation on source grid (dims: lat, lon)
+    dst_dem : xr.DataArray
+        Elevation on destination DEM (dims: lat, lon)
+    lapse_rate : float or xr.DataArray
+        Lapse rate (can be scalar or dims=(time, lat, lon))
+
+    Returns
+    -------
+    dem_temp : xr.DataArray
+        Temperature interpolated on the destination DEM (dims: time, lat, lon)
+    """
+    # Compute reference temperature at src_ref = 0 (or any reference level)
+    # Broadcast automatically src_dem to match lapse_rate
+    ref_temp = src_temp - lapse_rate * src_dem
+
+    # Reproject onto dst_dem grid
+    projected_temp = ref_temp.rio.reproject_match(
+        dst_dem,
+        resampling=rio.enums.Resampling.bilinear,
+    )
+
+    # Adjust to actual DEM elevation
+    dem_temp = projected_temp + lapse_rate * dst_dem
+
+    # Keep attributes
+    dem_temp.attrs.update(src_temp.attrs)
+    return dem_temp
+
+
+def rescale_temperature_with_variable_lapserate(
+    dem: xr.DataArray | None,
+    era5_data: xr.DataArray | None,
+    era5_dem: xr.DataArray | None,
+    lapse_rate: xr.DataArray,
+    key: str,
+    description: str,
+) -> xr.DataArray | None:
+    """
+    Rescale temperature using a time-variable lapse rate.
+    """
+
+    if era5_data is None:
+        logger.warning(
+            f"Skip {description} interpolation because data is missing"
+        )
+        return None
+
+    if dem is None or era5_dem is None:
+        logger.warning(
+            f"Skip {description} interpolation because DEM is missing"
+        )
+        return None
+
+    # Align lapse rate on ERA5 time axis (time-only)
+    lapse_rate = lapse_rate.reindex(
+        time=era5_data.time,
+        method="nearest",
+    )
+
+    data = interpolate_temperature_variant(
+        src_temp=era5_data,
+        src_dem=era5_dem,
+        dst_dem=dem,
+        lapse_rate=lapse_rate,
+    )
+
+    data.attrs.update(
+        {
+            "standard_name": key,
+            "long_name": description,
+            "units": "K",
+            "description": description,
+            "lapse_rate_type": "time-variable",
+        }
+    )
+    return data
+
+
+def add_dewpoint_to_ds(
+    ds: xr.Dataset,
+    temp_var: str = "t",
+    rh_var: str = "r",
+    output_var: str = "td",
+) -> xr.Dataset:
+    """
+    Compute the dew point temperature from temperature and
+    relative humidity and add it to an xarray Dataset.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset containing temperature and relative humidity.
+    temp_var : str, default "t"
+        Name of the air temperature variable (expected in Kelvin).
+    rh_var : str, default "r"
+        Name of the relative humidity variable (in %).
+    output_var : str, default "td"
+        Name of the dew point variable to be added to the dataset.
+
+    Returns
+    -------
+    xr.Dataset
+        A new dataset with the dew point temperature added
+        (in Kelvin).
+    """
+
+    ds = ds.copy()
+    t = ds[temp_var]
+    rh = ds[rh_var]
+    rh = xr.where(rh <= 0, np.nan, rh)
+    # Convert temperature to Celsius
+    t_c = kelvin_to_celsius(t)
+
+    # Compute dew point in Celsius
+    td_c = compute_dewpoint_temp(t_c, rh)
+
+    # Convert back to Kelvin
+    td_k = celsius_to_kelvin(td_c)
+
+    ds[output_var] = (t.dims, td_k)
+    ds[output_var].attrs.update(
+        {"units": "K", "long_name": "Dew point temperature"}
+    )
+    return ds
+
+
+def temperature_rescaling_variable_lapse_rate(
+    updated_data: xr.Dataset,
+    dataset: ERA5Dataset,
+    dem: xr.DataArray | None,
+    era5_data: xr.Dataset,
+    era5_dem: xr.DataArray | None,
+    lr_ta: xr.DataArray,
+    lr_tdp: xr.DataArray,
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    Rescale ERA5 temperature variables using a variable lapse rate.
+
+    The lapse rate can depend on time (and only time).
+
+    -> In a first step, the temperatures are adjusted to a fixed reference
+    elevation using a constant lapse rate.
+
+
+    -> In a second step, if a target DEM is provided, the temperatures are
+    further rescaled from the reference elevation to the DEM elevation.
+
+    The resulting temperature variables are added to the updated dataset.
+
+    Parameters
+    ----------
+    updated_data: xr.Dataset
+        Updated Data
+    dem : xr.DataArray | None
+        dem
+    era5_data: xr.Dataset
+        ERA5 Data
+    era5_dem: xr.DataArray | None
+        ERA5 Data
+    lr_ta: xr.
+    lr_tdp :ERA5Var
+
+    Return
+    -----------
+    updated_data : xr.Dataset
+        Updated data
+    """
+    ta_data: xr.DataArray | None = None
+
+    if dataset in (ERA5Dataset.ERA5, ERA5Dataset.ERA5LAND):
+        ta_data = era5_data.get(ERA5Var.TEMPERATURE.key)
+
+    elif dataset == ERA5Dataset.ERA5PRESSURE:
+        ta_data = era5_data.get(ERA5pressureVar.TEMPERATURE.key)
+        if ta_data is not None and "pressure_level" in ta_data.dims:
+            if ta_data.sizes["pressure_level"] != 1:
+                raise ValueError(
+                    "Cannot compute temperature: ERA5PRESSURE dataset "
+                    "contains multiple pressure levels. "
+                    "Select a single pressure level first."
+                )
+            ta_data = ta_data.squeeze("pressure_level")
+
+    if ta_data is not None:
+        rescaled = rescale_temperature_with_variable_lapserate(
+            dem=dem,
+            era5_data=ta_data,
+            era5_dem=era5_dem,
+            lapse_rate=lr_ta,
+            key="ta",
+            description="air temperature",
+        )
+
+        if rescaled is not None:
+            updated_data["ta"] = rescaled
+            logger.debug("Add temperature (variable lapse rate): OK")
+
+    tdp_data: xr.DataArray | None = None
+
+    # Dew point temperature
+    if dataset in (ERA5Dataset.ERA5, ERA5Dataset.ERA5LAND):
+        tdp_data = era5_data.get(ERA5Var.DEWPOINT_TEMPERATURE.key)
+
+    elif dataset == ERA5Dataset.ERA5PRESSURE:
+        temperature = era5_data.get("t")
+        rh = era5_data.get("r")
+        td = era5_data.get("td")
+
+        # If dewpoint already present
+        if td is not None:
+            tdp_data = td
+            if "pressure_level" in tdp_data.dims:
+                if tdp_data.sizes["pressure_level"] != 1:
+                    raise ValueError(
+                        "Cannot compute dewpoint: multiple pressure levelsfound"
+                    )
+                tdp_data = tdp_data.squeeze("pressure_level")
+        elif temperature is not None and rh is not None:
+            if (
+                "pressure_level" in temperature.dims
+                and temperature.sizes["pressure_level"] != 1
+            ):
+                raise ValueError(
+                    "Cannot compute dewpoint: ERA5PRESSURE dataset contains "
+                    "multiple pressure levels. Select a single level first."
+                )
+
+            era5_data = add_dewpoint_to_ds(era5_data)
+            tdp_data = era5_data["td"]
+            tdp_data = tdp_data.squeeze("pressure_level")
+
+    if tdp_data is not None:
+        rescaled = rescale_temperature_with_variable_lapserate(
+            dem=dem,
+            era5_data=tdp_data,
+            era5_dem=era5_dem,
+            lapse_rate=lr_tdp,
+            key="tdp",
+            description="dewpoint temperature",
+        )
+
+        if rescaled is not None:
+            updated_data["tdp"] = rescaled
+            logger.debug("Add dewpoint temperature (variable lapse rate): OK")
+    else:
+        logger.debug("No dewpoint temperature available in dataset : skipped")
+
+    return updated_data
+
+
+def compute_ah(
+    z: xr.DataArray, e: xr.DataArray
+) -> tuple[float, float, float, float]:
+    """
+    Compute the vertical coefficient 'ah' from the exponential model:
+
+        e(z) = e(z0) * exp(-ah * (z - z0))
+
+    where:
+        - 'z0' is the elevation of the reference location,
+        - 'z' is the elevation at other vertical levels,
+        - 'ah' is an hourly-dependent coefficient,
+        - 'e(z)' is the water vapor pressure at height z.
+
+    Method
+    ------
+    The exponential relationship is linearized by taking the natural logarithm:
+
+        ln(e(z)) = ln(e(z0)) - ah * (z - z0)
+
+    which can be written in linear regression form:
+
+        y = b + a * x
+
+    with:
+        x = z - z0
+        y = ln(e(z))
+        b = ln(e(z0))
+        a = -ah
+
+    A first-order polynomial fit (np.polyfit) is applied to (x, y)
+    to estimate the slope 'a' and intercept 'b'. The coefficient 'ah' is
+    obtained as:
+
+        ah = -a
+
+    The fit is evaluated using the coefficient of
+    determination (R2) computed between observed and predicted
+    ln(e).
+
+    Parameters
+    ----------
+    z : xr.DataArray
+        DataArray containing geopotentials
+    e : xr.DataArray
+        DataArray containing water vaport pressure
+
+    Returns
+    -------
+    ah : float
+        Vertical exponential  coefficient (km-1).
+
+    r2 : float
+        Coefficient of determination of the linear fit in log-space.
+    """
+
+    # Convert geopotential height to geometric height in km
+
+    # z / G_CST converts geopotential to meters, then /1000 converts to km
+    z_data = z / G_CST
+
+    # Convert vapor pressure from Pa to kPa (optional, does not affect slope)
+    e_data = e
+
+    # Create a mask to keep only valid data: finite z, finite e, and e > 0
+    mask = np.isfinite(z_data) & np.isfinite(e_data) & (e_data > 0)
+
+    # Skip this time step if there are less than 2 valid points
+    if np.sum(mask) < 2:
+        return np.nan, np.nan, np.nan, np.nan
+
+    # Keep only valid values
+    z_clean = z_data[mask]
+    e_clean = e_data[mask]
+
+    # Reference height (z0) at the first valid level
+    # This will be used as the base for the exponential
+    z0 = z_clean[0]
+
+    # Linearize the exponential relation:
+    # e(z) = e(z0) * exp(-ah * (z - z0))
+    # Taking natural log:
+    # ln(e(z)) = ln(e(z0)) - ah * (z - z0)
+    # Which can be expressed in standard linear regression form:
+    # y = a*x + b
+    # y = ln(e(z))
+    # x = z - z0
+    # a = -ah
+    # b = ln(e(z0))
+
+    x = z_clean - z0
+    y = np.log(e_clean)
+
+    # linear regression on (x, y)
+    a, b = np.polyfit(x, y, 1)
+
+    # Predicted values for computing R2
+    y_pred = a * x + b
+    r2 = r2_score(y, y_pred)
+
+    return -a, np.exp(b), float(z0), r2
