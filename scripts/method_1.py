@@ -283,6 +283,10 @@ if __name__ == "__main__":
     if args.mnt_path is not None and not os.path.isdir(args.mnt_path):
         raise FileNotFoundError(f"DEM directory not found {args.mnt_path}")
 
+    if args.id_stations == ["all"]:
+        stations = "all"
+    else:
+        stations = args.id_stations
     # Run
     generate_timeseries_for_stations_multiprocess(
         start_date=start_date,
@@ -293,5 +297,5 @@ if __name__ == "__main__":
         hour_start=args.hour_start,
         hour_end=args.hour_end,
         hour_step=args.hour_step,
-        stations=args.id_stations,
+        stations=stations,
     )
