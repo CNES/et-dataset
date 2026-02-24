@@ -230,7 +230,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "-p",
+        "-d",
         "--data_path",
         type=str,
         help="Directory of ERA5 data",
