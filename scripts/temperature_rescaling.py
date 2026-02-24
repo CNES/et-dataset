@@ -48,6 +48,7 @@ def run_stations_process(
     station: str,
     list_hours: list[dt.time],
     mnt_path: str,
+    data_path: str,
     output: str,
 ):  # Get metadats of the station
     logger.info(f"Current station : {station}")
@@ -57,7 +58,7 @@ def run_stations_process(
         era5_xrds = read_era5_file(
             d,
             ERA5Dataset.ERA5,
-            "out",
+            data_path,
         )
         era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
@@ -112,6 +113,7 @@ def generate_timeseries_for_stations_multiprocess(
     start_date: dt.date,
     end_date: dt.date,
     mnt_path: str,
+    data_path: str,
     output: str,
     step_day: int = 1,
     hour_start: int = 0,
@@ -149,6 +151,7 @@ def generate_timeseries_for_stations_multiprocess(
                 station_id,
                 list_hours,
                 mnt_path,
+                data_path,
                 output,
             ),
         )
@@ -195,6 +198,12 @@ def get_parser() -> argparse.ArgumentParser:
         "--mnt_path",
         type=str,
         help="Directory of DEM tiles",
+    )
+    parser.add_argument(
+        "-d",
+        "--data_path",
+        type=str,
+        help="Directory of ERA5 data",
     )
 
     parser.add_argument(
@@ -299,6 +308,7 @@ if __name__ == "__main__":
         start_date=start_date,
         end_date=end_date,
         mnt_path=args.mnt_path,
+        data_path=args.data_path,
         output=args.output,
         step_day=args.step_day,
         hour_start=args.hour_start,
