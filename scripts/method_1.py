@@ -62,6 +62,12 @@ def run_stations_process_method_1(
             ERA5Dataset.ERA5,
             data_path,
         )
+        if era5_xrds is None:
+            logger.warning(
+                "Skipping date %s because ERA5 file is unavailable", d
+            )
+            continue
+
         era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
         # FOR ERA5 RESCALED ####################################################

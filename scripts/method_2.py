@@ -64,6 +64,9 @@ def run_stations_process_method_2(
             ERA5Dataset.ERA5PRESSURE,
             data_path,
         )
+        if era5_xrds is None:
+            logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
+            continue
         era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
         ####### COMPUTE CURRENT LAPSE RATE #####################################
@@ -107,6 +110,9 @@ def run_stations_process_method_2(
                 ERA5Dataset.ERA5,
                 data_path,
             )
+            if era5_xrds is None:
+                logger.warning("Skipping date %s (ERA5 unavailable)", d)
+                continue
             era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
             era5_data = era5_filtered
             dataset = ERA5Dataset.ERA5
