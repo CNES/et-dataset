@@ -6,6 +6,7 @@ Module for temperature rescaling
 
 import datetime as dt
 import os
+import zipfile
 from collections.abc import Generator
 
 import numpy as np
@@ -147,7 +148,7 @@ def read_era5_file(
     date: dt.date,
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
     path: str | None = None,
-) -> xr.Dataset:
+) -> xr.Dataset | None:
     """
     Description
     -----------
@@ -168,17 +169,30 @@ def read_era5_file(
     """
     if path is None:
         path = os.getcwd()
+
     product_path = os.path.join(
         path,
         "ERA5_data",
         f"download_{dataset.key}_{date.isoformat()}.zip",
     )
-    logger.info(f"Product path: {product_path}")
-    if not os.path.isfile(product_path):
-        raise OSError(f"ERA5 data not found: {product_path}")
 
-    era5_xrds = read(product=product_path)
-    return era5_xrds
+    logger.info("Product path: %s", product_path)
+
+    if not os.path.isfile(product_path):
+        logger.warning("ERA5 data not found: %s", product_path)
+        return None
+
+    try:
+        era5_xrds = read(product=product_path)
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+        logger.warning(
+            "Skipping unreadable ERA5 file %s | Error: %s",
+            product_path,
+            exc,
+        )
+        return None
+    else:
+        return era5_xrds
 
 
 def generate_hours(
