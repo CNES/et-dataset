@@ -20,6 +20,7 @@ import xarray as xr
 from pyproj import CRS
 
 from etdataset.cli import CLIException
+from etdataset.dem import get_dem_from_roi
 from etdataset.era5 import ERA5Dataset, get_era5_dem
 from etdataset.icos import (
     get_csv_with_valid_icos_stations,
@@ -27,6 +28,9 @@ from etdataset.icos import (
     kelvin_to_celsius,
 )
 from etdataset.logging import LoggerManager
+from etdataset.utils import (
+    work_area_from_coord_point,
+)
 from etdataset.validation_temp.temperature_rescaling import (
     compute_dewpoint_temp_from_e,
     compute_vapor_pressure,
@@ -50,6 +54,7 @@ def run_stations_process_method_6(
     step_date: int,
     station: str,
     list_hours: list[dt.time],
+    mnt_path: str,
     data_path: str,
     output: str,
 ):
@@ -81,6 +86,27 @@ def run_stations_process_method_6(
         era5_surface = filter_dataset_by_location(
             era5_surface, cfg.lat, cfg.lon
         )
+        # GET ELEVATION AT THE LOCATION FROM DEM
+        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+            cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
+        )["utm"]
+        # get dem from the roi
+        dem = get_dem_from_roi(
+            roi_bbox=roi_bbox_utm,
+            roi_crs=roi_crs_utm,
+            base_dir=mnt_path,
+            resolution=60,
+        )
+        x, y = (
+            work_area_from_coord_point(
+                cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326)
+            )["utm"][0].left,
+            work_area_from_coord_point(
+                cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326)
+            )["utm"][0].bottom,
+        )
+        logger.info(f"dem = {dem}")
+        z_station = dem["height"].sel(x=x, y=y, method="nearest")
 
         # SURFACE HEIGHT
         z_surface = get_era5_dem()
@@ -99,7 +125,7 @@ def run_stations_process_method_6(
             method="nearest",
         )
 
-        delta_z = cfg.elev - z_surface
+        delta_z = z_station - z_surface
         logger.info(
             f"Altitude difference station - ERA5 surface: {delta_z.values}"
         )
@@ -113,7 +139,7 @@ def run_stations_process_method_6(
             hourly_surface = era5_surface.sel(time=t)
             logger.info(f"hourly_pressure: {hourly_pressure['t'] * 1}")
             # Altitudes absolues
-            z_station = float(cfg.elev)
+
             z_levels = hourly_pressure["z"].values / G_CST
             z_2m = z_surface + 2.0
 
@@ -235,6 +261,7 @@ def run_stations_process_method_6(
 def generate_timeseries_for_stations_multiprocess(
     start_date: dt.date,
     end_date: dt.date,
+    mnt_path: str,
     data_path: str,
     output: str,
     step_day: int = 1,
@@ -272,6 +299,7 @@ def generate_timeseries_for_stations_multiprocess(
                 step_day,
                 station_id,
                 list_hours,
+                mnt_path,
                 data_path,
                 output,
             ),
@@ -313,7 +341,12 @@ def get_parser() -> argparse.ArgumentParser:
         help="End date (dt.date(YYYY,MM,DD))",
         required=True,
     )
-
+    parser.add_argument(
+        "-p",
+        "--mnt_path",
+        type=str,
+        help="Directory of DEM tiles",
+    )
     parser.add_argument(
         "-d",
         "--data_path",
@@ -418,6 +451,7 @@ if __name__ == "__main__":
     generate_timeseries_for_stations_multiprocess(
         start_date=start_date,
         end_date=end_date,
+        mnt_path=args.mnt_path,
         data_path=args.data_path,
         output=args.output,
         step_day=args.step_day,
