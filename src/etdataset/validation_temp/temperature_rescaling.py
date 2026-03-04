@@ -17,11 +17,12 @@ import xarray as xr
 from pyproj import CRS
 from sklearn.metrics import r2_score
 
-from etdataset.dem import compute_egm96_height
 from etdataset.era5 import (
     ERA5Dataset,
     ERA5pressureVar,
     ERA5Var,
+    get_era5_dem,
+    get_era5land_dem,
     read,
     rescale_temperature_with_lapserate,
 )
@@ -116,17 +117,29 @@ def prepare_temperature_inputs(
         dem = dem.rio.write_crs(crs)
 
     # Compute ERA5 DEM
-    if (
-        dataset == ERA5Dataset.ERA5
-        and ERA5Var.GEOPOTENTIAL.key in era5_data.data_vars
-    ):
-        era5_dem = era5_data[ERA5Var.GEOPOTENTIAL.key] / G_CST
+    if dataset == ERA5Dataset.ERA5:
+        era5_dem = get_era5_dem()
+        era5_dem = xr.DataArray(
+            era5_dem.data,
+            dims=("latitude", "longitude"),
+            coords={
+                "latitude": era5_data.latitude,
+                "longitude": era5_data.longitude,
+            },
+        ).rio.write_crs(CRS(4326))
         logger.warning(
             "DEM is missing in ERA5 data: No variables 'height' in the dataset"
         )
     elif dataset == ERA5Dataset.ERA5LAND:
-        era5_dem = compute_egm96_height(era5_data)
-        logger.debug("Compute EGM96 height")
+        era5_dem = get_era5land_dem()
+        era5_dem = xr.DataArray(
+            era5_dem.data,
+            dims=("latitude", "longitude"),
+            coords={
+                "latitude": era5_data.latitude,
+                "longitude": era5_data.longitude,
+            },
+        ).rio.write_crs(CRS(4326))
     elif (
         dataset == ERA5Dataset.ERA5PRESSURE
         and ERA5pressureVar.GEOPOTENTIAL.key in era5_data.data_vars

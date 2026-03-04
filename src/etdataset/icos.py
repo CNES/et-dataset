@@ -10,6 +10,7 @@ Module for ICOS data
 import os
 import zipfile
 from dataclasses import dataclass
+from typing import overload
 
 import geopandas as gpd
 import numpy as np
@@ -643,15 +644,29 @@ def compute_dewpoint_temp(
     return tp
 
 
+@overload
+def kelvin_to_celsius(kelvin: xr.DataArray) -> xr.DataArray: ...
+@overload
+def kelvin_to_celsius(kelvin: npt.ArrayLike) -> npt.NDArray: ...
+
+
 def kelvin_to_celsius(
-    kelvin: xr.DataArray,
-) -> xr.DataArray:
+    kelvin: xr.DataArray | npt.ArrayLike,
+) -> xr.DataArray | npt.NDArray:
     """
     Description
     -----------
     Compute the temperature in celsius from a temperature in kelvin
     """
-    return kelvin - 273.15
+    if isinstance(kelvin, xr.DataArray):
+        return kelvin - 273.15
+    return np.array(kelvin) - 273.15
+
+
+@overload
+def celsius_to_kelvin(celsius: xr.DataArray) -> xr.DataArray: ...
+@overload
+def celsius_to_kelvin(celsius: npt.ArrayLike) -> npt.NDArray: ...
 
 
 def celsius_to_kelvin(
