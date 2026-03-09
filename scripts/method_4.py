@@ -139,15 +139,13 @@ def run_stations_process_method_4(
             z_surface_t = z_surface
 
             # RELATIVE HEIGHTS
-            z_station_rel = z_station - z_surface_t
-            z_levels_rel = (hourly_pressure["z"] / G_CST) - z_surface_t
+            z_station_rel = z_station
+            z_levels_rel = hourly_pressure["z"].values / G_CST
 
-            z_2m_rel = 2.0
+            z_2m_rel = 2.0 + z_surface_t
 
             # VARIABLES
             T_levels = hourly_pressure["t"].values
-
-            # recalcul pression de vapeur pour CE pas de temps
             T_levels_c = kelvin_to_celsius(hourly_pressure["t"].values)
             es_levels = get_saturation_vapor_pressure(T_levels_c)
             e_levels = compute_vapor_pressure(
@@ -156,39 +154,28 @@ def run_stations_process_method_4(
             )
 
             T_2m = hourly_surface["t2m"].values
+            Td_2m = kelvin_to_celsius(hourly_surface["d2m"].values)
 
-            # pression de vapeur à 2m directement depuis Td
-            e_2m = get_saturation_vapor_pressure(kelvin_to_celsius(T_2m))
-
-            # CLEAN DATA
-            mask = (
-                np.isfinite(z_levels_rel)
-                & np.isfinite(T_levels)
-                & np.isfinite(e_levels)
-                & (e_levels > 0)
-            )
-
-            z_clean = z_levels_rel[mask]
-            T_clean = T_levels[mask]
-            e_clean = e_levels[mask]
+            z_clean = z_levels_rel
+            T_clean = T_levels
+            Td_clean = compute_dewpoint_temp_from_e(e_levels)
 
             if len(z_clean) < 2:
                 ta_out.append(np.nan)
                 td_out.append(np.nan)
                 continue
 
-            # SORT VERTICALLY
-            sort_idx = np.argsort(z_clean)
-            z_clean = z_clean[sort_idx]
-            T_clean = T_clean[sort_idx]
-            e_clean = e_clean[sort_idx]
-
             # ADD 2m LEVEL
-            z_full = np.insert(z_clean, 0, z_2m_rel)
-            T_full = np.insert(T_clean, 0, T_2m)
-            e_full = np.insert(e_clean, 0, e_2m)
+            z_add = np.insert(z_clean, 0, z_2m_rel)
+            T_add = np.insert(T_clean, 0, T_2m)
+            Td_add = np.insert(Td_clean, 0, Td_2m)
 
-            ln_e_full = np.log(e_full)
+            # SORT VERTICALLY
+            sort_idx = np.argsort(z_add)
+            z_full = z_add[sort_idx]
+            T_full = T_add[sort_idx]
+            Td_full = Td_add[sort_idx]
+            logger.info(f"Td_full = {Td_full}")
 
             # INTERPOLATION
             f_t = interp1d(
@@ -198,23 +185,19 @@ def run_stations_process_method_4(
                 fill_value="extrapolate",
             )
 
-            f_ln_e = interp1d(
+            f_td = interp1d(
                 z_full,
-                ln_e_full,
+                Td_full,
                 kind="linear",
                 fill_value="extrapolate",
             )
 
             T_station = f_t(z_station_rel)
-            ln_e_station = f_ln_e(z_station_rel)
-            e_station = np.exp(ln_e_station)
-
-            Td_station = compute_dewpoint_temp_from_e(e_station)
+            Td_station = f_td(z_station_rel)
 
             ta_out.append(T_station)
             td_out.append(Td_station)
 
-        # BUILD OUTPUT DATASET
         ta_da = xr.DataArray(
             ta_out,
             coords={"time": era5_pressure.time},

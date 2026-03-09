@@ -118,7 +118,7 @@ def compute_mean_bias_error(x, y):
 def compute_monthly(
     df: pd.DataFrame,
     metric: str,
-    hour: list[str] | str = " ",
+    hour: list[str] | str = "all",
     *,
     plot: bool = False,
 ):
@@ -150,7 +150,7 @@ def compute_monthly(
         - Tdp_{metric}_rescaled : metric between Tdp_icos and Tdp_era5_rescaled
         - n_points : number of valid samples used for that month
     """
-    if hour != " ":
+    if hour != "all":
         if isinstance(hour, str):
             hour = [hour]
         df = df[df["time"].dt.strftime("%H").isin(hour)]
@@ -321,3 +321,421 @@ def compute_monthly_metrics_per_station(
         csv_paths[station_name] = csv_path
 
     return csv_paths
+
+
+"""
+def compute_monthly_multi(
+    df: pd.DataFrame,
+    metric: str,
+    hour: list[str] | str = "all",
+    *,
+    plot: bool = False,
+):
+
+    df = df.copy()
+
+    if hour != "all":
+        if isinstance(hour, str):
+            hour = [hour]
+        df = df[df["time"].dt.strftime("%H").isin(hour)]
+
+    metrics = {
+        "rmse": root_mean_squared_error,
+        "r2": r2_score,
+        "mae": mean_absolute_error,
+        "mbe": compute_mean_bias_error,
+        "slope": slope_forced_origin,
+    }
+
+    if metric not in metrics:
+        raise ValueError(f"Metric must be one of: {list(metrics.keys())}")
+
+    f = metrics[metric]
+
+    df["month"] = df["time"].dt.to_period("M")
+
+    per_month = []
+
+    ta_methods = [
+        c for c in df.columns if c.startswith("ta_") and c not in ["ta_icos"]
+    ]
+
+    tdp_methods = [
+        c for c in df.columns if c.startswith("tdp_") and c not in ["tdp_icos"]
+    ]
+
+    for month, group in df.groupby("month"):
+        row: dict[str, float | int | str] = {"month": str(month)}
+
+        # ---------------- TA ----------------
+
+        ta_valid = group.dropna(subset=["ta_icos"])
+        row["n_points_ta"] = len(ta_valid)
+
+        for c in ta_methods:
+            valid = ta_valid[[c, "ta_icos"]].dropna()
+
+            if valid.empty:
+                continue
+
+            val = f(valid["ta_icos"], valid[c])
+
+            method = c.replace("ta_", "")
+
+            row[f"ta_{metric}_{method}"] = val
+            row[f"ta_{metric}_{method}_min"] = valid[c].min()
+            row[f"ta_{metric}_{method}_max"] = valid[c].max()
+
+        # ---------------- TDP ----------------
+
+        tdp_valid = group.dropna(subset=["tdp_icos"])
+        row["n_points_tdp"] = len(tdp_valid)
+
+        for c in tdp_methods:
+            valid = tdp_valid[[c, "tdp_icos"]].dropna()
+
+            if valid.empty:
+                continue
+
+            val = f(valid["tdp_icos"], valid[c])
+
+            method = c.replace("tdp_", "")
+
+            row[f"tdp_{metric}_{method}"] = val
+            row[f"tdp_{metric}_{method}_min"] = valid[c].min()
+            row[f"tdp_{metric}_{method}_max"] = valid[c].max()
+
+        per_month.append(row)
+
+    return pd.DataFrame(per_month)
+"""
+
+
+def compute_monthly_multi(
+    df: pd.DataFrame,
+    metrics: list[str] | str | None = None,
+    hour: list[str] | str = "all",
+):
+    import pandas as pd
+
+    if metrics is None:
+        metrics = ["rmse", "mae", "r2", "slope", "mbe"]
+    df = df.copy()
+    if isinstance(metrics, str):
+        metrics = [metrics]
+
+    # filtrer les heures si besoin
+    if hour != "all":
+        if isinstance(hour, str):
+            hour = [hour]
+        df = df[df["time"].dt.strftime("%H").isin(hour)]
+
+    # fonctions disponibles
+    metric_funcs = {
+        "rmse": root_mean_squared_error,
+        "r2": r2_score,
+        "mae": mean_absolute_error,
+        "mbe": compute_mean_bias_error,
+        "slope": slope_forced_origin,
+    }
+
+    # vérifier que toutes les métriques sont valides
+    for m in metrics:
+        if m not in metric_funcs:
+            raise ValueError(
+                f"Metric {m} not supported. Choose from {list(metric_funcs.keys())}"  # noqa: E501
+            )
+
+    df["month"] = df["time"].dt.to_period("M")
+
+    ta_methods = [
+        c for c in df.columns if c.startswith("ta_") and c != "ta_icos"
+    ]
+    tdp_methods = [
+        c for c in df.columns if c.startswith("tdp_") and c != "tdp_icos"
+    ]
+
+    results = []
+
+    for month, group in df.groupby("month"):
+        row: dict[str, float | int | str] = {"month": str(month)}
+
+        # -------- TA --------
+        ta_valid = group.dropna(subset=["ta_icos"])
+        row["n_points_ta"] = len(ta_valid)
+
+        for c in ta_methods:
+            method = c.replace("ta_", "")
+            daily_rmse = []
+            daily_r2 = []
+            y_true_all = []
+            y_pred_all = []
+
+            # calcul RMSE journalier pour min/max
+            for _day, gday in ta_valid.groupby(ta_valid["time"].dt.date):
+                y_true = gday["ta_icos"]
+                y_pred = gday[c]
+
+                # garder uniquement les indices valides dans les deux séries
+                valid = y_true.notna() & y_pred.notna()
+                y_true = y_true[valid]
+                y_pred = y_pred[valid]
+
+                if len(y_true) > 0:
+                    rmse_day = root_mean_squared_error(y_true, y_pred)
+                    r2_day = r2_score(y_true, y_pred)
+                    daily_rmse.append(rmse_day)
+                    daily_r2.append(r2_day)
+                    y_true_all.append(y_true)
+                    y_pred_all.append(y_pred)
+
+            # concaténation pour métriques globales du mois
+            if y_true_all:
+                y_true_month = pd.concat(y_true_all)
+                y_pred_month = pd.concat(y_pred_all)
+
+                for m in metrics:
+                    f = metric_funcs[m]
+                    row[f"ta_{m}_{method}"] = f(y_true_month, y_pred_month)
+
+                if "rmse" in metrics:
+                    row[f"ta_rmse_{method}_min"] = min(daily_rmse)
+                    row[f"ta_rmse_{method}_max"] = max(daily_rmse)
+                if "r2" in metrics:
+                    row[f"ta_r2_{method}_min"] = min(daily_r2)
+                    row[f"ta_r2_{method}_max"] = max(daily_r2)
+
+        # -------- TDP --------
+        tdp_valid = group.dropna(subset=["tdp_icos"])
+        row["n_points_tdp"] = len(tdp_valid)
+
+        for c in tdp_methods:
+            method = c.replace("tdp_", "")
+            daily_rmse = []
+            daily_r2 = []
+            y_true_all = []
+            y_pred_all = []
+
+            for _day, gday in tdp_valid.groupby(tdp_valid["time"].dt.date):
+                y_true = gday["tdp_icos"]
+                y_pred = gday[c]
+
+                valid = y_true.notna() & y_pred.notna()
+                y_true = y_true[valid]
+                y_pred = y_pred[valid]
+
+                if len(y_true) > 0:
+                    rmse_day = root_mean_squared_error(y_true, y_pred)
+                    r2_day = r2_score(y_true, y_pred)
+                    daily_rmse.append(rmse_day)
+                    daily_r2.append(r2_day)
+                    y_true_all.append(y_true)
+                    y_pred_all.append(y_pred)
+
+            if y_true_all:
+                y_true_month = pd.concat(y_true_all)
+                y_pred_month = pd.concat(y_pred_all)
+
+                for m in metrics:
+                    f = metric_funcs[m]
+                    row[f"tdp_{m}_{method}"] = f(y_true_month, y_pred_month)
+
+                if "rmse" in metrics:
+                    row[f"tdp_rmse_{method}_min"] = min(daily_rmse)
+                    row[f"tdp_rmse_{method}_max"] = max(daily_rmse)
+                if "r2" in metrics:
+                    row[f"tdp_r2_{method}_min"] = min(daily_r2)
+                    row[f"tdp_r2_{method}_max"] = max(daily_r2)
+
+        results.append(row)
+
+    return pd.DataFrame(results)
+
+
+def compute_monthly_metrics_per_station_multi(
+    stations_ts: dict[str, pd.DataFrame],
+    metrics_list: str | list[str] | None = None,
+    out_dir: str = "metrics_csvs",
+    hour: list[str] | str = "all",
+    *,
+    plot: bool = False,  # noqa: ARG001
+) -> dict[str, str]:
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    if metrics_list is None:
+        metrics_list = ["rmse", "r2", "mae", "mbe", "slope"]
+    elif isinstance(metrics_list, str):
+        metrics_list = [metrics_list]
+
+    csv_paths: dict[str, str] = {}
+
+    for station_name, df_station in stations_ts.items():
+        if df_station.empty:
+            continue
+
+        df_all_metrics: pd.DataFrame | None = None
+
+        for metric in metrics_list:
+            df_metric = compute_monthly_multi(
+                df_station,
+                metrics=metric,
+                hour=hour,
+            )
+
+            if df_metric.empty:
+                continue
+
+            if df_all_metrics is None:
+                df_all_metrics = df_metric
+
+            else:
+                # éviter duplication des n_points
+                df_metric = df_metric.drop(
+                    columns=["n_points_ta", "n_points_tdp"],
+                    errors="ignore",
+                )
+
+                df_all_metrics = pd.merge(
+                    df_all_metrics,
+                    df_metric,
+                    on="month",
+                    how="outer",
+                )
+
+        if df_all_metrics is not None and not df_all_metrics.empty:
+            csv_path = os.path.join(
+                out_dir, f"{station_name}_monthly_metrics.csv"
+            )
+
+            df_all_metrics.to_csv(csv_path, index=False)
+
+            csv_paths[station_name] = csv_path
+
+    return csv_paths
+
+
+def plot_rmse_all_stations(csv_dir: str):
+
+    csv_files = [f for f in os.listdir(csv_dir) if f.endswith(".csv")]
+
+    for file in csv_files:
+        station_name = file.replace("_monthly_metrics.csv", "")
+        df = pd.read_csv(os.path.join(csv_dir, file))
+        df["month"] = pd.to_datetime(df["month"])
+
+        for var in ["ta", "tdp"]:
+            plt.figure(figsize=(10, 6))
+
+            rmse_cols = [
+                c
+                for c in df.columns
+                if c.startswith(f"{var}_rmse_")
+                and not c.endswith(("min", "max"))
+            ]
+
+            for col in rmse_cols:
+                method = col.replace(f"{var}_rmse_", "")
+
+                plt.plot(df["month"], df[col], marker="o", label=method)
+
+                min_col = f"{var}_rmse_{method}_min"
+                max_col = f"{var}_rmse_{method}_max"
+
+                if min_col in df.columns and max_col in df.columns:
+                    plt.fill_between(
+                        df["month"], df[min_col], df[max_col], alpha=0.2
+                    )
+
+            plt.title(f"{station_name.upper()} - RMSE mensuel ({var.upper()})")
+            plt.xlabel("Mois")
+            plt.ylabel("RMSE")
+            plt.legend()
+            plt.grid(True)
+            plt.tight_layout()
+            plt.show()
+
+
+def plot_r2_all_stations(csv_dir: str):
+
+    csv_files = [f for f in os.listdir(csv_dir) if f.endswith(".csv")]
+
+    for file in csv_files:
+        station_name = file.replace("_monthly_metrics.csv", "")
+        df = pd.read_csv(os.path.join(csv_dir, file))
+        df["month"] = pd.to_datetime(df["month"])
+
+        for var in ["ta", "tdp"]:
+            plt.figure(figsize=(10, 6))
+
+            rmse_cols = [
+                c
+                for c in df.columns
+                if c.startswith(f"{var}_r2_") and not c.endswith(("min", "max"))
+            ]
+
+            for col in rmse_cols:
+                method = col.replace(f"{var}_r2_", "")
+
+                plt.plot(df["month"], df[col], marker="o", label=method)
+
+                min_col = f"{var}_r2_{method}_min"
+                max_col = f"{var}_r2_{method}_max"
+
+                if min_col in df.columns and max_col in df.columns:
+                    plt.fill_between(
+                        df["month"], df[min_col], df[max_col], alpha=0.2
+                    )
+
+            plt.title(f"{station_name.upper()} - R2 mensuel ({var.upper()})")
+            plt.xlabel("Mois")
+            plt.ylabel("R2")
+            plt.legend()
+            plt.grid(True)
+            plt.tight_layout()
+            plt.show()
+
+
+def plot_slope_scatter_all_stations(
+    stations_ts: dict[str, pd.DataFrame],
+):
+
+    for station_name, df_ in stations_ts.items():
+        df = df_.copy()
+        df["month"] = df["time"].dt.to_period("M")
+
+        for var in ["ta", "tdp"]:
+            icos_col = f"{var}_icos"
+            methods = [
+                c
+                for c in df.columns
+                if c.startswith(f"{var}_") and c != icos_col
+            ]
+
+            plt.figure(figsize=(7, 7))
+
+            for m in methods:
+                xs = []
+                ys = []
+
+                for _month, group in df.groupby("month"):
+                    valid = group[[icos_col, m]].dropna()
+
+                    if len(valid) > 5:
+                        xs.append(valid[icos_col].mean())
+                        ys.append(valid[m].mean())
+
+                if xs:
+                    plt.scatter(xs, ys, label=m.replace(f"{var}_", ""))
+
+            min_val = df[icos_col].min()
+            max_val = df[icos_col].max()
+            plt.plot([min_val, max_val], [min_val, max_val], linestyle="--")
+
+            plt.title(f"{station_name.upper()} - Slope scatter ({var.upper()})")
+            plt.xlabel("ICOS (réel)")
+            plt.ylabel("Calculé")
+            plt.legend()
+            plt.grid(True)
+            plt.tight_layout()
+            plt.show()

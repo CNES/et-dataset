@@ -20,6 +20,8 @@ icos_data/
 test_*.ipynb
 prepare_landsat_*.ipynb
 method_*/
+metrics_*/
+base/
 
 # Data
 *.tif

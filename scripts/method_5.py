@@ -138,7 +138,6 @@ def run_stations_process_method_5(
             hourly_pressure = era5_pressure.sel(time=t)
             hourly_surface = era5_surface.sel(time=t)
             logger.info(f"hourly_pressure: {hourly_pressure['t'] * 1}")
-            # Altitudes absolues
 
             z_levels = hourly_pressure["z"].values / G_CST
             z_2m = z_surface + 2.0
@@ -151,7 +150,6 @@ def run_stations_process_method_5(
             e_levels = compute_vapor_pressure(
                 hourly_pressure["r"].values, es_levels
             )
-            logger.info(f"hourly_pressure = {hourly_pressure['r'] * 1}")
             Td_levels = compute_dewpoint_temp_from_e(e_levels)
 
             # Température et vapeur surface
@@ -218,18 +216,39 @@ def run_stations_process_method_5(
             d_top = abs(z_station - z_top)
             logger.info(f"d_top : {d_top}")
 
-            if (d_bot + d_top) == 0:
-                T_station = T_bot
-                Td_station = Td_bot
-            else:
-                w_bot = d_top / (d_bot + d_top)
-                w_top = d_bot / (d_bot + d_top)
+            # CAS 1 : stations sous les couches
+            if z_station <= z_bot or z_station >= z_top:
+                dz = z_top - z_bot
 
-                T_station = T_bot * w_bot + T_top * w_top
-                Td_station = Td_bot * w_bot + Td_top * w_top
+                if abs(dz) < 5:
+                    T_station = T_bot
+                    Td_station = Td_bot
+                else:
+                    gamma = (T_top - T_bot) / dz
+                    gamma_td = (Td_top - Td_bot) / dz
+
+                    T_station = T_bot + gamma * (z_station - z_bot)
+                    Td_station = Td_bot + gamma_td * (z_station - z_bot)
+
+            # CAS 3 : station entre les niveaux
+            else:
+                d_bot = z_station - z_bot
+                d_top = z_top - z_station
+
+                if (d_bot + d_top) == 0:
+                    T_station = T_bot
+                    Td_station = Td_bot
+                else:
+                    w_bot = d_top / (d_bot + d_top)
+                    w_top = d_bot / (d_bot + d_top)
+
+                    T_station = T_bot * w_bot + T_top * w_top
+                    Td_station = Td_bot * w_bot + Td_top * w_top
 
             ta_out.append(float(np.asarray(T_station)))
             td_out.append(float(np.asarray(Td_station)))
+            logger.info(f"Les élévations méthodes 5 : {z_full}")
+            logger.info(f"Les températures méthodes 5 : {T_full}")
 
         # BUILD OUTPUT DATASET
         ta_da = xr.DataArray(

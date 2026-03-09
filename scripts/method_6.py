@@ -137,7 +137,6 @@ def run_stations_process_method_6(
         for t in era5_pressure.time.values:
             hourly_pressure = era5_pressure.sel(time=t)
             hourly_surface = era5_surface.sel(time=t)
-            logger.info(f"hourly_pressure: {hourly_pressure['t'] * 1}")
             # Altitudes absolues
 
             z_levels = hourly_pressure["z"].values / G_CST
@@ -213,23 +212,47 @@ def run_stations_process_method_6(
             logger.info(f"Td_top = {Td_top}")
             # LOCAL LAPSE RATE
 
-            if z_top == z_bot:
+            dz = z_top - z_bot
+
+            # niveaux trop proches
+            if np.isnan(dz) or abs(dz) < 5:
+                logger.warning("Vertical levels too close ")
                 T_station = T_bot
                 Td_station = Td_bot
+
             else:
-                gamma = (T_top - T_bot) / (z_top - z_bot)
-                logger.info(f"gamma = {gamma}")
-                gamma_td = (Td_top - Td_bot) / (z_top - z_bot)
-                logger.info(f"gamma_td = {gamma_td}")
+                gamma = (T_top - T_bot) / dz
+                gamma_td = (Td_top - Td_bot) / dz
 
-                T_station = T_bot + gamma * (z_station - z_bot)
+                logger.info(f"gamma raw = {gamma}")
+                logger.info(f"gamma_td raw = {gamma_td}")
+
+                # limiter gradient physique (K/m)
+                gamma = np.clip(gamma, -0.015, 0.005)
+                gamma_td = np.clip(gamma_td, -0.02, 0.01)
+
+                logger.info(f"gamma clipped = {gamma}")
+                logger.info(f"gamma_td clipped = {gamma_td}")
+
+                dz_station = z_station - z_bot
+
+                # limiter extrapolation trop grande
+                if abs(dz_station) > 2000:
+                    logger.warning("Station too far from profile")
+                    T_station = T_bot
+                    Td_station = Td_bot
+                else:
+                    T_station = T_bot + gamma * dz_station
+                    Td_station = Td_bot + gamma_td * dz_station
+
                 logger.info(f"T_station = {T_station}")
-
-                Td_station = Td_bot + gamma_td * (z_station - z_bot)
+                logger.info(f"Td_station = {Td_station}")
                 logger.info(f"Td_station = {Td_station}")
 
             ta_out.append(float(T_station))
             td_out.append(float(Td_station))
+            logger.info(f"Les élévations méthodes 6 : {z_full}")
+            logger.info(f"Les températures méthodes 6 : {T_full}")
 
         ta_da = xr.DataArray(
             ta_out,
