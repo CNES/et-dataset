@@ -177,26 +177,45 @@ def run_stations_process_method_4(
             Td_full = Td_add[sort_idx]
             logger.info(f"Td_full = {Td_full}")
 
-            # INTERPOLATION
-            f_t = interp1d(
-                z_full,
-                T_full,
+            dz_min = 30
+            # trouver le premier niveau où la distance avec le précédent >dz_min
+            start_idx = 0
+            for i in range(len(z_full)):
+                if abs(z_full[i + 1] - z_full[i]) > dz_min:
+                    start_idx = i
+                    break
+            logger.info(f"START INDICE : {start_idx}")
+            z_filtered = [z_full[start_idx]]
+            T_filtered = [T_full[start_idx]]
+            Td_filtered = [Td_full[start_idx]]
+
+            for i in range(1, len(z_full)):
+                dz = abs(z_full[i] - z_full[i - 1])
+
+                if dz > 30:
+                    z_filtered.append(z_full[i])
+                    T_filtered.append(T_full[i])
+                    Td_filtered.append(Td_full[i])
+
+            logger.info(f"z_filtered : {z_filtered}")
+
+            f_t_filtered = interp1d(
+                z_filtered,
+                T_filtered,
+                kind="linear",
+                fill_value="extrapolate",
+            )
+            f_td_filtered = interp1d(
+                z_filtered,
+                Td_filtered,
                 kind="linear",
                 fill_value="extrapolate",
             )
 
-            f_td = interp1d(
-                z_full,
-                Td_full,
-                kind="linear",
-                fill_value="extrapolate",
-            )
-
-            T_station = f_t(z_station_rel)
-            Td_station = f_td(z_station_rel)
-
-            ta_out.append(T_station)
-            td_out.append(Td_station)
+            T_station_filtered = f_t_filtered(z_station_rel)
+            Td_station_filtered = f_td_filtered(z_station_rel)
+            ta_out.append(T_station_filtered)
+            td_out.append(Td_station_filtered)
 
         ta_da = xr.DataArray(
             ta_out,

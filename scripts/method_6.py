@@ -180,14 +180,33 @@ def run_stations_process_method_6(
             Td_full = Td_all[sort_idx]
             logger.info(f"Td_full : {Td_full}")
 
+            dz_min = 30
+            # trouver le premier niveau où la distance avec le précédent >dz_min
+            start_idx = 0
+            for i in range(len(z_full)):
+                if abs(z_full[i + 1] - z_full[i]) > dz_min:
+                    start_idx = i
+                    break
+            logger.info(f"START INDICE : {start_idx}")
+            z_filtered = [z_full[start_idx]]
+            T_filtered = [T_full[start_idx]]
+            Td_filtered = [Td_full[start_idx]]
+
+            for i in range(1, len(z_full)):
+                dz = abs(z_full[i] - z_full[i - 1])
+
+                if dz > dz_min:
+                    z_filtered.append(z_full[i])
+                    T_filtered.append(T_full[i])
+                    Td_filtered.append(Td_full[i])
+
             # Trouver la couche
-            ind_top = int(np.searchsorted(z_full, z_station))
-            logger.info(f"ind_top:{ind_top}")
+            ind_top = int(np.searchsorted(z_filtered, z_station))
             if ind_top == 0:
                 # extrapolation sous le plus bas niveau
                 ind_bot = 0
                 ind_top = 1
-            elif ind_top >= len(z_full):
+            elif ind_top >= len(z_filtered):
                 # extrapolation au-dessus du plus haut niveau
                 ind_bot = -2
                 ind_top = -1
@@ -195,64 +214,38 @@ def run_stations_process_method_6(
                 ind_bot = ind_top - 1
             logger.info(f"ind_top après if:{ind_top}")
 
-            z_bot = z_full[ind_bot]
+            z_bot = z_filtered[ind_bot]
             logger.info(f"z_bot = {z_bot} et z station = {cfg.elev}")
 
-            z_top = z_full[ind_top]
+            z_top = z_filtered[ind_top]
             logger.info(f"z_top = {z_top} et z station = {cfg.elev}")
 
-            T_bot = T_full[ind_bot]
+            T_bot = T_filtered[ind_bot]
             logger.info(f"T_bot = {T_bot}")
-            T_top = T_full[ind_top]
+            T_top = T_filtered[ind_top]
             logger.info(f"T_top = {T_top}")
 
-            Td_bot = Td_full[ind_bot]
+            Td_bot = Td_filtered[ind_bot]
             logger.info(f"Td_bot = {Td_bot}")
-            Td_top = Td_full[ind_top]
+            Td_top = Td_filtered[ind_top]
             logger.info(f"Td_top = {Td_top}")
-            # LOCAL LAPSE RATE
 
+            # LOCAL LAPSE RATE
             dz = z_top - z_bot
 
-            # niveaux trop proches
-            if np.isnan(dz) or abs(dz) < 5:
-                logger.warning("Vertical levels too close ")
-                T_station = T_bot
-                Td_station = Td_bot
+            gamma = (T_top - T_bot) / dz
+            gamma_td = (Td_top - Td_bot) / dz
 
-            else:
-                gamma = (T_top - T_bot) / dz
-                gamma_td = (Td_top - Td_bot) / dz
+            logger.info(f"gamma = {gamma}")
+            logger.info(f"gamma_td = {gamma_td}")
 
-                logger.info(f"gamma raw = {gamma}")
-                logger.info(f"gamma_td raw = {gamma_td}")
+            dz_station = z_station - z_bot
 
-                # limiter gradient physique (K/m)
-                gamma = np.clip(gamma, -0.015, 0.005)
-                gamma_td = np.clip(gamma_td, -0.02, 0.01)
-
-                logger.info(f"gamma clipped = {gamma}")
-                logger.info(f"gamma_td clipped = {gamma_td}")
-
-                dz_station = z_station - z_bot
-
-                # limiter extrapolation trop grande
-                if abs(dz_station) > 2000:
-                    logger.warning("Station too far from profile")
-                    T_station = T_bot
-                    Td_station = Td_bot
-                else:
-                    T_station = T_bot + gamma * dz_station
-                    Td_station = Td_bot + gamma_td * dz_station
-
-                logger.info(f"T_station = {T_station}")
-                logger.info(f"Td_station = {Td_station}")
-                logger.info(f"Td_station = {Td_station}")
+            T_station = T_bot + gamma * dz_station
+            Td_station = Td_bot + gamma_td * dz_station
 
             ta_out.append(float(T_station))
             td_out.append(float(Td_station))
-            logger.info(f"Les élévations méthodes 6 : {z_full}")
-            logger.info(f"Les températures méthodes 6 : {T_full}")
 
         ta_da = xr.DataArray(
             ta_out,
