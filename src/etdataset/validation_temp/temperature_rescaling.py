@@ -347,7 +347,10 @@ def filter_dataset_by_pressure_levels(
 
     ds_sel = ds.sel({pressure_dim: pressure_levels_sorted}, method="nearest")
 
-    ds_sel = ds_sel.sortby(ds_sel[pressure_dim].astype(float), ascending=False)
+    ds_sel = ds_sel.sortby(ds_sel[pressure_dim], ascending=False)
+    ds_sel = ds_sel.isel(
+        {pressure_dim: ~ds_sel[pressure_dim].to_index().duplicated()}
+    )
     return ds_sel
 
 
