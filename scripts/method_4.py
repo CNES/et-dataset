@@ -37,6 +37,7 @@ from etdataset.validation_temp.temperature_rescaling import (
     compute_vapor_pressure,
     filter_dataset_by_hours,
     filter_dataset_by_location,
+    filter_dataset_by_pressure_levels,
     generate_dates,
     generate_hours,
     get_saturation_vapor_pressure,
@@ -74,6 +75,23 @@ def run_stations_process_method_4(
         era5_pressure = filter_dataset_by_location(
             era5_pressure, cfg.lat, cfg.lon
         )
+        era5_pressure = filter_dataset_by_pressure_levels(
+            era5_pressure,
+            [
+                "700",
+                "725",
+                "750",
+                "775",
+                "800",
+                "825",
+                "850",
+                "875",
+                "900",
+                "925",
+                "950",
+                "975",
+            ],
+        )
 
         # READ ERA5 SURFACE
         era5_data = read_era5_file(d, ERA5Dataset.ERA5, data_path)
@@ -104,9 +122,7 @@ def run_stations_process_method_4(
                 cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326)
             )["utm"][0].bottom,
         )
-        logger.info(f"dem = {dem}")
         z_station = dem["height"].sel(x=x, y=y, method="nearest")
-
         # GET ERA5 ELEVATION
         z_surface = get_era5_dem()
         z_surface = xr.DataArray(
@@ -121,31 +137,19 @@ def run_stations_process_method_4(
             latitude=cfg.lat, longitude=cfg.lon, method="nearest"
         )
 
-        # DIFFERENCE
-        delta_z = z_station - z_surface
-        logger.info(
-            f"Altitude difference station - ERA5 surface: {delta_z.values}"
-        )
-
         ta_out = []
         td_out = []
 
         # LOOP OVER TIME
         for t in era5_pressure.time.values:
             hourly_pressure = era5_pressure.sel(time=t)
-            hourly_surface = era5_surface.sel(time=t)
-
-            # SURFACE HEIGHT
-            z_surface_t = z_surface
-
             # RELATIVE HEIGHTS
-            z_station_rel = z_station
             z_levels_rel = hourly_pressure["z"].values / G_CST
-
-            z_2m_rel = 2.0 + z_surface_t
 
             # VARIABLES
             T_levels = hourly_pressure["t"].values
+
+            # recalcul pression de vapeur pour CE pas de temps
             T_levels_c = kelvin_to_celsius(hourly_pressure["t"].values)
             es_levels = get_saturation_vapor_pressure(T_levels_c)
             e_levels = compute_vapor_pressure(
@@ -153,70 +157,44 @@ def run_stations_process_method_4(
                 es_levels,
             )
 
-            T_2m = hourly_surface["t2m"].values
-            Td_2m = kelvin_to_celsius(hourly_surface["d2m"].values)
-
             z_clean = z_levels_rel
             T_clean = T_levels
             Td_clean = compute_dewpoint_temp_from_e(e_levels)
-
             if len(z_clean) < 2:
                 ta_out.append(np.nan)
                 td_out.append(np.nan)
                 continue
 
-            # ADD 2m LEVEL
-            z_add = np.insert(z_clean, 0, z_2m_rel)
-            T_add = np.insert(T_clean, 0, T_2m)
-            Td_add = np.insert(Td_clean, 0, Td_2m)
-
+            z_add = z_clean
+            T_add = T_clean
+            Td_add = Td_clean
             # SORT VERTICALLY
             sort_idx = np.argsort(z_add)
             z_full = z_add[sort_idx]
             T_full = T_add[sort_idx]
             Td_full = Td_add[sort_idx]
-            logger.info(f"Td_full = {Td_full}")
 
-            dz_min = 30
-            # trouver le premier niveau où la distance avec le précédent >dz_min
-            start_idx = 0
-            for i in range(len(z_full)):
-                if abs(z_full[i + 1] - z_full[i]) > dz_min:
-                    start_idx = i
-                    break
-            logger.info(f"START INDICE : {start_idx}")
-            z_filtered = [z_full[start_idx]]
-            T_filtered = [T_full[start_idx]]
-            Td_filtered = [Td_full[start_idx]]
-
-            for i in range(1, len(z_full)):
-                dz = abs(z_full[i] - z_full[i - 1])
-
-                if dz > 30:
-                    z_filtered.append(z_full[i])
-                    T_filtered.append(T_full[i])
-                    Td_filtered.append(Td_full[i])
-
-            logger.info(f"z_filtered : {z_filtered}")
-
-            f_t_filtered = interp1d(
-                z_filtered,
-                T_filtered,
+            # INTERPOLATION
+            f_t = interp1d(
+                z_full,
+                T_full,
                 kind="linear",
                 fill_value="extrapolate",
             )
-            f_td_filtered = interp1d(
-                z_filtered,
-                Td_filtered,
+            f_td = interp1d(
+                z_full,
+                Td_full,
                 kind="linear",
                 fill_value="extrapolate",
             )
 
-            T_station_filtered = f_t_filtered(z_station_rel)
-            Td_station_filtered = f_td_filtered(z_station_rel)
-            ta_out.append(T_station_filtered)
-            td_out.append(Td_station_filtered)
+            T_station = f_t(z_station)
+            Td_station = f_td(z_station)
 
+            ta_out.append(T_station)
+            td_out.append(Td_station)
+
+        # BUILD OUTPUT DATASET
         ta_da = xr.DataArray(
             ta_out,
             coords={"time": era5_pressure.time},

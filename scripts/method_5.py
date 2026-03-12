@@ -25,7 +25,6 @@ from etdataset.era5 import ERA5Dataset
 from etdataset.icos import (
     get_csv_with_valid_icos_stations,
     get_stations_config,
-    kelvin_to_celsius,
 )
 from etdataset.logging import LoggerManager
 from etdataset.utils import (
@@ -234,7 +233,7 @@ def run_stations_process_method_5(
 
         ds_out = xr.Dataset(
             {
-                "ta": kelvin_to_celsius(ta_da),
+                "ta": ta_da,
                 "tdp": td_da,
             }
         )

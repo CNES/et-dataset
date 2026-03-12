@@ -25,7 +25,6 @@ from etdataset.era5 import ERA5Dataset
 from etdataset.icos import (
     get_csv_with_valid_icos_stations,
     get_stations_config,
-    kelvin_to_celsius,
 )
 from etdataset.logging import LoggerManager
 from etdataset.utils import (
@@ -200,31 +199,31 @@ def run_stations_process_method_6(
             ta_out.append(float(T_station.item()))
             td_out.append(float(Td_station.item()))
 
-            ta_da = xr.DataArray(
-                ta_out,
-                coords={"time": era5_pressure.time},
-                dims=["time"],
-            )
+        ta_da = xr.DataArray(
+            ta_out,
+            coords={"time": era5_pressure.time},
+            dims=["time"],
+        )
 
-            td_da = xr.DataArray(
-                td_out,
-                coords={"time": era5_pressure.time},
-                dims=["time"],
-            )
+        td_da = xr.DataArray(
+            td_out,
+            coords={"time": era5_pressure.time},
+            dims=["time"],
+        )
 
-            ds_out = xr.Dataset(
-                {
-                    "ta": kelvin_to_celsius(ta_da),
-                    "tdp": td_da,
-                }
-            )
+        ds_out = xr.Dataset(
+            {
+                "ta": ta_da,
+                "tdp": td_da,
+            }
+        )
 
-            save_ta_td_csv(
-                ds_out,
-                cfg,
-                output,
-                name_dir="csv_era5_rescaled",
-            )
+        save_ta_td_csv(
+            ds_out,
+            cfg,
+            output,
+            name_dir="csv_era5_rescaled",
+        )
 
 
 def generate_timeseries_for_stations_multiprocess(
