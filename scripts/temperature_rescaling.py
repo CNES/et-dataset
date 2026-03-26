@@ -32,6 +32,7 @@ from etdataset.validation_temp.temperature_rescaling import (
     generate_dates,
     generate_hours,
     get_ta_td_celsius_at_location,
+    normalize_longitude_latitude,
     prepare_temperature_inputs,
     read_era5_file,
     save_ta_td_csv,
@@ -65,6 +66,7 @@ def run_stations_process(
                 "Skipping date %s because ERA5 file is unavailable", d
             )
             continue
+        era5_xrds = normalize_longitude_latitude(era5_xrds)
 
         era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
@@ -96,7 +98,9 @@ def run_stations_process(
         )
         new_dem, era5_dem, updated_data = prepare_temperature_inputs(
             data=dem,
-            era5_data=era5_filtered,
+            era5_data=normalize_longitude_latitude(
+                era5_filtered, target="0_360"
+            ),
             dataset=ERA5Dataset.ERA5,
         )
         updated = temperature_rescaling_constant_lapse_rate(
