@@ -39,6 +39,7 @@ from etdataset.validation_temp.temperature_rescaling import (
     generate_dates,
     generate_hours,
     get_ta_td_celsius_at_location,
+    normalize_longitude_latitude,
     prepare_temperature_inputs,
     read_era5_file,
     save_ta_td_csv,
@@ -73,6 +74,7 @@ def run_stations_process_method_6(
         if era5_pressure is None:
             logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
             continue
+        era5_pressure = normalize_longitude_latitude(era5_pressure)
         # FILTER ERA5 PRESSURE BY HOURS
         era5_pressure = filter_dataset_by_hours(era5_pressure, d, list_hours)
         era5_pressure = filter_dataset_by_pressure_levels(
@@ -92,7 +94,6 @@ def run_stations_process_method_6(
                 "975",
             ],
         )
-
         # FILTER ERA5 PRESSURE ON LOCATION
         era5_filt_location = filter_dataset_by_location(
             era5_pressure, cfg.lat, cfg.lon
@@ -103,13 +104,26 @@ def run_stations_process_method_6(
         if era5_data is None:
             logger.warning("Skipping date %s (ERA5 unavailable)", d)
             continue
+        logger.info(f"CRS DE ERA5 :{era5_data.rio.crs}")
+
+        era5_data = normalize_longitude_latitude(era5_data)
+        # logger.info(f"CRS DE ERA5 APRÈS :{era5_data.rio.crs}")
+
         # FILTER ERA5 BY HOURS
         era5_surface = filter_dataset_by_hours(era5_data, d, list_hours)
+        era5_surface_loc = filter_dataset_by_location(
+            era5_surface, cfg.lat, cfg.lon
+        )
 
+        logger.info(
+            f"ERA5 SURFACE AU POINT STATION T = "
+            f"{era5_surface_loc['t2m'].values}"
+        )
         # GET DEM
         roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
             cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
         )["utm"]
+
         # get dem from the roi
         dem = get_dem_from_roi(
             roi_bbox=roi_bbox_utm,
@@ -117,7 +131,7 @@ def run_stations_process_method_6(
             base_dir=mnt_path,
             resolution=60,
         )
-
+        # GRILLE
         # GET HEIGHT OF THE STATION
         x, y = (
             work_area_from_coord_point(
@@ -128,7 +142,7 @@ def run_stations_process_method_6(
             )["utm"][0].bottom,
         )
         z_station_dem = dem["height"].sel(x=x, y=y, method="nearest").values
-
+        logger.info(f"ALTITUDE CIBLE = {z_station_dem}")
         ta_out = []
         td_out = []
 
@@ -176,13 +190,17 @@ def run_stations_process_method_6(
             ####### Get lapse rates
             lr_t = compute_lapse_rate_from_2_levels(era5_add_dewpoint)
             lr_td = compute_lapse_rate_from_2_levels(era5_add_dewpoint, "td")
-
+            # logger.info(f"new_era5 = {new_era5}")
             # prepare inputs for rescaling
             new_dem, era5_dem, updated_data = prepare_temperature_inputs(
                 data=dem,
-                era5_data=era5_data,
+                era5_data=normalize_longitude_latitude(
+                    era5_data, target="0_360"
+                ),
                 dataset=dataset,
             )
+
+            logger.info(f"LAPSE RATE = {lr_t}")
 
             # rescaling
             updated = temperature_rescaling_variable_lapse_rate(
@@ -194,6 +212,7 @@ def run_stations_process_method_6(
                 lr_ta=lr_t,
                 lr_tdp=lr_td,
             )
+            logger.info(f"updated = {updated['ta'].values}")
             T_station, Td_station = get_ta_td_celsius_at_location(updated, cfg)
 
             ta_out.append(float(T_station.item()))

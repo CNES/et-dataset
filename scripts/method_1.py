@@ -34,6 +34,7 @@ from etdataset.validation_temp.temperature_rescaling import (
     get_lapse_rate_monthly,
     get_ta_td_celsius_at_location,
     get_vapor_pressure_monthly,
+    normalize_longitude_latitude,
     prepare_temperature_inputs,
     read_era5_file,
     save_ta_td_csv,
@@ -67,7 +68,7 @@ def run_stations_process_method_1(
                 "Skipping date %s because ERA5 file is unavailable", d
             )
             continue
-
+        era5_xrds = normalize_longitude_latitude(era5_xrds)
         era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
         # FOR ERA5 RESCALED ####################################################
@@ -84,7 +85,9 @@ def run_stations_process_method_1(
         )
         new_dem, era5_dem, updated_data = prepare_temperature_inputs(
             data=dem,
-            era5_data=era5_filtered,
+            era5_data=normalize_longitude_latitude(
+                era5_filtered, target="0_360"
+            ),
             dataset=ERA5Dataset.ERA5,
         )
         lr_monthly = get_lapse_rate_monthly(d)

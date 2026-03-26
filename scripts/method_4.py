@@ -41,6 +41,7 @@ from etdataset.validation_temp.temperature_rescaling import (
     generate_dates,
     generate_hours,
     get_saturation_vapor_pressure,
+    normalize_longitude_latitude,
     read_era5_file,
     save_ta_td_csv,
 )
@@ -71,6 +72,8 @@ def run_stations_process_method_4(
         if era5_pressure is None:
             logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
             continue
+        era5_pressure = normalize_longitude_latitude(era5_pressure)
+
         era5_pressure = filter_dataset_by_hours(era5_pressure, d, list_hours)
         era5_pressure = filter_dataset_by_location(
             era5_pressure, cfg.lat, cfg.lon
@@ -99,10 +102,7 @@ def run_stations_process_method_4(
         if era5_data is None:
             logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
             continue
-        era5_surface = filter_dataset_by_hours(era5_data, d, list_hours)
-        era5_surface = filter_dataset_by_location(
-            era5_surface, cfg.lat, cfg.lon
-        )
+        era5_data = normalize_longitude_latitude(era5_data)
 
         # GET ELEVATION AT THE LOCATION FROM DEM
         roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
@@ -134,6 +134,9 @@ def run_stations_process_method_4(
                 "longitude": era5_data.longitude,
             },
         ).rio.write_crs(CRS(4326))
+        z_surface_ds = z_surface.to_dataset(name="elevation")
+        z_surface_ds = normalize_longitude_latitude(z_surface_ds)
+        z_surface = z_surface_ds["elevation"]
         z_surface = z_surface.sel(
             latitude=cfg.lat, longitude=cfg.lon, method="nearest"
         )

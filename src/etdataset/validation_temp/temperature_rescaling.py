@@ -822,7 +822,8 @@ def get_ta_td_celsius_at_location(
         y = cfg.lat
 
         if data[dims["x"]].max() > 180:
-            x = (x + 360) % 360
+            # x = (x + 360) % 360
+            x = ((x + 180) % 360) - 180
     # Interpolate air temperature and dewpoint temperature at the specified
     # location
 

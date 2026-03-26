@@ -44,6 +44,7 @@ from etdataset.validation_temp.temperature_rescaling import (
     generate_dates,
     generate_hours,
     get_saturation_vapor_pressure,
+    normalize_longitude_latitude,
     read_era5_file,
     save_ta_td_csv,
 )
@@ -65,7 +66,6 @@ def run_stations_process_method_5(
 ):
     logger.info(f"Current station : {station}")
     cfg = get_stations_config(station)
-
     for d in generate_dates(start_date, end_date, step_date):
         logger.info(f"Date: {d}")
         logger.info(f"Station elevation: {cfg.elev}")
@@ -75,7 +75,9 @@ def run_stations_process_method_5(
         if era5_pressure is None:
             logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
             continue
-        # FILTER ERA5 PRESSURE BY HOURS
+
+        era5_pressure = normalize_longitude_latitude(era5_pressure)
+
         era5_pressure = filter_dataset_by_hours(era5_pressure, d, list_hours)
         era5_pressure = filter_dataset_by_location(
             era5_pressure, cfg.lat, cfg.lon
@@ -103,12 +105,14 @@ def run_stations_process_method_5(
         if era5_data is None:
             logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
             continue
+        era5_data = normalize_longitude_latitude(era5_data)
+
         era5_surface = filter_dataset_by_hours(era5_data, d, list_hours)
         era5_surface = filter_dataset_by_location(
             era5_surface, cfg.lat, cfg.lon
         )
 
-        # GET DEM
+        # GET ELEVATION AT THE LOCATION FROM DEM
         roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
             cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
         )["utm"]
@@ -119,8 +123,6 @@ def run_stations_process_method_5(
             base_dir=mnt_path,
             resolution=60,
         )
-
-        # GET HEIGHT OF THE STATION
         x, y = (
             work_area_from_coord_point(
                 cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326)
@@ -129,8 +131,8 @@ def run_stations_process_method_5(
                 cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326)
             )["utm"][0].bottom,
         )
-        z_station = dem["height"].sel(x=x, y=y, method="nearest").values
-
+        z_station = dem["height"].sel(x=x, y=y, method="nearest")
+        # GET ERA5 ELEVATION
         z_surface = get_era5_dem()
         z_surface = xr.DataArray(
             z_surface.data,
@@ -140,8 +142,17 @@ def run_stations_process_method_5(
                 "longitude": era5_data.longitude,
             },
         ).rio.write_crs(CRS(4326))
+        z_surface_ds = z_surface.to_dataset(name="elevation")
+        z_surface_ds = normalize_longitude_latitude(z_surface_ds)
+        z_surface = z_surface_ds["elevation"]
         z_surface = z_surface.sel(
             latitude=cfg.lat, longitude=cfg.lon, method="nearest"
+        )
+
+        # DIFFERENCE
+        delta_z = z_station - z_surface
+        logger.info(
+            f"Altitude difference station - ERA5 surface: {delta_z.values}"
         )
 
         ta_out = []
@@ -152,11 +163,14 @@ def run_stations_process_method_5(
             hourly_pressure = era5_pressure.sel(time=t)
             hourly_surface = era5_surface.sel(time=t)
 
+            # SURFACE HEIGHT
+            z_surface_t = z_surface
+
             # RELATIVE HEIGHTS
             z_station_rel = z_station
             z_levels_rel = hourly_pressure["z"].values / G_CST
 
-            z_2m_rel = z_surface
+            z_2m_rel = 2.0 + z_surface_t
 
             # VARIABLES
             T_levels = hourly_pressure["t"].values
@@ -179,6 +193,7 @@ def run_stations_process_method_5(
             if len(z_clean) < 2:
                 ta_out.append(np.nan)
                 td_out.append(np.nan)
+                continue
 
             # ADD 2m LEVEL
             z_add = np.insert(z_clean, 0, z_2m_rel)
@@ -210,17 +225,6 @@ def run_stations_process_method_5(
             ta_out.append(T_station)
             td_out.append(Td_station)
 
-        ta_da = xr.DataArray(
-            ta_out,
-            coords={"time": era5_pressure.time},
-            dims=["time"],
-        )
-
-        td_da = xr.DataArray(
-            td_out,
-            coords={"time": era5_pressure.time},
-            dims=["time"],
-        )
         # BUILD OUTPUT DATASET
         ta_da = xr.DataArray(
             ta_out,
@@ -236,11 +240,12 @@ def run_stations_process_method_5(
 
         ds_out = xr.Dataset(
             {
-                "ta": ta_da,
+                "ta": kelvin_to_celsius(ta_da),
                 "tdp": td_da,
             }
         )
 
+        # SAVE
         save_ta_td_csv(
             ds_out,
             cfg,

@@ -35,6 +35,7 @@ from etdataset.validation_temp.temperature_rescaling import (
     generate_dates,
     generate_hours,
     get_ta_td_celsius_at_location,
+    normalize_longitude_latitude,
     prepare_temperature_inputs,
     read_era5_file,
     save_ta_td_csv,
@@ -67,6 +68,8 @@ def run_stations_process_method_2(
         if era5_xrds is None:
             logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
             continue
+        era5_xrds = normalize_longitude_latitude(era5_xrds)
+
         era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
         ####### COMPUTE CURRENT LAPSE RATE #####################################
@@ -113,6 +116,7 @@ def run_stations_process_method_2(
             if era5_xrds is None:
                 logger.warning("Skipping date %s (ERA5 unavailable)", d)
                 continue
+            era5_xrds = normalize_longitude_latitude(era5_xrds)
             era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
             era5_data = era5_filtered
             dataset = ERA5Dataset.ERA5
@@ -120,7 +124,7 @@ def run_stations_process_method_2(
         # prepare inputs for rescaling
         new_dem, era5_dem, updated_data = prepare_temperature_inputs(
             data=dem,
-            era5_data=era5_data,
+            era5_data=normalize_longitude_latitude(era5_data, target="0_360"),
             dataset=dataset,
         )
         # rescaling

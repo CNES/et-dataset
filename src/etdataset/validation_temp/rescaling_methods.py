@@ -800,7 +800,10 @@ def run_stations_process_method_6(
         if era5_data is None:
             logger.warning("Skipping date %s (ERA5 unavailable)", d)
             continue
+        logger.info(f"CRS DE ERA5 :{era5_data.rio.crs}")
+
         era5_data = normalize_longitude_latitude(era5_data)
+        # logger.info(f"CRS DE ERA5 APRÈS :{era5_data.rio.crs}")
 
         # FILTER ERA5 BY HOURS
         era5_surface = filter_dataset_by_hours(era5_data, d, list_hours)
@@ -855,6 +858,7 @@ def run_stations_process_method_6(
             base_dir=mnt_path,
             resolution=60,
         )
+        logger.info(f"CRS DE DEM :{dem.rio.crs}")
 
         # dem = create_grid_dataset(roi_bbox_utm, roi_crs_utm, 5000)
         # dem["height"] = xr.ones_like(dem["grid"]) * 165
