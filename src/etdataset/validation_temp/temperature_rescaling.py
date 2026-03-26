@@ -38,6 +38,66 @@ G_CST = 9.80665
 #########################################
 
 
+def normalize_longitude_latitude(
+    ds: xr.Dataset,
+    lon_name: str = "longitude",
+    lat_name: str = "latitude",
+    target: str = "-180_180",
+) -> xr.Dataset:
+    """
+    Normalize longitude coordinates of an xarray Dataset to a desired range.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset containing longitude and latitude coordinates.
+    lon_name : str
+        Name of the longitude coordinate
+    lat_name : str
+        Name of the latitude coordinate
+    target : str
+        Target longitude convention:
+        - "-180_180": longitudes in [-180, 180]
+        - "0_360": longitudes in [0, 360]
+    Returns
+    -------
+    xr.Dataset
+        Dataset with normalized longitude coordinates and sorted by longitude.
+
+    """
+    lon = ds[lon_name]
+    lat = ds[lat_name]
+
+    lon_min = float(lon.min())
+    lon_max = float(lon.max())
+    lat_min = float(lat.min())
+    lat_max = float(lat.max())
+    if target == "-180_180":
+        # If longitudes exceed 180, we assume they are in [0, 360]
+        if lon_max > 180:
+            lon = ((lon + 180) % 360) - 180
+            logger.warning(
+                f"Longitudes detected in 0-360 range ({lon_min} to {lon_max})"
+            )
+    elif target == "0_360":
+        # If longitudes contain negative values, assume [-180, 180]
+        if lon_min < 0:
+            logger.warning(
+                f"Converting longitude from -180-180 to 0-360 "
+                f"({lon_min:.2f} to {lon_max:.2f})"
+            )
+            lon = lon % 360
+    else:
+        raise ValueError("Target must be [-180_180] or [0_360]")
+
+    if lat_min < -90 or lat_max > 90:
+        raise ValueError("Unvalid latitude")
+
+    ds = ds.assign_coords({lon_name: lon})
+    ds = ds.sortby(lon_name)
+    return ds
+
+
 def generate_dates(
     start_date: dt.date,
     end_date: dt.date,
