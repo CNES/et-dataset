@@ -8,6 +8,7 @@ import datetime as dt
 import os
 import zipfile
 from collections.abc import Generator
+from typing import overload
 
 import numpy as np
 import numpy.typing as npt
@@ -15,6 +16,7 @@ import pandas as pd
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
+from rasterio.warp import transform_bounds
 from sklearn.metrics import r2_score
 
 from etdataset.era5 import (
@@ -47,6 +49,66 @@ G_CST = 9.80665
 ##                                     ##
 ##                                     ##
 #########################################
+
+
+def normalize_longitude_latitude(
+    ds: xr.Dataset,
+    lon_name: str = "longitude",
+    lat_name: str = "latitude",
+    target: str = "-180_180",
+) -> xr.Dataset:
+    """
+    Normalize longitude coordinates of an xarray Dataset to a desired range.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset containing longitude and latitude coordinates.
+    lon_name : str
+        Name of the longitude coordinate
+    lat_name : str
+        Name of the latitude coordinate
+    target : str
+        Target longitude convention:
+        - "-180_180": longitudes in [-180, 180]
+        - "0_360": longitudes in [0, 360]
+    Returns
+    -------
+    xr.Dataset
+        Dataset with normalized longitude coordinates and sorted by longitude.
+
+    """
+    lon = ds[lon_name]
+    lat = ds[lat_name]
+
+    lon_min = float(lon.min())
+    lon_max = float(lon.max())
+    lat_min = float(lat.min())
+    lat_max = float(lat.max())
+    if target == "-180_180":
+        # If longitudes exceed 180, we assume they are in [0, 360]
+        if lon_max > 180:
+            lon = ((lon + 180) % 360) - 180
+            logger.warning(
+                f"Longitudes detected in 0-360 range ({lon_min} to {lon_max})"
+            )
+    elif target == "0_360":
+        # If longitudes contain negative values, assume [-180, 180]
+        if lon_min < 0:
+            logger.warning(
+                f"Converting longitude from -180-180 to 0-360 "
+                f"({lon_min:.2f} to {lon_max:.2f})"
+            )
+            lon = lon % 360
+    else:
+        raise ValueError("Wanted must be [-180_180] or [0_360]")
+
+    if lat_min < -90 or lat_max > 90:
+        raise ValueError("Unvalid latitude")
+
+    ds = ds.assign_coords({lon_name: lon})
+    ds = ds.sortby(lon_name)
+    return ds
 
 
 def generate_dates(
@@ -127,6 +189,9 @@ def prepare_temperature_inputs(
                 "longitude": era5_data.longitude,
             },
         ).rio.write_crs(CRS(4326))
+        era5_dem_ds = era5_dem.to_dataset(name="dem")
+        era5_dem_ds = normalize_longitude_latitude(era5_dem_ds)
+        era5_dem = era5_dem_ds["dem"]
         logger.warning(
             "DEM is missing in ERA5 data: No variables 'height' in the dataset"
         )
@@ -140,12 +205,21 @@ def prepare_temperature_inputs(
                 "longitude": era5_data.longitude,
             },
         ).rio.write_crs(CRS(4326))
+        era5_dem_ds = era5_dem.to_dataset(name="dem")
+        era5_dem_ds = normalize_longitude_latitude(era5_dem_ds)
+        era5_dem = era5_dem_ds["dem"]
+
     elif (
         dataset == ERA5Dataset.ERA5PRESSURE
         and ERA5pressureVar.GEOPOTENTIAL.key in era5_data.data_vars
     ):
         era5_dem = era5_data[ERA5pressureVar.GEOPOTENTIAL.key] / G_CST
         era5_dem = era5_dem.squeeze("pressure_level")
+        era5_dem = era5_dem.rio.write_crs(CRS(4326))
+        era5_dem_ds = era5_dem.to_dataset(name="dem")
+        era5_dem_ds = normalize_longitude_latitude(era5_dem_ds)
+        era5_dem = era5_dem_ds["dem"]
+
         logger.warning(
             "DEM is missing in ERA5 data: No variables 'height' in the dataset"
         )
@@ -281,7 +355,7 @@ def filter_dataset_by_location(
     longitude: float,
 ) -> xr.Dataset:
     """
-    Filter an xarray Dataset to retain only the specified latitude and longitude
+    Filter Dataset to keep only the specified latitude and longitude
 
     Parameters
     ----------
@@ -300,6 +374,82 @@ def filter_dataset_by_location(
     """
 
     return ds.sel(latitude=latitude, longitude=longitude, method="nearest")
+
+
+@overload
+def filter_dataset_by_roi(
+    ds: xr.DataArray, roi_bbox: rio.coords.BoundingBox, roi_crs: CRS
+) -> xr.DataArray: ...
+@overload
+def filter_dataset_by_roi(
+    ds: xr.Dataset, roi_bbox: rio.coords.BoundingBox, roi_crs: CRS
+) -> xr.Dataset: ...
+
+
+def filter_dataset_by_roi(
+    ds: xr.Dataset | xr.DataArray,
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    target_crs: str = "EPSG:4326",
+) -> xr.Dataset | xr.DataArray:
+    """
+    Filter Dataset to keep only data inside ROI.
+
+    Handles ROI in:
+    - lat/lon (EPSG:4326)
+    - UTM or any other CRS
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset.
+    roi_bbox : rio.BoundingBox
+        Bounding box of the ROI
+    roi_crs : CRS
+        CRS of the bounding box
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset filtered to include only the ROI
+    """
+
+    if ds.rio.crs is None:
+        ds = ds.rio.write_crs(target_crs)
+    dataset_crs = ds.rio.crs
+    roi_crs = CRS.from_user_input(roi_crs)
+
+    if dataset_crs is None:
+        raise ValueError("Dataset does not have defined CRS")
+
+    if roi_crs != dataset_crs:
+        min_lon, min_lat, max_lon, max_lat = transform_bounds(
+            roi_crs,
+            dataset_crs,
+            roi_bbox.left,
+            roi_bbox.bottom,
+            roi_bbox.right,
+            roi_bbox.top,
+        )
+    else:
+        min_lon = roi_bbox.left
+        max_lon = roi_bbox.right
+        min_lat = roi_bbox.bottom
+        max_lat = roi_bbox.top
+
+    if ds.longitude.max() > 180:
+        min_lon, max_lon = np.mod([min_lon, max_lon], 360)
+
+    latitudes = ds.latitude.values
+
+    if latitudes[0] > latitudes[-1]:
+        lat_slice = slice(max_lat, min_lat)
+    else:
+        lat_slice = slice(min_lat, max_lat)
+    ds = ds.rio.write_crs(target_crs, inplace=False)
+    return ds.sel(
+        latitude=lat_slice,
+        longitude=slice(min_lon, max_lon),
+    )
 
 
 def filter_dataset_by_pressure_levels(
@@ -799,6 +949,67 @@ def vapor_pressure_model(z, em0, am, z0):
 
 
 # LAPSE RATE EVERY DAY
+def compute_lapse_rate_from_2_levels_roi(
+    ds: xr.Dataset,
+    temperature_var: str = "t",
+    height_var: str = "z",
+    level_dim: str = "pressure_level",
+) -> xr.DataArray:
+    """
+    Compute time-dependent lapse rate between two pressure levels.
+
+    The lapse rate is computed as:
+        (T_high - T_low) / (Z_high - Z_low)
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset containing exactly two pressure levels.
+        Must include temperature and height variables.
+    temperature_var : str
+        Name of temperature variable.
+    height_var : str
+        Name of height variable.
+    level_dim : str
+        Name of pressure level dimension.
+
+    Returns
+    -------
+    xr.DataArray
+        Lapse rate as a function of time.
+    """
+
+    if ds.sizes[level_dim] != 2:
+        raise ValueError("Dataset must contain exactly two pressure levels.")
+
+    t = ds[temperature_var]
+    z = ds[height_var] / G_CST
+
+    # sort by height
+    order = z.mean(("time", "latitude", "longitude")).argsort()
+
+    t = t.isel({level_dim: order})
+    z = z.isel({level_dim: order})
+
+    # level index 0 = low, 1 = high
+    t_low = t.isel({level_dim: 0})
+    t_high = t.isel({level_dim: 1})
+
+    z_low = z.isel({level_dim: 0})
+    z_high = z.isel({level_dim: 1})
+
+    lapse_rate = (t_high - t_low) / (z_high - z_low)
+
+    lapse_rate.name = "lapse_rate"
+    lapse_rate.attrs["units"] = "°C m-1"
+    lapse_rate.attrs["description"] = (
+        "Temperature lapse rate between two pressure levels"
+    )
+
+    return lapse_rate
+
+
+# LAPSE RATE EVERY DAY
 def compute_lapse_rate_from_2_levels(
     ds: xr.Dataset,
     temperature_var: str = "t",
@@ -835,7 +1046,7 @@ def compute_lapse_rate_from_2_levels(
     t = ds[temperature_var]
     z = ds[height_var] / G_CST
 
-    # Assume level index 0 = low, 1 = high
+    # level index 0 = low, 1 = high
     t_low = t.isel({level_dim: 0})
     t_high = t.isel({level_dim: 1})
 
@@ -930,7 +1141,7 @@ def interpolate_temperature_variant(
     src_dem : xr.DataArray
         Elevation on source grid (dims: lat, lon)
     dst_dem : xr.DataArray
-        Elevation on destination DEM (dims: lat, lon)
+        Elevation on destination DEM (dims: x, y )
     lapse_rate : float or xr.DataArray
         Lapse rate (can be scalar or dims=(time, lat, lon))
 
@@ -941,16 +1152,42 @@ def interpolate_temperature_variant(
     """
     # Compute reference temperature at src_ref = 0 (or any reference level)
     # Broadcast automatically src_dem to match lapse_rate
-    ref_temp = src_temp - lapse_rate * src_dem
 
-    # Reproject onto dst_dem grid
+    ref_temp = src_temp - lapse_rate * src_dem
+    # logger.info(f"CRS DE REF_TEMP :{ref_temp.rio.crs}")
+    # logger.info(f"CRS DE SRC_TEMP :{src_temp.rio.crs}")
+    # logger.info(f"CRS DE SRC_DEM :{src_dem.rio.crs}")
+    # logger.info(f"CRS DE LAPSE_RATE :{lapse_rate.rio.crs}")
+
+    # logger.info(f"src_dem ={src_dem}")
+    # logger.info(f"src_temp ={src_temp}")
+    # logger.info(f"lapse_rate ={lapse_rate}")
+
+    # logger.info(f"ref_temp ={ref_temp}")
+
+    # logger.info(f"dst_dem ={dst_dem}")
+    # logger.info(f"CRS DE REF_TEMP :{ref_temp.rio.crs}")
+    # logger.info(f"CRS DE DST_DEM :{dst_dem.rio.crs}")
+
     projected_temp = ref_temp.rio.reproject_match(
         dst_dem,
         resampling=rio.enums.Resampling.bilinear,
     )
+    logger.info(f"projected_temp = {projected_temp}")
+    if (
+        {"latitude", "longitude"} <= set(lapse_rate.dims)
+        and lapse_rate.sizes["latitude"] > 1
+        and lapse_rate.sizes["longitude"] > 1
+    ):
+        lr = lapse_rate.rio.reproject_match(
+            dst_dem, resampling=rio.enums.Resampling.nearest
+        )
+    else:
+        lr = lapse_rate
+    logger.info(f"lr reprojection  ={lr}")
 
     # Adjust to actual DEM elevation
-    dem_temp = projected_temp + lapse_rate * dst_dem
+    dem_temp = projected_temp + lr * dst_dem
 
     # Keep attributes
     dem_temp.attrs.update(src_temp.attrs)
@@ -982,10 +1219,10 @@ def rescale_temperature_with_variable_lapserate(
         return None
 
     # Align lapse rate on ERA5 time axis (time-only)
-    lapse_rate = lapse_rate.reindex(
-        time=era5_data.time,
-        method="nearest",
-    )
+    # lapse_rate = lapse_rate.reindex(
+    #     time=era5_data.time,
+    #     method="nearest",
+    # )
 
     data = interpolate_temperature_variant(
         src_temp=era5_data,
@@ -1006,6 +1243,55 @@ def rescale_temperature_with_variable_lapserate(
     return data
 
 
+def add_dewpoint_to_ds_roi(
+    ds: xr.Dataset,
+    temp_var: str = "t",
+    rh_var: str = "r",
+    output_var: str = "tdp",
+) -> xr.Dataset:
+    """
+    Compute the dew point temperature from temperature and
+    relative humidity and add it to an xarray Dataset.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input dataset containing temperature and relative humidity.
+    temp_var : str, default "t"
+        Name of the air temperature variable (expected in Kelvin).
+    rh_var : str, default "r"
+        Name of the relative humidity variable (in %).
+    output_var : str, default "tdp"
+        Name of the dew point variable to be added to the dataset.
+
+    Returns
+    -------
+    xr.Dataset
+        A new dataset with the dew point temperature added
+        (in Kelvin).
+    """
+    ds = ds.copy()
+    t = ds[temp_var]
+    rh = ds[rh_var]
+    rh = xr.where(rh <= 0, np.nan, rh)
+    # Convert temperature to Celsius
+    t_c = kelvin_to_celsius(t)
+
+    # Compute dew point in Celsius
+    td_c = compute_dewpoint_temp(t_c, rh)
+
+    # Convert back to Kelvin
+    td_k = celsius_to_kelvin(td_c)
+
+    ds[output_var] = (t.dims, td_k)
+    ds[output_var].attrs.update(
+        {"units": "K", "long_name": "Dew point temperature"}
+    )
+    ds = ds[["t", "tdp"]]
+    ds = ds.rename({"t": "ta"})
+    return ds
+
+
 def add_dewpoint_to_ds(
     ds: xr.Dataset,
     temp_var: str = "t",
@@ -1024,7 +1310,7 @@ def add_dewpoint_to_ds(
         Name of the air temperature variable (expected in Kelvin).
     rh_var : str, default "r"
         Name of the relative humidity variable (in %).
-    output_var : str, default "td"
+    output_var : str, default "tdp"
         Name of the dew point variable to be added to the dataset.
 
     Returns
@@ -1090,7 +1376,7 @@ def temperature_rescaling_variable_lapse_rate(
     era5_dem: xr.DataArray | None
         ERA5 Data
     lr_ta: xr.
-    lr_tdp :ERA5Var
+    lr_tdp :
 
     Return
     -----------

@@ -90,6 +90,7 @@ def run_stations_process_method_4(
                 "925",
                 "950",
                 "975",
+                "1000",
             ],
         )
 

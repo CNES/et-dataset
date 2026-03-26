@@ -447,7 +447,7 @@ def plot_variable(
             go.Scatter(
                 x=df_t["time"],
                 y=df_t[f"{var}_icos"],
-                name=f"{station_name} ICOS",
+                name=" ICOS",
                 legendgroup=station_name,
                 legendgrouptitle_text=f"Station {station_name}",
             )
@@ -457,7 +457,7 @@ def plot_variable(
             go.Scatter(
                 x=df_t["time"],
                 y=df_t[f"{var}_era5"],
-                name=f"{station_name} ERA5",
+                name="ERA5",
                 legendgroup=station_name,
                 line={"dash": "dash"},
             )
@@ -467,14 +467,16 @@ def plot_variable(
             go.Scatter(
                 x=df_t["time"],
                 y=df_t[f"{var}_era5_rescaled"],
-                name=f"{station_name} ERA5 rescaled",
+                name="ERA5 rescaled",
                 legendgroup=station_name,
-                line={"dash": "dot"},
             )
         )
-
+    titles = {
+        "ta": "Air temperature (Ta) of ICOS station",
+        "td": "Dew point temperature ICOS stations",
+    }
     fig.update_layout(
-        title=f"{var} ICOS stations",
+        title=titles.get(var, f"{var} ICOS stations"),
         xaxis_title="Time",
         yaxis_title=f"{var} (°C)",
         hovermode="x unified",

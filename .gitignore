@@ -26,6 +26,8 @@ base/
 # Data
 *.tif
 *.csv
+*.xml
+*.gpkg
 !notebooks/products.csv
 !notebooks/landsat_products.csv
 !src/etdataset/data/stations_meteoL2.csv
@@ -33,6 +35,7 @@ base/
 *.nc
 *.zip
 *.zarr/
+pckg/
 
 # Package data
 !src/etdataset/data/geopotential_era5.nc
