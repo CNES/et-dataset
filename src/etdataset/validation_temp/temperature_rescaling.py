@@ -1153,18 +1153,21 @@ def interpolate_temperature_variant(
     """
     # Compute reference temperature at src_ref = 0 (or any reference level)
     # Broadcast automatically src_dem to match lapse_rate
-
+    logger.info(f"src_dem ={src_dem}")
+    logger.info(f"src_temp ={src_temp}")
+    logger.info(f"lapse_rate ={lapse_rate}")
+    # lapse_rate_bis = lapse_rate.rio.reproject_match(
+    #     src_temp, resampling=rio.enums.Resampling.nearest
+    # )
     ref_temp = src_temp - lapse_rate * src_dem
+    # ref_temp = ref_temp.transpose("time", "latitude", "longitude")
+
     # logger.info(f"CRS DE REF_TEMP :{ref_temp.rio.crs}")
     # logger.info(f"CRS DE SRC_TEMP :{src_temp.rio.crs}")
     # logger.info(f"CRS DE SRC_DEM :{src_dem.rio.crs}")
     # logger.info(f"CRS DE LAPSE_RATE :{lapse_rate.rio.crs}")
 
-    # logger.info(f"src_dem ={src_dem}")
-    # logger.info(f"src_temp ={src_temp}")
-    # logger.info(f"lapse_rate ={lapse_rate}")
-
-    # logger.info(f"ref_temp ={ref_temp}")
+    logger.info(f"ref_temp ={ref_temp}")
 
     # logger.info(f"dst_dem ={dst_dem}")
     # logger.info(f"CRS DE REF_TEMP :{ref_temp.rio.crs}")
@@ -1173,6 +1176,8 @@ def interpolate_temperature_variant(
     projected_temp = ref_temp.rio.reproject_match(
         dst_dem,
         resampling=rio.enums.Resampling.bilinear,
+        # rio.enums.Resampling.bilinear,
+        # rio.enums.Resampling.nearest,
     )
     logger.info(f"projected_temp = {projected_temp}")
     if (
@@ -1181,7 +1186,7 @@ def interpolate_temperature_variant(
         and lapse_rate.sizes["longitude"] > 1
     ):
         lr = lapse_rate.rio.reproject_match(
-            dst_dem, resampling=rio.enums.Resampling.nearest
+            dst_dem, resampling=rio.enums.Resampling.bilinear
         )
     else:
         lr = lapse_rate
@@ -1218,12 +1223,6 @@ def rescale_temperature_with_variable_lapserate(
             f"Skip {description} interpolation because DEM is missing"
         )
         return None
-
-    # Align lapse rate on ERA5 time axis (time-only)
-    # lapse_rate = lapse_rate.reindex(
-    #     time=era5_data.time,
-    #     method="nearest",
-    # )
 
     data = interpolate_temperature_variant(
         src_temp=era5_data,

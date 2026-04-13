@@ -5,6 +5,7 @@ Module for temperature rescaling
 import datetime as dt
 
 import numpy as np
+import rasterio as rio
 import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 from pyproj import CRS
@@ -26,10 +27,12 @@ from etdataset.validation_temp.temperature_rescaling import (
     compute_dewpoint_lr,
     compute_dewpoint_temp_from_e,
     compute_lapse_rate_from_2_levels,
+    compute_lapse_rate_from_2_levels_roi,
     compute_vapor_pressure,
     filter_dataset_by_hours,
     filter_dataset_by_location,
     filter_dataset_by_pressure_levels,
+    filter_dataset_by_roi,
     generate_dates,
     get_lapse_rate_monthly,
     get_saturation_vapor_pressure,
@@ -116,7 +119,7 @@ def run_stations_process_method_1(
             }
         )
         save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_rescaled")
-    return ds_era5_grid
+    return updated
 
 
 # METHOD 2
@@ -226,9 +229,137 @@ def run_stations_process_method_2(
     return ds_era5_grid
 
 
+def run_stations_process_method_2_roi(
+    start_date: dt.date,
+    end_date: dt.date,
+    step_date: int,
+    station: str,
+    list_hours: list[dt.time],
+    mnt_path: str,
+    data_path: str,
+):
+    logger.info(f"Current station : {station}")
+    cfg = get_stations_config(station)
+    lat = cfg.lat
+    lon = cfg.lon
+    for d in generate_dates(start_date, end_date, step_date):
+        logger.info(f"Current date : {d} for method 2")
+        # Get ERA5 pressure file
+        era5_xrds = read_era5_file(
+            d,
+            ERA5Dataset.ERA5PRESSURE,
+            data_path,
+        )
+        if era5_xrds is None:
+            logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
+            continue
+        era5_xrds = normalize_longitude_latitude(era5_xrds)
+        era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
+        logger.info(f"era5_filtered : {era5_filtered}")
+        logger.info(f"CRS DE era5 filtré :{era5_filtered.rio.crs}")
+
+        ########### ROI ERA5 ###################################################
+        roi_bbox, roi_crs = work_area_from_coord_point(
+            lat, lon, 50000, 50000, CRS.from_epsg(4326)
+        )["lat/lon"]
+        # logger.info(f"roi_bbox = {roi_bbox}")
+        # logger.info(f"roi crs = {roi_crs}")
+        # Filter on ROI
+        era5_roi = filter_dataset_by_roi(
+            era5_filtered, roi_bbox, CRS.from_epsg(4326)
+        )
+        logger.info(f"CRS DE era5 roi :{era5_roi.rio.crs}")
+
+        ############ RESCALING #################################################
+        # get a roi around the station
+        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+            lat, lon, 10000, 10000, CRS.from_epsg(4326)
+        )["utm"]
+        # logger.info(f"roi_bbox UTM= {roi_bbox_utm}")
+        # get dem from the roi
+        dem = get_dem_from_roi(
+            roi_bbox=roi_bbox_utm,
+            roi_crs=roi_crs_utm,
+            base_dir=mnt_path,
+            resolution=60,
+        )
+
+        ############# COMPUTE LAPSE RATE ###########################
+        era5_700_925 = filter_dataset_by_pressure_levels(
+            era5_roi, ["700", "925"]
+        )
+
+        era5_700_925 = add_dewpoint_to_ds(era5_700_925)
+
+        lr_t = compute_lapse_rate_from_2_levels_roi(era5_700_925)
+        lr_td = compute_lapse_rate_from_2_levels_roi(era5_700_925, "td")
+
+        logger.info(f"ICOS's elevation: {cfg.elev}")
+        high_alt = dem["height"] > 1500
+
+        # ERA5 850 hPa
+        era5_850 = filter_dataset_by_pressure_levels(era5_filtered, ["850"])
+        era5_850 = add_dewpoint_to_ds(era5_850)
+        era5_850 = era5_850.rio.write_crs(CRS(4326))
+
+        new_dem, era5_dem_high, updated_data = prepare_temperature_inputs(
+            data=dem,
+            era5_data=normalize_longitude_latitude(era5_850, target="0_360"),
+            dataset=ERA5Dataset.ERA5PRESSURE,
+        )
+
+        updated_high = temperature_rescaling_variable_lapse_rate(
+            updated_data=updated_data,
+            dataset=ERA5Dataset.ERA5PRESSURE,
+            dem=new_dem,
+            era5_data=era5_850,
+            era5_dem=era5_dem_high,
+            lr_ta=lr_t,
+            lr_tdp=lr_td,
+        )
+        # ERA5 surface
+        era5_surface = read_era5_file(
+            d,
+            ERA5Dataset.ERA5,
+            "out",
+        )
+        if era5_surface is None:
+            logger.warning("Skipping date %s (ERA5 unavailable)", d)
+            continue
+        era5_surface = normalize_longitude_latitude(era5_surface)
+
+        era5_surface_h = filter_dataset_by_hours(era5_surface, d, list_hours)
+        era5_surface_h = era5_surface_h.rio.write_crs(CRS(4326))
+
+        new_dem, era5_dem_low, updated_data = prepare_temperature_inputs(
+            data=dem,
+            era5_data=normalize_longitude_latitude(
+                era5_surface_h, target="0_360"
+            ),
+            dataset=ERA5Dataset.ERA5,
+        )
+        logger.info(f"new_dem = {new_dem}")
+        logger.info(f"updated_data = {updated_data}")
+
+        # logger.info(f"Dims new_dem : {new_dem.rio.crs}")
+        updated_low = temperature_rescaling_variable_lapse_rate(
+            updated_data=updated_data,
+            dataset=ERA5Dataset.ERA5,
+            dem=new_dem,
+            era5_data=era5_surface_h,  # new_era5,
+            era5_dem=era5_dem_low,  # new_era5["height"],
+            lr_ta=lr_t.rio.write_crs(CRS(4326)),
+            lr_tdp=lr_td.rio.write_crs(CRS(4326)),
+        )
+
+        logger.info(f"updated_low = {updated_low}")
+
+        result = xr.where(high_alt, updated_high, updated_low)
+
+    return result
+
+
 # METHOD 3
-
-
 def run_stations_process_method_3(
     start_date: dt.date,
     end_date: dt.date,
@@ -349,9 +480,143 @@ def run_stations_process_method_3(
     return ds_era5_grid
 
 
+def run_stations_process_method_3_roi(
+    start_date: dt.date,
+    end_date: dt.date,
+    step_date: int,
+    station: str,
+    list_hours: list[dt.time],
+    mnt_path: str,
+    data_path: str,
+):
+    logger.info(f"Current station : {station}")
+    cfg = get_stations_config(station)
+    lat = cfg.lat
+    lon = cfg.lon
+    for d in generate_dates(start_date, end_date, step_date):
+        logger.info(f"Current date : {d} for method 2")
+        # Get ERA5 pressure file
+        era5_xrds = read_era5_file(
+            d,
+            ERA5Dataset.ERA5PRESSURE,
+            data_path,
+        )
+        if era5_xrds is None:
+            logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
+            continue
+        era5_xrds = normalize_longitude_latitude(era5_xrds)
+        era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
+        logger.info(f"era5_filtered : {era5_filtered}")
+        logger.info(f"CRS DE era5 filtré :{era5_filtered.rio.crs}")
+
+        ########### ROI ERA5 ###################################################
+        roi_bbox, roi_crs = work_area_from_coord_point(
+            lat, lon, 50000, 50000, CRS.from_epsg(4326)
+        )["lat/lon"]
+        # logger.info(f"roi_bbox = {roi_bbox}")
+        # logger.info(f"roi crs = {roi_crs}")
+        # Filter on ROI
+        era5_roi = filter_dataset_by_roi(
+            era5_filtered, roi_bbox, CRS.from_epsg(4326)
+        )
+        logger.info(f"CRS DE era5 roi :{era5_roi.rio.crs}")
+
+        ############ RESCALING #################################################
+        # get a roi around the station
+        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+            lat, lon, 10000, 10000, CRS.from_epsg(4326)
+        )["utm"]
+        # logger.info(f"roi_bbox UTM= {roi_bbox_utm}")
+        # get dem from the roi
+        dem = get_dem_from_roi(
+            roi_bbox=roi_bbox_utm,
+            roi_crs=roi_crs_utm,
+            base_dir=mnt_path,
+            resolution=60,
+        )
+
+        logger.info(f"ICOS's elevation: {cfg.elev}")
+        high_alt = dem["height"] > 1500
+        # ERA5 850 hPa
+        era5_850 = filter_dataset_by_pressure_levels(era5_filtered, ["850"])
+        era5_850 = add_dewpoint_to_ds(era5_850)
+        era5_850 = era5_850.rio.write_crs(CRS(4326))
+
+        # COMPUTE LAPSE RATE
+        era5_700_850 = filter_dataset_by_pressure_levels(
+            era5_roi, ["700", "850"]
+        )
+
+        era5_700_850 = add_dewpoint_to_ds(era5_700_850)
+
+        lr_t = compute_lapse_rate_from_2_levels_roi(era5_700_850)
+        lr_td = compute_lapse_rate_from_2_levels_roi(era5_700_850, "td")
+
+        new_dem, era5_dem_high, updated_data = prepare_temperature_inputs(
+            data=dem,
+            era5_data=normalize_longitude_latitude(era5_850, target="0_360"),
+            dataset=ERA5Dataset.ERA5PRESSURE,
+        )
+
+        updated_high = temperature_rescaling_variable_lapse_rate(
+            updated_data=updated_data,
+            dataset=ERA5Dataset.ERA5PRESSURE,
+            dem=new_dem,
+            era5_data=era5_850,
+            era5_dem=era5_dem_high,
+            lr_ta=lr_t,
+            lr_tdp=lr_td,
+        )
+        # ERA5 surface
+        era5_surface = read_era5_file(
+            d,
+            ERA5Dataset.ERA5,
+            "out",
+        )
+        if era5_surface is None:
+            logger.warning("Skipping date %s (ERA5 unavailable)", d)
+            continue
+        era5_surface = normalize_longitude_latitude(era5_surface)
+
+        era5_surface_h = filter_dataset_by_hours(era5_surface, d, list_hours)
+        era5_surface_h = era5_surface_h.rio.write_crs(CRS(4326))
+
+        # COMPUTE LAPSE RATE
+        era5_925_850 = filter_dataset_by_pressure_levels(
+            era5_roi, ["925", "850"]
+        )
+
+        era5_925_850 = add_dewpoint_to_ds(era5_925_850)
+
+        lr_t = compute_lapse_rate_from_2_levels_roi(era5_925_850)
+        lr_td = compute_lapse_rate_from_2_levels_roi(era5_925_850, "td")
+
+        new_dem, era5_dem_low, updated_data = prepare_temperature_inputs(
+            data=dem,
+            era5_data=normalize_longitude_latitude(
+                era5_surface_h, target="0_360"
+            ),
+            dataset=ERA5Dataset.ERA5,
+        )
+        logger.info(f"new_dem = {new_dem}")
+        logger.info(f"updated_data = {updated_data}")
+
+        # logger.info(f"Dims new_dem : {new_dem.rio.crs}")
+        updated_low = temperature_rescaling_variable_lapse_rate(
+            updated_data=updated_data,
+            dataset=ERA5Dataset.ERA5,
+            dem=new_dem,
+            era5_data=era5_surface_h,  # new_era5,
+            era5_dem=era5_dem_low,  # new_era5["height"],
+            lr_ta=lr_t.rio.write_crs(CRS(4326)),
+            lr_tdp=lr_td.rio.write_crs(CRS(4326)),
+        )
+        logger.info(f"updated_low = {updated_low}")
+        result = xr.where(high_alt, updated_high, updated_low)
+    return result
+
+
 # METHOD 4
-
-
 def run_stations_process_method_4(
     start_date: dt.date,
     end_date: dt.date,
@@ -427,13 +692,17 @@ def run_stations_process_method_4(
         )
         z_station = dem["height"].sel(x=x, y=y, method="nearest")
         # GET ERA5 ELEVATION
+        era5_data_origin = normalize_longitude_latitude(
+            era5_data, target="0_360"
+        )
+
         z_surface = get_era5_dem()
         z_surface = xr.DataArray(
             z_surface.data,
             dims=("latitude", "longitude"),
             coords={
-                "latitude": era5_data.latitude,
-                "longitude": era5_data.longitude,
+                "latitude": era5_data_origin.latitude,
+                "longitude": era5_data_origin.longitude,
             },
         ).rio.write_crs(CRS(4326))
         z_surface_ds = z_surface.to_dataset(name="elevation")
@@ -531,6 +800,139 @@ def run_stations_process_method_4(
     return ds_out
 
 
+def run_stations_process_method_4_roi(
+    start_date: dt.date,
+    end_date: dt.date,
+    step_date: int,
+    station: str,
+    list_hours: list[dt.time],
+    mnt_path: str,
+    data_path: str,
+):
+
+    logger.info(f"Current station : {station}")
+
+    cfg = get_stations_config(station)
+    lat = cfg.lat
+    lon = cfg.lon
+    for d in generate_dates(start_date, end_date, step_date):
+        logger.info(f"Date: {d}")
+        logger.info(f"Station elevation: {cfg.elev}")
+
+        ################################ READ ERA5 PRESSURE
+        era5_pressure = read_era5_file(d, ERA5Dataset.ERA5PRESSURE, data_path)
+        if era5_pressure is None:
+            logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
+            continue
+        era5_pressure = normalize_longitude_latitude(era5_pressure)
+        era5_pressure = filter_dataset_by_hours(era5_pressure, d, list_hours)
+        era5_pressure = filter_dataset_by_pressure_levels(
+            era5_pressure,
+            [
+                "700",
+                "725",
+                "750",
+                "775",
+                "800",
+                "825",
+                "850",
+                "875",
+                "900",
+                "925",
+                "950",
+                "975",
+                "1000",
+            ],
+        )
+        era5_pressure = add_dewpoint_to_ds(era5_pressure)
+        # FILTER ERA5 PRESSURE ON ROI
+        roi_bbox, roi_crs = work_area_from_coord_point(
+            lat, lon, 50000, 50000, CRS.from_epsg(4326)
+        )["lat/lon"]
+        era5_roi_pre = filter_dataset_by_roi(
+            era5_pressure, roi_bbox, CRS.from_epsg(4326)
+        )
+        logger.info(f"CRS DE era5 roi :{era5_roi_pre.rio.crs}")
+
+        ############################### GET DEM
+        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+            cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
+        )["utm"]
+
+        # get dem from the roi
+        dem = get_dem_from_roi(
+            roi_bbox=roi_bbox_utm,
+            roi_crs=roi_crs_utm,
+            base_dir=mnt_path,
+            resolution=60,
+        )
+        logger.info(f"CRS DE DEM :{dem.rio.crs}")
+
+        ds = era5_roi_pre.copy()
+        ds = ds.rio.write_crs(CRS(4326))
+        ds["height"] = ds["z"] / G_CST
+        height = ds["z"] / G_CST
+        logger.info(f"ds : {ds}")
+        ds["height"].rio.write_crs(ds.rio.crs, inplace=True)
+        logger.info(f"dem avant = {dem}")
+        dem_h = dem.get("height", None)
+        crs = dem.rio.crs
+        logger.info(f"crs: {crs}")
+        if dem_h is not None:
+            dem_h = dem_h.rio.write_crs(crs)
+
+        z_min = float(ds["height"].min())
+        z_max = float(ds["height"].max())
+
+        z = np.arange(z_min, z_max, 100)
+        logger.info(f"z = {z}")
+
+        t_interp = np.full(
+            (len(z), len(ds.latitude), len(ds.longitude)),
+            np.nan,
+        )
+        # logger.info(f"t_interp={t_interp}")
+        logger.info(f"ds = {ds}")
+
+        for i in range(len(ds.latitude.values)):
+            for j in range(len(ds.longitude.values)):
+                logger.info(f" i = {i} et j = {j}")
+
+                z_profile = height[0, :, i, j].values
+                logger.info(f"z_profile = {z_profile}")
+
+                t_profile = ds["t"][0, :, i, j].values
+                logger.info(f"t_profile = {t_profile}")
+
+                idx = np.argsort(z_profile)
+                z_profile = z_profile[idx]
+                t_profile = t_profile[idx]
+                logger.info(f"z_profile = {z_profile}")
+                logger.info(f"t_profile = {t_profile}")
+
+                # interpolation des températures sur les z
+                t_interp[:, i, j] = np.interp(
+                    z,
+                    z_profile,
+                    t_profile,
+                )
+        logger.info(f"t_interp = {t_interp}")
+
+        temp = xr.DataArray(
+            t_interp,
+            dims=("z", "latitude", "longitude"),
+            coords={"z": z, "latitude": ds.latitude, "longitude": ds.longitude},
+        )
+        logger.info(f"temp = {temp}")
+        temp = temp.rio.write_crs(CRS(4326))
+        temp = temp.rio.reproject_match(
+            dem_h, resampling=rio.enums.Resampling.bilinear
+        )
+        logger.info(f"temp after reprojection = {temp}")
+        res = temp.interp(z=dem_h, kwargs={"fill_value": "extrapolate"})
+        logger.info(f"res={res}")
+
+
 # METHOD 5
 def run_stations_process_method_5(
     start_date: dt.date,
@@ -612,13 +1014,17 @@ def run_stations_process_method_5(
         )
         z_station = dem["height"].sel(x=x, y=y, method="nearest")
         # GET ERA5 ELEVATION
+        era5_data_origin = normalize_longitude_latitude(
+            era5_data, target="0_360"
+        )
+
         z_surface = get_era5_dem()
         z_surface = xr.DataArray(
             z_surface.data,
             dims=("latitude", "longitude"),
             coords={
-                "latitude": era5_data.latitude,
-                "longitude": era5_data.longitude,
+                "latitude": era5_data_origin.latitude,
+                "longitude": era5_data_origin.longitude,
             },
         ).rio.write_crs(CRS(4326))
         z_surface_ds = z_surface.to_dataset(name="elevation")
@@ -649,10 +1055,19 @@ def run_stations_process_method_5(
             z_station_rel = z_station
             z_levels_rel = hourly_pressure["z"].values / G_CST
 
-            z_2m_rel = 2.0 + z_surface_t
+            z_2m_rel = z_surface_t
 
             # VARIABLES
             T_levels = hourly_pressure["t"].values
+
+            # FILTRE
+            threshold = 100  # en mètres
+            dist_to_2m = np.abs(z_levels_rel - z_2m_rel.values)
+            mask = dist_to_2m > threshold
+
+            # appliquer le filtre
+            z_clean = z_levels_rel[mask]
+            T_clean = T_levels[mask]
 
             # recalcul pression de vapeur pour CE pas de temps
             T_levels_c = kelvin_to_celsius(hourly_pressure["t"].values)
@@ -666,9 +1081,8 @@ def run_stations_process_method_5(
 
             Td_2m = kelvin_to_celsius(hourly_surface["d2m"].values)
 
-            z_clean = z_levels_rel
-            T_clean = T_levels
             Td_clean = compute_dewpoint_temp_from_e(e_levels)
+            Td_clean = Td_clean[mask]
             if len(z_clean) < 2:
                 ta_out.append(np.nan)
                 td_out.append(np.nan)
@@ -700,6 +1114,7 @@ def run_stations_process_method_5(
             )
             T_station = f_t(z_station_rel)
             Td_station = f_td(z_station_rel)
+            logger.info(f"T_station = {T_station}")
 
             ta_out.append(T_station)
             td_out.append(Td_station)
@@ -733,6 +1148,189 @@ def run_stations_process_method_5(
         )
         ds.append(ds_out)
     return ds_out
+
+
+def run_stations_process_method_5_roi(
+    start_date: dt.date,
+    end_date: dt.date,
+    step_date: int,
+    station: str,
+    list_hours: list[dt.time],
+    mnt_path: str,
+    data_path: str,
+):
+    logger.info(f"Current station : {station}")
+    cfg = get_stations_config(station)
+    lat = cfg.lat
+    lon = cfg.lon
+    for d in generate_dates(start_date, end_date, step_date):
+        logger.info(f"Date: {d}")
+        logger.info(f"Station elevation: {cfg.elev}")
+
+        ################################ READ ERA5 PRESSURE
+        era5_pressure = read_era5_file(d, ERA5Dataset.ERA5PRESSURE, data_path)
+        if era5_pressure is None:
+            logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
+            continue
+        era5_pressure = normalize_longitude_latitude(era5_pressure)
+        era5_pressure = filter_dataset_by_hours(era5_pressure, d, list_hours)
+        era5_pressure = filter_dataset_by_pressure_levels(
+            era5_pressure,
+            [
+                "700",
+                "725",
+                "750",
+                "775",
+                "800",
+                "825",
+                "850",
+                "875",
+                "900",
+                "925",
+                "950",
+                "975",
+            ],
+        )
+        era5_pressure = add_dewpoint_to_ds(era5_pressure)
+
+        era5_data = read_era5_file(d, ERA5Dataset.ERA5, data_path)
+        if era5_data is None:
+            logger.warning("Skipping date %s (ERA5 unavailable)", d)
+            continue
+        era5_data = normalize_longitude_latitude(era5_data)
+        era5_data = filter_dataset_by_hours(era5_data, d, list_hours)
+        # FILTER ERA5 PRESSURE ON ROI
+        roi_bbox, roi_crs = work_area_from_coord_point(
+            lat, lon, 50000, 50000, CRS.from_epsg(4326)
+        )["lat/lon"]
+        era5_roi_pre = filter_dataset_by_roi(
+            era5_pressure, roi_bbox, CRS.from_epsg(4326)
+        )
+        era5_roi_data = filter_dataset_by_roi(
+            era5_data, roi_bbox, CRS.from_epsg(4326)
+        )
+        logger.info(f"CRS DE era5 roi :{era5_roi_pre.rio.crs}")
+
+        ############################### GET DEM
+        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+            cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
+        )["utm"]
+
+        # get dem from the roi
+        dem = get_dem_from_roi(
+            roi_bbox=roi_bbox_utm,
+            roi_crs=roi_crs_utm,
+            base_dir=mnt_path,
+            resolution=60,
+        )
+        logger.info(f"CRS DE DEM :{dem.rio.crs}")
+
+        g = 9.80665
+        ds = era5_roi_pre.copy()
+        ds = ds.rio.write_crs(CRS(4326))
+        ds["height"] = ds["z"] / g
+        height = ds["z"] / g
+        logger.info(f"ds : {ds}")
+        ds["height"].rio.write_crs(ds.rio.crs, inplace=True)
+        logger.info(f"dem avant = {dem}")
+        dem_h = dem.get("height", None)
+        crs = dem.rio.crs
+        logger.info(f"crs: {crs}")
+        if dem_h is not None:
+            dem_h = dem_h.rio.write_crs(crs)
+
+        era5_data_origin = normalize_longitude_latitude(
+            era5_data, target="0_360"
+        )
+
+        z_surface = get_era5_dem()
+        z_surface = xr.DataArray(
+            z_surface.data,
+            dims=("latitude", "longitude"),
+            coords={
+                "latitude": era5_data_origin.latitude,
+                "longitude": era5_data_origin.longitude,
+            },
+        ).rio.write_crs(CRS(4326))
+        z_surface_ds = z_surface.to_dataset(name="height")
+        z_surface_ds = normalize_longitude_latitude(z_surface_ds)
+        z_surface = z_surface_ds["height"]
+        z_surface = filter_dataset_by_roi(
+            z_surface, roi_bbox, CRS.from_epsg(4326)
+        )
+
+        z_min = float(min(ds["height"].min().item(), z_surface.min().item()))
+        z_max = float(max(ds["height"].max().item(), z_surface.max().item()))
+        logger.info(f"zmin = {z_min}")
+        logger.info(f"zmax = {z_max}")
+        # logger.info(f"DEM MIN = {dem_h.min()}")
+        z = np.arange(z_min, z_max, 250)
+        logger.info(f"z = {z}")
+
+        t_interp = np.full(
+            (len(z), len(ds.latitude), len(ds.longitude)),
+            np.nan,
+        )
+        # logger.info(f"t_interp={t_interp}")
+        logger.info(f"ds = {ds}")
+
+        for i in range(len(ds.latitude.values)):
+            for j in range(len(ds.longitude.values)):
+                logger.info(f" i = {i} et j = {j}")
+
+                z_profile = height[0, :, i, j].values
+                logger.info(f"z_profile = {z_profile}")
+
+                t_profile = ds["t"][0, :, i, j].values
+                logger.info(f"t_profile = {t_profile}")
+
+                z_2m = z_surface[i, j].values
+                logger.info(f"z_surface = {z_2m}")
+
+                t2m = era5_roi_data["t2m"][0, i, j].values
+                logger.info(f"z_surface = {t2m}")
+                threshold = 100  # mètres
+                mask2 = np.abs(z_profile - z_2m) > threshold
+                logger.info(f"mask2 = {mask2}")
+
+                z_profile = z_profile[mask2]
+                t_profile = t_profile[mask2]
+                z_profile = np.insert(z_profile, 0, z_2m)
+                t_profile = np.insert(t_profile, 0, t2m)
+                logger.info(f"z_profile après mask2 = {z_profile}")
+                logger.info(f"t_profile après mask2 = {t_profile}")
+
+                idx = np.argsort(z_profile)
+                z_profile = z_profile[idx]
+                t_profile = t_profile[idx]
+                logger.info(f"z_profile = {z_profile}")
+                logger.info(f"t_profile = {t_profile}")
+
+                # interpolation
+                t_interp[:, i, j] = np.interp(
+                    z,
+                    z_profile,
+                    t_profile,
+                )
+        logger.info(f"t_interp = {t_interp}")
+
+        temp = xr.DataArray(
+            t_interp,
+            dims=("z", "latitude", "longitude"),
+            coords={"z": z, "latitude": ds.latitude, "longitude": ds.longitude},
+        )
+        logger.info(f"temp = {temp}")
+        temp = temp.rio.write_crs(CRS(4326))
+        temp = temp.rio.reproject_match(
+            dem_h, resampling=rio.enums.Resampling.bilinear
+        )
+        logger.info(f"temp after reprojection = {temp}")
+        # print("temp.z min:", float(temp.z.min()))
+        # print("temp.z max:", float(temp.z.max()))
+        # print("dem_h min:", float(dem_h.min()))
+        # print("dem_h max:", float(dem_h.max()))
+        res = temp.interp(z=dem_h, kwargs={"fill_value": "extrapolate"})
+        logger.info(f"res={res}")
 
 
 # METHOD 6
@@ -993,3 +1591,217 @@ def run_stations_process_method_6(
             name_dir="csv_era5_rescaled",
         )
     return ds_out
+
+
+def run_stations_process_method_6_roi(
+    start_date: dt.date,
+    end_date: dt.date,
+    step_date: int,
+    station: str,
+    list_hours: list[dt.time],
+    mnt_path: str,
+    data_path: str,
+):
+    logger.info(f"Current station : {station}")
+
+    cfg = get_stations_config(station)
+    # gdf_s = get_station_location(station)
+    # create_geopckg_from_gdf(gdf_s)
+
+    for d in generate_dates(start_date, end_date, step_date):
+        logger.info(f"Date: {d}")
+        logger.info(f"Station elevation: {cfg.elev}")
+
+        ################################ READ ERA5 PRESSURE
+        era5_pressure = read_era5_file(d, ERA5Dataset.ERA5PRESSURE, data_path)
+        if era5_pressure is None:
+            logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
+            continue
+        era5_pressure = normalize_longitude_latitude(era5_pressure)
+        era5_pressure = filter_dataset_by_hours(era5_pressure, d, list_hours)
+        era5_pressure = filter_dataset_by_pressure_levels(
+            era5_pressure,
+            [
+                "700",
+                "725",
+                "750",
+                "775",
+                "800",
+                "825",
+                "850",
+                "875",
+                "900",
+                "925",
+                "950",
+                "975",
+            ],
+        )
+        era5_pressure = add_dewpoint_to_ds(era5_pressure)
+
+        era5_data = read_era5_file(d, ERA5Dataset.ERA5, data_path)
+        if era5_data is None:
+            logger.warning("Skipping date %s (ERA5 unavailable)", d)
+            continue
+        era5_data = normalize_longitude_latitude(era5_data)
+        era5_data = filter_dataset_by_hours(era5_data, d, list_hours)
+        # FILTER ERA5 PRESSURE ON ROI
+        roi_bbox, roi_crs = work_area_from_coord_point(
+            cfg.lat, cfg.lon, 50000, 50000, CRS.from_epsg(4326)
+        )["lat/lon"]
+        era5_roi_pre = filter_dataset_by_roi(
+            era5_pressure, roi_bbox, CRS.from_epsg(4326)
+        )
+        era5_roi_data = filter_dataset_by_roi(
+            era5_data, roi_bbox, CRS.from_epsg(4326)
+        )
+        logger.info(f"CRS DE era5 roi :{era5_roi_pre.rio.crs}")
+
+        ############################### GET DEM
+        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+            cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
+        )["utm"]
+
+        # get dem from the roi
+        dem = get_dem_from_roi(
+            roi_bbox=roi_bbox_utm,
+            roi_crs=roi_crs_utm,
+            base_dir=mnt_path,
+            resolution=60,
+        )
+        logger.info(f"CRS DE DEM :{dem.rio.crs}")
+
+        g = 9.80665
+        ds = era5_roi_pre.copy()
+        ds = ds.rio.write_crs(CRS(4326))
+        ds["height"] = ds["z"] / g
+        height = ds["z"] / g
+        logger.info(f"ds : {ds}")
+        ds["height"].rio.write_crs(ds.rio.crs, inplace=True)
+        logger.info(f"dem avant = {dem}")
+        dem_h = dem.get("height", None)
+        crs = dem.rio.crs
+        logger.info(f"crs: {crs}")
+        if dem_h is not None:
+            dem_h = dem_h.rio.write_crs(crs)
+
+        era5_data_origin = normalize_longitude_latitude(
+            era5_data, target="0_360"
+        )
+
+        z_surface = get_era5_dem()
+        z_surface = xr.DataArray(
+            z_surface.data,
+            dims=("latitude", "longitude"),
+            coords={
+                "latitude": era5_data_origin.latitude,
+                "longitude": era5_data_origin.longitude,
+            },
+        ).rio.write_crs(CRS(4326))
+        z_surface_ds = z_surface.to_dataset(name="height")
+        z_surface_ds = normalize_longitude_latitude(z_surface_ds)
+        z_surface = z_surface_ds["height"]
+        z_surface = filter_dataset_by_roi(
+            z_surface, roi_bbox, CRS.from_epsg(4326)
+        )
+
+        z_min = float(
+            min(ds["height"].item().min(), era5_roi_data["z"].item().min())
+        )
+        z_max = float(
+            max(ds["height"].item().max(), era5_roi_data["z"].item().max())
+        )
+        logger.info(f"zmin = {z_min}")
+        logger.info(f"zmax = {z_max}")
+        # logger.info(f"DEM MIN = {dem_h.min()}")
+        z = np.arange(z_min, z_max, 250)
+        logger.info(f"z = {z}")
+
+        t_interp = np.full(
+            (len(z), len(ds.latitude), len(ds.longitude)),
+            np.nan,
+        )
+        # logger.info(f"t_interp={t_interp}")
+        logger.info(f"ds = {ds}")
+
+        for i in range(len(ds.latitude.values)):
+            for j in range(len(ds.longitude.values)):
+                logger.info(f" i = {i} et j = {j}")
+
+                z_profile = height[0, :, i, j].values
+                logger.info(f"z_profile = {z_profile}")
+
+                t_profile = ds["t"][0, :, i, j].values
+                logger.info(f"t_profile = {t_profile}")
+
+                idx = np.argsort(z_profile)
+                z_profile = z_profile[idx]
+                t_profile = t_profile[idx]
+                logger.info(f"z_profile = {z_profile}")
+                logger.info(f"t_profile = {t_profile}")
+
+                # interpolation
+                t_interp[:, i, j] = np.interp(
+                    z,
+                    z_profile,
+                    t_profile,
+                )
+        logger.info(f"t_interp = {t_interp}")
+
+        temp = xr.DataArray(
+            t_interp,
+            dims=("z", "latitude", "longitude"),
+            coords={"z": z, "latitude": ds.latitude, "longitude": ds.longitude},
+        )
+        logger.info(f"temp = {temp}")
+        temp = temp.rio.write_crs(CRS(4326))
+        temp = temp.rio.reproject_match(
+            dem_h, resampling=rio.enums.Resampling.bilinear
+        )
+        logger.info(f"temp after reprojection = {temp}")
+        # print("temp.z min:", float(temp.z.min()))
+        # print("temp.z max:", float(temp.z.max()))
+        # print("dem_h min:", float(dem_h.min()))
+        # print("dem_h max:", float(dem_h.max()))
+        res = temp.interp(z=dem_h)
+        logger.info(f"res={res}")
+
+        z_min_profile = temp.z.min()
+        z_max_profile = temp.z.max()
+
+        mask_below = dem_h < z_min_profile
+        mask_above = dem_h > z_max_profile
+        logger.info(f"Pixels sous profil: {mask_below.sum().values}")
+        logger.info(f"Pixels au-dessus profil: {mask_above.sum().values}")
+
+        if mask_below.any():
+            era5_975_950 = filter_dataset_by_pressure_levels(
+                era5_roi_pre, ["975", "950"]
+            )
+
+            era5_975_950 = add_dewpoint_to_ds(era5_975_950)
+
+            lr_t = compute_lapse_rate_from_2_levels_roi(era5_975_950)
+            lr_td = compute_lapse_rate_from_2_levels_roi(era5_975_950, "td")
+
+            new_dem, era5_dem, updated_data = prepare_temperature_inputs(
+                data=dem,
+                era5_data=normalize_longitude_latitude(
+                    era5_data, target="0_360"
+                ),
+                dataset=ERA5Dataset.ERA5,
+            )
+
+            updated_low = temperature_rescaling_variable_lapse_rate(
+                updated_data=updated_data,
+                dataset=ERA5Dataset.ERA5,
+                dem=new_dem,
+                era5_data=era5_roi_data,  # new_era5,
+                era5_dem=era5_dem,  # new_era5["height"],
+                lr_ta=lr_t.rio.write_crs(CRS(4326)),
+                lr_tdp=lr_td.rio.write_crs(CRS(4326)),
+            )
+            res = xr.where(mask_below, updated_low, res)
+        if mask_above.any():
+            logger.warning(
+                "DEM au-dessus des niveaux ERA5 : ajouter niveaux de pression"
+            )
