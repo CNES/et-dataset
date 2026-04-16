@@ -952,7 +952,7 @@ def vapor_pressure_model(z, em0, am, z0):
 # LAPSE RATE EVERY DAY
 def compute_lapse_rate_from_2_levels_roi(
     ds: xr.Dataset,
-    temperature_var: str = "t",
+    temperature_var: str = "ta",
     height_var: str = "z",
     level_dim: str = "pressure_level",
 ) -> xr.DataArray:
@@ -987,7 +987,7 @@ def compute_lapse_rate_from_2_levels_roi(
     z = ds[height_var] / G_CST
 
     # sort by height
-    order = z.mean(("time", "latitude", "longitude")).argsort()
+    order = z.mean(("latitude", "longitude")).argsort()
 
     t = t.isel({level_dim: order})
     z = z.isel({level_dim: order})
@@ -1010,7 +1010,6 @@ def compute_lapse_rate_from_2_levels_roi(
     return lapse_rate
 
 
-# LAPSE RATE EVERY DAY
 def compute_lapse_rate_from_2_levels(
     ds: xr.Dataset,
     temperature_var: str = "t",
@@ -1060,66 +1059,6 @@ def compute_lapse_rate_from_2_levels(
     lapse_rate.attrs["units"] = "°C m-1"
     lapse_rate.attrs["description"] = (
         "Temperature lapse rate between two pressure levels"
-    )
-
-    return lapse_rate
-
-
-def compute_lapse_rate_n_levels(
-    ds: xr.Dataset,
-    temperature_var: str = "t",
-    height_var: str = "z",
-    level_dim: str = "pressure_level",
-) -> xr.DataArray:
-    """
-    Compute time-dependent lapse rate between all adjacent pressure levels.
-
-    The lapse rate is computed between consecutive vertical levels:
-        (T[i+1] - T[i]) / (Z[i+1] - Z[i])
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Dataset containing multiple pressure levels.
-        Must include temperature and geopotential variables.
-    temperature_var : str
-        Name of temperature variable.
-    height_var : str
-        Name of geopotential variable.
-    level_dim : str
-        Name of pressure level dimension.
-    g : float
-        Gravitational acceleration used to convert geopotential to height.
-
-    Returns
-    -------
-    xr.DataArray
-        Lapse rate with dimensions:
-            (time, layer)
-
-        where "layer" represents the interval between two adjacent
-        pressure levels.
-    """
-
-    if ds.sizes[level_dim] < 2:
-        raise ValueError("At least two pressure levels are required.")
-
-    # Ensure physical ordering: high pressure (low altitude) first
-    ds = ds.sortby(ds[level_dim].astype(float), ascending=False)
-
-    t = ds[temperature_var]
-    z = ds[height_var] / G_CST  # convert geopotential to height (m)
-
-    # Compute vertical differences
-    dT = t.diff(level_dim)
-    dZ = z.diff(level_dim)
-
-    lapse_rate = dT / dZ
-
-    lapse_rate.name = "lapse_rate"
-    lapse_rate.attrs["units"] = "°C m-1"
-    lapse_rate.attrs["description"] = (
-        "Temperature lapse rate between adjacent pressure levels"
     )
 
     return lapse_rate

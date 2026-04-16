@@ -13,7 +13,6 @@ import logging
 import os
 from multiprocessing import Process
 
-import numpy as np
 import pandas as pd
 import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
@@ -27,23 +26,15 @@ from etdataset.icos import (
     get_stations_config,
 )
 from etdataset.logging import LoggerManager
+from etdataset.temperature import RescalTempMethod, TempVariable, add_temp
 from etdataset.utils import (
     work_area_from_coord_point,
 )
 from etdataset.validation_temp.temperature_rescaling import (
-    add_dewpoint_to_ds,
-    compute_lapse_rate_from_2_levels,
-    filter_dataset_by_hours,
-    filter_dataset_by_location,
-    filter_dataset_by_pressure_levels,
     generate_dates,
     generate_hours,
     get_ta_td_celsius_at_location,
-    normalize_longitude_latitude,
-    prepare_temperature_inputs,
-    read_era5_file,
     save_ta_td_csv,
-    temperature_rescaling_variable_lapse_rate,
 )
 
 logger = LoggerManager.get_logger(__name__)
@@ -64,185 +55,60 @@ def run_stations_process_method_6(
     logger.info(f"Current station : {station}")
 
     cfg = get_stations_config(station)
-
+    ta_out = []
+    td_out = []
+    times = []
     for d in generate_dates(start_date, end_date, step_date):
-        logger.info(f"Date: {d}")
-        logger.info(f"Station elevation: {cfg.elev}")
+        for h in list_hours:
+            date = dt.datetime.combine(d, h)
+            logger.info(f"Processing {date}")
 
-        # READ ERA5 PRESSURE
-        era5_pressure = read_era5_file(d, ERA5Dataset.ERA5PRESSURE, data_path)
-        if era5_pressure is None:
-            logger.warning("Skipping date %s (ERA5PRESSURE unavailable)", d)
-            continue
-        era5_pressure = normalize_longitude_latitude(era5_pressure)
-        # FILTER ERA5 PRESSURE BY HOURS
-        era5_pressure = filter_dataset_by_hours(era5_pressure, d, list_hours)
-        era5_pressure = filter_dataset_by_pressure_levels(
-            era5_pressure,
-            [
-                "700",
-                "725",
-                "750",
-                "775",
-                "800",
-                "825",
-                "850",
-                "875",
-                "900",
-                "925",
-                "950",
-                "975",
-            ],
-        )
-        # FILTER ERA5 PRESSURE ON LOCATION
-        era5_filt_location = filter_dataset_by_location(
-            era5_pressure, cfg.lat, cfg.lon
-        )
+            # ROI
+            roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+                cfg.lat, cfg.lon, 25000, 25000, CRS.from_epsg(4326)
+            )["utm"]
 
-        # READ ERA5 SURFACE
-        era5_data = read_era5_file(d, ERA5Dataset.ERA5, data_path)
-        if era5_data is None:
-            logger.warning("Skipping date %s (ERA5 unavailable)", d)
-            continue
-        logger.info(f"CRS DE ERA5 :{era5_data.rio.crs}")
-
-        era5_data = normalize_longitude_latitude(era5_data)
-        # logger.info(f"CRS DE ERA5 APRÈS :{era5_data.rio.crs}")
-
-        # FILTER ERA5 BY HOURS
-        era5_surface = filter_dataset_by_hours(era5_data, d, list_hours)
-        era5_surface_loc = filter_dataset_by_location(
-            era5_surface, cfg.lat, cfg.lon
-        )
-
-        logger.info(
-            f"ERA5 SURFACE AU POINT STATION T = "
-            f"{era5_surface_loc['t2m'].values}"
-        )
-        # GET DEM
-        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
-            cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
-        )["utm"]
-
-        # get dem from the roi
-        dem = get_dem_from_roi(
-            roi_bbox=roi_bbox_utm,
-            roi_crs=roi_crs_utm,
-            base_dir=mnt_path,
-            resolution=60,
-        )
-        # GRILLE
-        # GET HEIGHT OF THE STATION
-        x, y = (
-            work_area_from_coord_point(
-                cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326)
-            )["utm"][0].left,
-            work_area_from_coord_point(
-                cfg.lat, cfg.lon, 0, 0, CRS.from_epsg(4326)
-            )["utm"][0].bottom,
-        )
-        z_station_dem = dem["height"].sel(x=x, y=y, method="nearest").values
-        logger.info(f"ALTITUDE CIBLE = {z_station_dem}")
-        ta_out = []
-        td_out = []
-
-        # LOOP OVER TIME
-        for t in era5_pressure.time.values:
-            hourly_p = era5_pressure.sel(time=t)
-            hourly_p_filt_location = era5_filt_location.sel(time=t)
-            hourly_surface = era5_surface.sel(time=[t])
-
-            z_levels = hourly_p_filt_location["z"].values / G_CST
-
-            ind = np.searchsorted(z_levels, z_station_dem)
-            if ind == 0:
-                ind_bot, ind_top = ind, ind + 1
-                # si station inférieure au premier niveau, on utilise Tref=Tera5
-                # et lapse_rate entre 925 Pa et 850 Pa
-                era5_data = hourly_surface
-                dataset = ERA5Dataset.ERA5
-            else:
-                ind_bot, ind_top = ind - 1, ind
-                p_levels = hourly_p_filt_location["pressure_level"].values
-                p_bot = str(p_levels[ind_bot])
-                # dataset au niveau bottom uniquement
-                era5_data = filter_dataset_by_pressure_levels(
-                    hourly_p,
-                    [p_bot],
-                ).expand_dims(time=[t])
-                era5_data = add_dewpoint_to_ds(era5_data)
-
-                dataset = ERA5Dataset.ERA5PRESSURE
-
-            # LAPSE RATE
-            # récupérer les niveaux de pression correspondants
-            p_levels = hourly_p_filt_location["pressure_level"].values
-            p_bot = str(p_levels[ind_bot])
-            p_top = str(p_levels[ind_top])
-
-            # filtrer ERA5 sur ces deux niveaux
-            era5_filt_pressure = filter_dataset_by_pressure_levels(
-                hourly_p_filt_location,
-                [p_bot, p_top],
-            )
-            # ajouter Td
-            era5_add_dewpoint = add_dewpoint_to_ds(era5_filt_pressure)
-            ####### Get lapse rates
-            lr_t = compute_lapse_rate_from_2_levels(era5_add_dewpoint)
-            lr_td = compute_lapse_rate_from_2_levels(era5_add_dewpoint, "td")
-            # logger.info(f"new_era5 = {new_era5}")
-            # prepare inputs for rescaling
-            new_dem, era5_dem, updated_data = prepare_temperature_inputs(
-                data=dem,
-                era5_data=normalize_longitude_latitude(
-                    era5_data, target="0_360"
-                ),
-                dataset=dataset,
+            # DEM
+            data = get_dem_from_roi(
+                roi_bbox=roi_bbox_utm,
+                roi_crs=roi_crs_utm,
+                base_dir=mnt_path,
+                resolution=60,
             )
 
-            logger.info(f"LAPSE RATE = {lr_t}")
+            # attributes nécessaires
+            data.attrs["vis_date"] = date.date()
+            data.attrs["vis_time"] = date.time()
+            data.attrs["tir_date"] = date.date()
+            data.attrs["tir_time"] = date.time()
 
-            # rescaling
-            updated = temperature_rescaling_variable_lapse_rate(
-                updated_data=updated_data,
-                dataset=dataset,
-                dem=new_dem,
-                era5_data=era5_data,
-                era5_dem=era5_dem,
-                lr_ta=lr_t,
-                lr_tdp=lr_td,
+            updated = add_temp(
+                data=data,
+                path=data_path,
+                dataset=ERA5Dataset.ERA5,
+                variables=[TempVariable.TD, TempVariable.TA],
+                method=RescalTempMethod.INTERP_LR_HYBRID,
             )
-            logger.info(f"updated = {updated['ta'].values}")
             T_station, Td_station = get_ta_td_celsius_at_location(updated, cfg)
 
             ta_out.append(float(T_station.item()))
             td_out.append(float(Td_station.item()))
+            times.append(date)
 
-        ta_da = xr.DataArray(
-            ta_out,
-            coords={"time": era5_pressure.time},
-            dims=["time"],
-        )
+    ds_out = xr.Dataset(
+        {
+            "ta": ("time", ta_out),
+            "tdp": ("time", td_out),
+        },
+        coords={"time": times},
+    )
 
-        td_da = xr.DataArray(
-            td_out,
-            coords={"time": era5_pressure.time},
-            dims=["time"],
-        )
-
-        ds_out = xr.Dataset(
-            {
-                "ta": ta_da,
-                "tdp": td_da,
-            }
-        )
-
-        save_ta_td_csv(
-            ds_out,
-            cfg,
-            output,
-            name_dir="csv_era5_rescaled",
-        )
+    save_ta_td_csv(
+        ds_out,
+        cfg,
+        output,
+        name_dir="csv_era5_rescaled",
+    )
 
 
 def generate_timeseries_for_stations_multiprocess(

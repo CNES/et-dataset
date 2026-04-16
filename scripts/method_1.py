@@ -21,24 +21,20 @@ from pyproj import CRS
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
 from etdataset.era5 import ERA5Dataset
-from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
+from etdataset.icos import (
+    get_csv_with_valid_icos_stations,
+    get_stations_config,
+)
 from etdataset.logging import LoggerManager
+from etdataset.temperature import RescalTempMethod, TempVariable, add_temp
 from etdataset.utils import (
     work_area_from_coord_point,
 )
 from etdataset.validation_temp.temperature_rescaling import (
-    compute_dewpoint_lr,
-    filter_dataset_by_hours,
     generate_dates,
     generate_hours,
-    get_lapse_rate_monthly,
     get_ta_td_celsius_at_location,
-    get_vapor_pressure_monthly,
-    normalize_longitude_latitude,
-    prepare_temperature_inputs,
-    read_era5_file,
     save_ta_td_csv,
-    temperature_rescaling_constant_lapse_rate,
 )
 
 logger = LoggerManager.get_logger(__name__)
@@ -53,62 +49,64 @@ def run_stations_process_method_1(
     mnt_path: str,
     data_path: str,
     output: str,
-):  # Get metadats of the station
+):
     logger.info(f"Current station : {station}")
+    # Get metadats of the station
     cfg = get_stations_config(station)
+    ta_out = []
+    td_out = []
+    times = []
     for d in generate_dates(start_date, end_date, step_date):
-        logger.info(f"Current date : {d} for method_1")
-        era5_xrds = read_era5_file(
-            d,
-            ERA5Dataset.ERA5,
-            data_path,
-        )
-        if era5_xrds is None:
-            logger.warning(
-                "Skipping date %s because ERA5 file is unavailable", d
-            )
-            continue
-        era5_xrds = normalize_longitude_latitude(era5_xrds)
-        era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
+        for h in list_hours:
+            date = dt.datetime.combine(d, h)
+            logger.info(f"Processing {date}")
 
-        # FOR ERA5 RESCALED ####################################################
-        # get a roi around the station
-        roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
-            cfg.lat, cfg.lon, 10000, 10000, CRS.from_epsg(4326)
-        )["utm"]
-        # get dem from the roi
-        dem = get_dem_from_roi(
-            roi_bbox=roi_bbox_utm,
-            roi_crs=roi_crs_utm,
-            base_dir=mnt_path,
-            resolution=60,
-        )
-        new_dem, era5_dem, updated_data = prepare_temperature_inputs(
-            data=dem,
-            era5_data=normalize_longitude_latitude(
-                era5_filtered, target="0_360"
-            ),
-            dataset=ERA5Dataset.ERA5,
-        )
-        lr_monthly = get_lapse_rate_monthly(d)
-        coeff = get_vapor_pressure_monthly(d)
-        dp_lr_monthly = compute_dewpoint_lr(coeff)
-        updated = temperature_rescaling_constant_lapse_rate(
-            updated_data,
-            new_dem,
-            era5_filtered,
-            era5_dem,
-            lr_monthly,
-            dp_lr_monthly,
-        )
-        ta, td = get_ta_td_celsius_at_location(updated, cfg)
-        ds_era5_grid = xr.Dataset(
-            {
-                "ta": ta,
-                "tdp": td,
-            }
-        )
-        save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_rescaled")
+            # ROI
+            roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+                cfg.lat, cfg.lon, 25000, 25000, CRS.from_epsg(4326)
+            )["utm"]
+
+            # DEM
+            data = get_dem_from_roi(
+                roi_bbox=roi_bbox_utm,
+                roi_crs=roi_crs_utm,
+                base_dir=mnt_path,
+                resolution=60,
+            )
+
+            # attributes nécessaires
+            data.attrs["vis_date"] = date.date()
+            data.attrs["vis_time"] = date.time()
+            data.attrs["tir_date"] = date.date()
+            data.attrs["tir_time"] = date.time()
+
+            updated = add_temp(
+                data=data,
+                path=data_path,
+                dataset=ERA5Dataset.ERA5,
+                variables=[TempVariable.TD, TempVariable.TA],
+                method=RescalTempMethod.MONTHLY_LR,
+            )
+            T_station, Td_station = get_ta_td_celsius_at_location(updated, cfg)
+
+            ta_out.append(float(T_station.item()))
+            td_out.append(float(Td_station.item()))
+            times.append(date)
+
+    ds_out = xr.Dataset(
+        {
+            "ta": ("time", ta_out),
+            "tdp": ("time", td_out),
+        },
+        coords={"time": times},
+    )
+
+    save_ta_td_csv(
+        ds_out,
+        cfg,
+        output,
+        name_dir="csv_era5_rescaled",
+    )
 
 
 def generate_timeseries_for_stations_multiprocess(
