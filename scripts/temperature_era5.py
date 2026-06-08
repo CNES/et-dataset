@@ -70,7 +70,7 @@ def run_stations_process(
         ds_era5_grid = xr.Dataset(
             {
                 "ta": ta,
-                "tdp": td,
+                "td": td,
             }
         )
         # save data as csv
@@ -80,7 +80,6 @@ def run_stations_process(
 def generate_timeseries_for_stations_multiprocess(
     start_date: dt.date,
     end_date: dt.date,
-    mnt_path: str,
     data_path: str,
     output: str,
     step_day: int = 1,
@@ -118,7 +117,6 @@ def generate_timeseries_for_stations_multiprocess(
                 step_day,
                 station_id,
                 list_hours,
-                mnt_path,
                 data_path,
                 output,
             ),
@@ -161,12 +159,6 @@ def get_parser() -> argparse.ArgumentParser:
         required=True,
     )
 
-    parser.add_argument(
-        "-p",
-        "--mnt_path",
-        type=str,
-        help="Directory of DEM tiles",
-    )
     parser.add_argument(
         "-d",
         "--data_path",
@@ -263,10 +255,6 @@ if __name__ == "__main__":
         logger.debug(f"Create output path: {args.output}")
         os.makedirs(args.output, exist_ok=True)
 
-    # DEM directory
-    if args.mnt_path is not None and not os.path.isdir(args.mnt_path):
-        raise FileNotFoundError(f"DEM directory not found {args.mnt_path}")
-
     if args.id_stations == ["all"]:
         stations = "all"
     else:
@@ -275,7 +263,6 @@ if __name__ == "__main__":
     generate_timeseries_for_stations_multiprocess(
         start_date=start_date,
         end_date=end_date,
-        mnt_path=args.mnt_path,
         data_path=args.data_path,
         output=args.output,
         step_day=args.step_day,

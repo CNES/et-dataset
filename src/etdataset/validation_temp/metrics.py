@@ -1,3 +1,5 @@
+# type: ignore
+
 #
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales /
 #            Université Paul Sabatier (UT3)
@@ -9,15 +11,23 @@ Functions for metrics
 """
 
 import os
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from sklearn.metrics import (
     mean_absolute_error,
+    mean_squared_error,
     r2_score,
     root_mean_squared_error,
 )
+
+from etdataset.icos import get_stations_config
+from etdataset.logging import LoggerManager
+
+logger = LoggerManager.get_logger(__name__)
 
 #########################################
 ##                                     ##
@@ -157,7 +167,7 @@ def compute_monthly(
 
     metrics = {
         "rmse": root_mean_squared_error,
-        "r2": r2_score,
+        # "r2": r2_score,
         "mae": mean_absolute_error,
         "mbe": compute_mean_bias_error,
         "slope": slope_forced_origin,
@@ -323,94 +333,6 @@ def compute_monthly_metrics_per_station(
     return csv_paths
 
 
-"""
-def compute_monthly_multi(
-    df: pd.DataFrame,
-    metric: str,
-    hour: list[str] | str = "all",
-    *,
-    plot: bool = False,
-):
-
-    df = df.copy()
-
-    if hour != "all":
-        if isinstance(hour, str):
-            hour = [hour]
-        df = df[df["time"].dt.strftime("%H").isin(hour)]
-
-    metrics = {
-        "rmse": root_mean_squared_error,
-        "r2": r2_score,
-        "mae": mean_absolute_error,
-        "mbe": compute_mean_bias_error,
-        "slope": slope_forced_origin,
-    }
-
-    if metric not in metrics:
-        raise ValueError(f"Metric must be one of: {list(metrics.keys())}")
-
-    f = metrics[metric]
-
-    df["month"] = df["time"].dt.to_period("M")
-
-    per_month = []
-
-    ta_methods = [
-        c for c in df.columns if c.startswith("ta_") and c not in ["ta_icos"]
-    ]
-
-    tdp_methods = [
-        c for c in df.columns if c.startswith("tdp_") and c not in ["tdp_icos"]
-    ]
-
-    for month, group in df.groupby("month"):
-        row: dict[str, float | int | str] = {"month": str(month)}
-
-        # ---------------- TA ----------------
-
-        ta_valid = group.dropna(subset=["ta_icos"])
-        row["n_points_ta"] = len(ta_valid)
-
-        for c in ta_methods:
-            valid = ta_valid[[c, "ta_icos"]].dropna()
-
-            if valid.empty:
-                continue
-
-            val = f(valid["ta_icos"], valid[c])
-
-            method = c.replace("ta_", "")
-
-            row[f"ta_{metric}_{method}"] = val
-            row[f"ta_{metric}_{method}_min"] = valid[c].min()
-            row[f"ta_{metric}_{method}_max"] = valid[c].max()
-
-        # ---------------- TDP ----------------
-
-        tdp_valid = group.dropna(subset=["tdp_icos"])
-        row["n_points_tdp"] = len(tdp_valid)
-
-        for c in tdp_methods:
-            valid = tdp_valid[[c, "tdp_icos"]].dropna()
-
-            if valid.empty:
-                continue
-
-            val = f(valid["tdp_icos"], valid[c])
-
-            method = c.replace("tdp_", "")
-
-            row[f"tdp_{metric}_{method}"] = val
-            row[f"tdp_{metric}_{method}_min"] = valid[c].min()
-            row[f"tdp_{metric}_{method}_max"] = valid[c].max()
-
-        per_month.append(row)
-
-    return pd.DataFrame(per_month)
-"""
-
-
 def compute_monthly_multi(
     df: pd.DataFrame,
     metrics: list[str] | str | None = None,
@@ -433,7 +355,7 @@ def compute_monthly_multi(
     # fonctions disponibles
     metric_funcs = {
         "rmse": root_mean_squared_error,
-        "r2": r2_score,
+        # "r2": r2_score,
         "mae": mean_absolute_error,
         "mbe": compute_mean_bias_error,
         "slope": slope_forced_origin,
@@ -739,3 +661,490 @@ def plot_slope_scatter_all_stations(
             plt.grid(True)
             plt.tight_layout()
             plt.show()
+
+
+cluster_results = [
+    {"station": "BE-Bra", "altitude": np.float64(16.0), "cluster": 2},
+    {"station": "BE-Vie", "altitude": np.float64(490.0), "cluster": 0},
+    {"station": "BE-Lcr", "altitude": np.float64(6.25), "cluster": 2},
+    {"station": "BE-Dor", "altitude": np.float64(253.0), "cluster": 2},
+    {"station": "CH-Dav", "altitude": np.float64(1637.0), "cluster": 1},
+    {"station": "CH-BaK", "altitude": np.float64(273.0), "cluster": 2},
+    {"station": "CZ-wet", "altitude": np.float64(426.0), "cluster": 0},
+    {"station": "CZ-BK1", "altitude": np.float64(881.0), "cluster": 0},
+    {"station": "DE-RuW", "altitude": np.float64(610.0), "cluster": 0},
+    {"station": "DE-Tha", "altitude": np.float64(380.0), "cluster": 2},
+    {"station": "DE-RuS", "altitude": np.float64(106.0), "cluster": 2},
+    {"station": "DE-Har", "altitude": np.float64(201.0), "cluster": 2},
+    {"station": "DE-Brs", "altitude": np.float64(78.0), "cluster": 2},
+    {"station": "DE-Geb", "altitude": np.float64(163.0), "cluster": 2},
+    {"station": "DK-Vng", "altitude": np.float64(67.7), "cluster": 2},
+    {"station": "DK-Skj", "altitude": np.float64(2.0), "cluster": 2},
+    {"station": "DK-Gds", "altitude": np.float64(86.0), "cluster": 2},
+    {"station": "ES-LMa", "altitude": np.float64(265.0), "cluster": 2},
+    {"station": "FI-Tvm", "altitude": np.float64(1.0), "cluster": 2},
+    {"station": "FI-Sii", "altitude": np.float64(164.0), "cluster": 2},
+    {"station": "FI-Kmp", "altitude": np.float64(26.0), "cluster": 2},
+    {"station": "FI-Ken", "altitude": np.float64(347.0), "cluster": 2},
+    {"station": "FR-Tou", "altitude": np.float64(158.0), "cluster": 2},
+    {"station": "FR-Mej", "altitude": np.float64(40.0), "cluster": 2},
+    {"station": "FR-Lus", "altitude": np.float64(154.0), "cluster": 2},
+    {"station": "FR-Lqu", "altitude": np.float64(1040.0), "cluster": 0},
+    {"station": "FR-Hes", "altitude": np.float64(310.0), "cluster": 2},
+    {"station": "FR-Gri", "altitude": np.float64(125.0), "cluster": 2},
+    {"station": "FR-EM2", "altitude": np.float64(85.0), "cluster": 2},
+    {"station": "FR-CLt", "altitude": np.float64(2050.6), "cluster": 1},
+    {"station": "FR-Bil", "altitude": np.float64(39.18), "cluster": 2},
+    {"station": "UK-AMo", "altitude": np.float64(268.0), "cluster": 2},
+    {"station": "GF-Guy", "altitude": np.float64(40.0), "cluster": 2},
+    {"station": "GL-ZaH", "altitude": np.float64(41.0), "cluster": 2},
+    {"station": "GL-ZaF", "altitude": np.float64(42.0), "cluster": 2},
+    {"station": "GR-HeM", "altitude": np.float64(69.0), "cluster": 2},
+    {"station": "GR-HeK", "altitude": np.float64(30.0), "cluster": 2},
+    {"station": "IT-TrF", "altitude": np.float64(2100.0), "cluster": 1},
+    {"station": "IT-Tor", "altitude": np.float64(2168.0), "cluster": 1},
+    {"station": "IT-SR2", "altitude": np.float64(4.0), "cluster": 2},
+    {"station": "IT-Ren", "altitude": np.float64(1744.0), "cluster": 1},
+    {"station": "IT-OXm", "altitude": np.float64(66.0), "cluster": 2},
+    {"station": "IT-Niv", "altitude": np.float64(2750.0), "cluster": 1},
+    {"station": "IT-MBo", "altitude": np.float64(1550.0), "cluster": 1},
+    {"station": "IT-BCi", "altitude": np.float64(10.0), "cluster": 2},
+    {"station": "NL-Loo", "altitude": np.float64(33.0), "cluster": 2},
+    {"station": "NO-Hur", "altitude": np.float64(275.1308), "cluster": 2},
+    {"station": "SE-Htm", "altitude": np.float64(115.0), "cluster": 2},
+]
+
+# mapping station -> cluster
+station_to_cluster = {d["station"]: d["cluster"] for d in cluster_results}
+
+
+def altitude_class(station, station_to_cluster):
+    """
+    Retourne la classe d'altitude basée sur le clustering KMeans.
+    """
+
+    cluster = station_to_cluster.get(station)
+
+    if cluster is None:
+        raise ValueError(f"Station {station} not found")
+
+    # mapping cluster -> label
+    mapping = {
+        2: "low",
+        0: "mid",
+        1: "high",
+    }
+
+    return mapping[cluster]
+
+
+# def altitude_class(alt):
+#     if alt < 1000:
+#         return "low"
+#     if alt > 1000 and alt < 2000:
+#         return "mid"
+#     return "high"
+
+
+def filter_hours(df: pd.DataFrame, hour):
+    if hour == "all" or hour is None:
+        return df
+
+    if isinstance(hour, str):
+        hour = [hour]
+
+    df_filtered = df[df["time"].dt.strftime("%H").isin(hour)]
+
+    # fallback si vide
+    if df_filtered.empty:
+        return df
+
+    return df_filtered
+
+
+METRICS = {
+    "rmse": root_mean_squared_error,
+    "r2": r2_score,
+    "mae": mean_absolute_error,
+    "mbe": compute_mean_bias_error,
+    "slope": slope_forced_origin,
+}
+
+
+def compute_by_altitude(
+    stations_ts: dict[str, pd.DataFrame],
+    metrics=("rmse", "mae", "mbe"),
+    hour="all",
+):
+
+    if isinstance(metrics, str):
+        metrics = [metrics]
+
+    rows = []
+    enriched = []
+
+    # ==========================
+    # 1. ENRICHMENT
+    # ==========================
+    for station, df in stations_ts.items():
+        cfg = get_stations_config(station)
+        alt = cfg.elev
+
+        if alt is None:
+            continue
+
+        df_ = df.copy()
+        df_["station"] = station
+        df_["category"] = altitude_class(
+            station, station_to_cluster
+        )  # altitude_class(alt)
+        df_["time"] = pd.to_datetime(df_["time"])
+        df_["month"] = df_["time"].dt.to_period("M")
+
+        enriched.append(df_)
+
+    if not enriched:
+        return pd.DataFrame()
+
+    df_all = pd.concat(enriched, ignore_index=True)
+    df_all = filter_hours(df_all, hour)
+
+    if df_all.empty:
+        return pd.DataFrame()
+
+    # ==========================
+    # 2. DETECT METHODS
+    # ==========================
+    ta_methods = [
+        c for c in df_all.columns if c.startswith("ta_") and c != "ta_icos"
+    ]
+    tdp_methods = [
+        c for c in df_all.columns if c.startswith("tdp_") and c != "tdp_icos"
+    ]
+
+    # ==========================
+    # 3. GROUPING
+    # ==========================
+    for (category, month), g in df_all.groupby(["category", "month"]):
+        row = {
+            "category": category,
+            "month": str(month),
+            "n_points_ta": g["ta_icos"].notna().sum(),
+            "n_points_tdp": g["tdp_icos"].notna().sum(),
+        }
+
+        # ======================
+        # TA (pondéré)
+        # ======================
+        for col in ta_methods:
+            method = col.replace("ta_", "")
+
+            mask = g["ta_icos"].notna() & g[col].notna()
+            if mask.sum() == 0:
+                continue
+
+            y_true = g.loc[mask, "ta_icos"]
+            y_pred = g.loc[mask, col]
+
+            errors = y_pred - y_true
+
+            weights = np.ones_like(errors)  # pondération uniforme (modifiable)
+
+            for m in metrics:
+                if m == "mae":
+                    val = np.average(np.abs(errors), weights=weights)
+                elif m == "mbe":
+                    val = np.average(errors, weights=weights)
+                elif m == "rmse":
+                    val = np.sqrt(np.average(errors**2, weights=weights))
+                else:
+                    val = METRICS[m](y_true, y_pred)
+
+                row[f"ta_{m}_{method}"] = val
+
+        # ======================
+        # TDP (pondéré)
+        # ======================
+        for col in tdp_methods:
+            method = col.replace("tdp_", "")
+
+            mask = g["tdp_icos"].notna() & g[col].notna()
+            if mask.sum() == 0:
+                continue
+
+            y_true = g.loc[mask, "tdp_icos"]
+            y_pred = g.loc[mask, col]
+
+            errors = y_pred - y_true
+            weights = np.ones_like(errors)
+
+            for m in metrics:
+                if m == "mae":
+                    val = np.average(np.abs(errors), weights=weights)
+                elif m == "mbe":
+                    val = np.average(errors, weights=weights)
+                elif m == "rmse":
+                    val = np.sqrt(np.average(errors**2, weights=weights))
+                else:
+                    val = METRICS[m](y_true, y_pred)
+
+                row[f"tdp_{m}_{method}"] = val
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+def compute_metrics(
+    measured: npt.ArrayLike, estimated: npt.ArrayLike
+) -> tuple[float, float, float, float, float]:
+    """
+    Compute slope, mbe, mae, rmse, r2
+    """
+
+    idx = np.isfinite(measured) & np.isfinite(estimated)
+    if idx.sum() < 2:
+        return (np.nan, np.nan, np.nan, np.nan, np.nan)
+
+    slope, _ = np.polyfit(measured[idx], estimated[idx], 1)
+    mbe = np.nanmean(estimated - measured)
+    mae = mean_absolute_error(measured[idx], estimated[idx])
+    rmse = np.sqrt(mean_squared_error(measured[idx], estimated[idx]))
+    r2 = r2_score(measured[idx], estimated[idx])
+    return (slope, mbe, mae, rmse, r2)
+
+
+def compute_monthly_metrics_stations(
+    stations_data: dict[str, pd.DataFrame],
+    output_dir: str = "monthly_metrics",
+) -> dict[str, pd.DataFrame]:
+    """
+    Compute monthly metrics for all methods and all stations.
+
+    Parameters
+    ----------
+    stations_data : dict[str, pd.DataFrame]
+        Dictionary of station DataFrames.
+
+    output_dir : str
+        Directory where CSV files are saved.
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Dictionary containing metrics DataFrames for each station.
+    """
+
+    ta_methods = [
+        "ta_era5",
+        "ta_base",
+        "ta_method_1",
+        "ta_method_2",
+        "ta_method_3",
+        "ta_method_4",
+        "ta_method_5",
+        "ta_method_6",
+    ]
+
+    tdp_methods = [
+        "tdp_era5",
+        "tdp_base",
+        "tdp_method_1",
+        "tdp_method_2",
+        "tdp_method_3",
+        "tdp_method_4",
+        "tdp_method_5",
+        "tdp_method_6",
+    ]
+
+    output_path = Path(output_dir)
+    output_path.mkdir(exist_ok=True)
+
+    all_results = {}
+
+    for station, df in stations_data.items():
+        df_ = df.copy()
+
+        # datetime
+        df_["time"] = pd.to_datetime(df_["time"])
+
+        # monthly grouping
+        df_["month"] = df_["time"].dt.to_period("M")
+
+        results = []
+
+        for month, group in df_.groupby("month"):
+            # -----------------------------
+            # Air temperature
+            # -----------------------------
+            for method in ta_methods:
+                if method not in group.columns:
+                    continue
+
+                idx = np.isfinite(group["ta_icos"]) & np.isfinite(group[method])
+
+                slope, mbe, mae, rmse, r2 = compute_metrics(
+                    measured=group["ta_icos"].values,
+                    estimated=group[method].values,
+                )
+
+                results.append(
+                    {
+                        "month": str(month),
+                        "variable": "ta",
+                        "method": method,
+                        "slope": slope,
+                        "mbe": mbe,
+                        "mae": mae,
+                        "rmse": rmse,
+                        "r2": r2,
+                        "n": idx.sum(),
+                    }
+                )
+
+            # -----------------------------
+            # Dew point temperature
+            # -----------------------------
+            for method in tdp_methods:
+                if method not in group.columns:
+                    continue
+
+                idx = np.isfinite(group["tdp_icos"]) & np.isfinite(
+                    group[method]
+                )
+
+                slope, mbe, mae, rmse, r2 = compute_metrics(
+                    measured=group["tdp_icos"].values,
+                    estimated=group[method].values,
+                )
+
+                results.append(
+                    {
+                        "month": str(month),
+                        "variable": "tdp",
+                        "method": method,
+                        "slope": slope,
+                        "mbe": mbe,
+                        "mae": mae,
+                        "rmse": rmse,
+                        "r2": r2,
+                        "n": idx.sum(),
+                    }
+                )
+
+        metrics_df = pd.DataFrame(results)
+
+        # save csv
+        csv_file = output_path / f"{station}_monthly_metrics.csv"
+        metrics_df.to_csv(csv_file, index=False)
+
+        all_results[station] = metrics_df
+
+        logger.info(f"Saved: {csv_file}")
+
+    return all_results
+
+
+def compute_global_monthly_metrics(
+    stations_data: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """
+    Compute monthly metrics across ALL stations
+    for all available methods.
+
+    Returns
+    -------
+    pd.DataFrame
+        Global monthly metrics.
+    """
+
+    all_dfs = []
+
+    # -----------------------------------------
+    # concat toutes les stations
+    # -----------------------------------------
+    for station, df in stations_data.items():
+        tmp = df.copy()
+
+        tmp["station"] = station
+        tmp["time"] = pd.to_datetime(tmp["time"])
+        tmp["month"] = tmp["time"].dt.to_period("M")
+
+        all_dfs.append(tmp)
+
+    df_all = pd.concat(all_dfs, ignore_index=True)
+
+    # -----------------------------------------
+    # méthodes disponibles
+    # -----------------------------------------
+    ta_methods = [
+        c for c in df_all.columns if c.startswith("ta_") and c != "ta_icos"
+    ]
+
+    tdp_methods = [
+        c for c in df_all.columns if c.startswith("tdp_") and c != "tdp_icos"
+    ]
+
+    rows = []
+
+    # -----------------------------------------
+    # boucle sur les mois
+    # -----------------------------------------
+    for month, group in df_all.groupby("month"):
+        # -----------------------------
+        # TA metrics
+        # -----------------------------
+        for method in ta_methods:
+            idx = group["ta_icos"].notna() & group[method].notna()
+
+            if idx.sum() < 2:
+                continue
+
+            slope, mbe, mae, rmse, r2 = compute_metrics(
+                measured=group.loc[idx, "ta_icos"],
+                estimated=group.loc[idx, method],
+            )
+
+            rows.append(
+                {
+                    "month": str(month),
+                    "variable": "ta",
+                    "method": method,
+                    "n": idx.sum(),
+                    "slope": slope,
+                    "mbe": mbe,
+                    "mae": mae,
+                    "rmse": rmse,
+                    "r2": r2,
+                }
+            )
+
+        # -----------------------------
+        # TDP metrics
+        # -----------------------------
+        for method in tdp_methods:
+            idx = group["tdp_icos"].notna() & group[method].notna()
+
+            if idx.sum() < 2:
+                continue
+
+            slope, mbe, mae, rmse, r2 = compute_metrics(
+                measured=group.loc[idx, "tdp_icos"],
+                estimated=group.loc[idx, method],
+            )
+
+            rows.append(
+                {
+                    "month": str(month),
+                    "variable": "tdp",
+                    "method": method,
+                    "n": idx.sum(),
+                    "slope": slope,
+                    "mbe": mbe,
+                    "mae": mae,
+                    "rmse": rmse,
+                    "r2": r2,
+                }
+            )
+
+    return pd.DataFrame(rows)

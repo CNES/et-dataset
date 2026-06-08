@@ -6,15 +6,32 @@ Functions for plotting
 """
 # Skip this file with mypy
 
+import math
 import os
 from pathlib import Path
 
 import geopandas as gpd
+import matplotlib.pyplot as plt
+import numpy as np
+import numpy.typing as npt
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
+import seaborn as sns
 import xarray as xr
+from plotly.subplots import make_subplots
+from sklearn.cluster import KMeans
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    silhouette_score,
+)
+from sklearn.preprocessing import StandardScaler
 
+from etdataset.icos import get_stations_config
 from etdataset.logging import LoggerManager
+from etdataset.validation_temp.metrics import altitude_class
 
 logger = LoggerManager.get_logger(__name__)
 
@@ -524,8 +541,9 @@ def plot_station_map(gdf: gpd.GeoDataFrame):
     -------
 
     """
+    has_elev = "elev" in gdf.columns and gdf["elev"].notna().any()
     m = gdf.explore(
-        column="elev",
+        column="elev" if has_elev else None,
         tooltip="name",
         popup=True,
         legend=True,
@@ -761,7 +779,6 @@ def build_station_timeseries_multi(
 
     for station in station_names:
         logger.info(f"Station:{station}")
-        # --- ERA5 ---
         df_era5 = None
         for k, df in data["era5"].items():
             if k.startswith(station):
@@ -774,7 +791,6 @@ def build_station_timeseries_multi(
         if df_era5 is None or df_era5.empty:
             continue
 
-        # --- ICOS filtré sur ERA5 ---
         df_icos = None
         for k, df in data["icos"].items():
             if k.startswith(station):
@@ -788,7 +804,6 @@ def build_station_timeseries_multi(
 
         dfs = [df_era5, df_icos]
 
-        # --- Toutes les méthodes disponibles ---
         for method_name, method_data in data.get("methods", {}).items():
             df_m = None
             for k, df in method_data.items():
@@ -801,23 +816,39 @@ def build_station_timeseries_multi(
             if df_m is not None and not df_m.empty:
                 dfs.append(df_m)
 
-        # --- Merge ---
         df_station = dfs[0]
         logger.info(f"df_station : {df_station}")
-        for df_next in dfs[1:]:
-            df_station = pd.merge(df_station, df_next, on="time", how="left")
 
-        # --- Filtrer période ---
+        for df_next in dfs[1:]:
+            df_station = pd.merge(
+                df_station,
+                df_next,
+                on="time",
+                how="left",
+            )
+
         if start_date is not None:
             df_station = df_station[df_station["time"] >= start_date]
+
         if end_date is not None:
             df_station = df_station[df_station["time"] <= end_date]
 
-        # --- Filtrer nombre de mois minimum ---
         n_months = df_station["time"].dt.to_period("M").nunique()
-        if n_months >= min_months:
-            stations_out[station] = df_station.sort_values("time")
 
+        valid_idx = (
+            df_station["ta_icos"].notna() & df_station["tdp_icos"].notna()
+        )
+
+        valid_months = (
+            df_station.loc[valid_idx, "time"].dt.to_period("M").nunique()
+        )
+
+        logger.info(
+            f"{station} -> total months={n_months}, valid months={valid_months}"
+        )
+
+        if valid_months >= min_months:
+            stations_out[station] = df_station.sort_values("time")
     return stations_out
 
 
@@ -844,13 +875,11 @@ def plot_all_stations_timeseries(
         df = df_stations.copy()
         df["time"] = pd.to_datetime(df["time"])
 
-        # --- Filter hours ---
         if hour != "all":
             if isinstance(hour, str):
                 hour = [hour]
             df = df[df["time"].dt.strftime("%H").isin(hour)]
 
-        # --- Filter period ---
         if start:
             df = df[df["time"] >= pd.to_datetime(start)]
         if end:
@@ -883,7 +912,6 @@ def plot_all_stations_timeseries(
                 )
             )
 
-        # All methods dynamically
         method_cols = [
             col
             for col in df.columns
@@ -913,3 +941,1212 @@ def plot_all_stations_timeseries(
         figures[station] = fig
 
     return figures
+
+
+def plot_rmse(df):
+    df = df.copy()
+
+    df["month"] = pd.to_datetime(df["month"])
+    df = df.sort_values("month")
+
+    rmse_cols = [c for c in df.columns if c.startswith("ta_rmse_")]
+
+    df_long = df.melt(
+        id_vars=["category", "month"],
+        value_vars=rmse_cols,
+        var_name="metric",
+        value_name="rmse",
+    )
+
+    df_long["method"] = df_long["metric"].str.replace("ta_rmse_", "")
+
+    for cat in df_long["category"].unique():
+        df_cat = df_long[df_long["category"] == cat]
+
+        fig = px.line(
+            df_cat,
+            x="month",
+            y="rmse",
+            color="method",
+            markers=True,
+            title=f"RMSE par méthode - {cat} altitude",
+        )
+
+        fig.update_layout(
+            xaxis_title="Temps (mois)",
+            yaxis_title="RMSE (°C)",
+        )
+
+        fig.show()
+
+
+def plot_r2(df, var="ta"):
+    df = df.copy()
+    df["month"] = pd.to_datetime(df["month"])
+
+    prefix = f"{var}_r2_"
+    cols = [c for c in df.columns if c.startswith(prefix)]
+
+    methods = [c.replace(prefix, "") for c in cols]
+
+    for cat in df["category"].unique():
+        df_cat = df[df["category"] == cat].sort_values("month")
+
+        fig = go.Figure()
+
+        for col, method in zip(cols, methods, strict=False):
+            fig.add_trace(
+                go.Scatter(
+                    x=df_cat["month"],
+                    y=df_cat[col],
+                    mode="lines+markers",
+                    name=method,
+                )
+            )
+
+        fig.update_layout(
+            title=f"R² ({var.upper()}) - {cat}",
+            xaxis_title="Mois",
+            yaxis_title="R²",
+        )
+
+        fig.show()
+
+
+def plot_metric_by_method(
+    df,
+    metric="rmse",
+    var="ta",  # "ta" ou "tdp"
+):
+    df = df.copy()
+
+    df["month"] = pd.to_datetime(df["month"])
+    df = df.sort_values("month")
+
+    prefix = f"{var}_{metric}_"
+
+    cols = [c for c in df.columns if c.startswith(prefix)]
+
+    if not cols:
+        raise ValueError(f"Aucune colonne trouvée pour {prefix}")
+
+    df_long = df.melt(
+        id_vars=["category", "month"],
+        value_vars=cols,
+        var_name="metric_full",
+        value_name=metric,
+    )
+
+    df_long["method"] = df_long["metric_full"].str.replace(prefix, "")
+
+    for cat in df_long["category"].unique():
+        df_cat = df_long[df_long["category"] == cat]
+
+        fig = px.line(
+            df_cat,
+            x="month",
+            y=metric,
+            color="method",
+            markers=True,
+            title=f"{metric.upper()} ({var.upper()}) - {cat} altitude",
+        )
+
+        ylabel = {
+            "rmse": "RMSE (°C)",
+            "mae": "MAE (°C)",
+            "mbe": "MBE (°C)",
+            "r2": "R²",
+            "slope": "Slope",
+        }.get(metric, metric)
+
+        fig.update_layout(
+            xaxis_title="Temps (mois)",
+            yaxis_title=ylabel,
+        )
+
+        fig.show()
+
+
+def compute_metrics(
+    measured: npt.ArrayLike, estimated: npt.ArrayLike
+) -> tuple[float, float, float, float, float]:
+    """
+    Compute slope, mbe, mae, rmse, r2
+    """
+    idx = np.isfinite(measured) & np.isfinite(estimated)
+    slope, _ = np.polyfit(measured[idx], estimated[idx], 1)
+    mbe = np.nanmean(estimated - measured)
+    mae = mean_absolute_error(measured[idx], estimated[idx])
+    rmse = np.sqrt(mean_squared_error(measured[idx], estimated[idx]))
+    r2 = r2_score(measured[idx], estimated[idx])
+    return (slope, mbe, mae, rmse, r2)
+
+
+def plot_metrics(df: pd.DataFrame, variable: str = "ta"):
+    """
+    Interactive plot with Plotly (hover shows date)
+    """
+
+    groups = list(df.name.unique())
+    groups.append("all")
+    n_groups = len(groups)
+
+    base_groups = df.name.unique()
+    colors = px.colors.qualitative.Plotly
+
+    color_map = {g: colors[i % len(colors)] for i, g in enumerate(base_groups)}
+
+    ncols = 3
+    nrows = int(np.ceil(n_groups / ncols))
+
+    fig = make_subplots(
+        rows=nrows,
+        cols=ncols,
+        subplot_titles=groups,
+        horizontal_spacing=0.06,
+        vertical_spacing=0.14,
+    )
+
+    for i, group in enumerate(groups):
+        row = i // ncols + 1
+        col = i % ncols + 1
+
+        if group == "all":
+            measured = df[f"ec_{variable}"]
+            estimated = df[variable]
+            for g in df.name.unique():
+                subset = df[df.name == g]
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=subset[f"ec_{variable}"],
+                        y=subset[variable],
+                        mode="markers",
+                        marker={
+                            "size": 6,
+                            "opacity": 0.5,
+                            "color": color_map[g],
+                        },
+                        name=g,
+                        legendgroup=g,
+                        showlegend=(group == "all"),
+                        customdata=subset["date"],
+                        hovertemplate=(
+                            "Group: " + g + "<br>"
+                            "Measured: %{x:.3f}<br>"
+                            "Estimated: %{y:.3f}<br>"
+                            "Date: %{customdata|%Y-%m-%d}<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+        else:
+            subset = df[df.name == group]
+            measured = subset[f"ec_{variable}"]
+            estimated = subset[variable]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=measured,
+                    y=estimated,
+                    mode="markers",
+                    marker={
+                        "size": 6,
+                        "opacity": 0.6,
+                        "color": color_map.get(group, "gray"),
+                    },
+                    name=group,
+                    showlegend=False,
+                    customdata=subset["date"],
+                    hovertemplate=(
+                        "Measured: %{x:.2f}<br>"
+                        "Estimated: %{y:.2f}<br>"
+                        "Date: %{customdata|%Y-%m-%d}<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+
+        lims = [
+            min(measured.min(), estimated.min()),
+            max(measured.max(), estimated.max()),
+        ]
+
+        fig.add_trace(
+            go.Scatter(
+                x=lims,
+                y=lims,
+                mode="lines",
+                line={"dash": "dash", "color": "black"},
+                showlegend=False,
+            ),
+            row=row,
+            col=col,
+        )
+
+        idx = np.isfinite(measured) & np.isfinite(estimated)
+        slope, intercept = np.polyfit(measured[idx], estimated[idx], 1)
+        fig.add_trace(
+            go.Scatter(
+                x=lims,
+                y=[lims[0] * slope + intercept, lims[1] * slope + intercept],
+                mode="lines",
+                line={"color": "red"},
+                showlegend=False,
+            ),
+            row=row,
+            col=col,
+        )
+
+        slope_m, mbe, mae, rmse, r2 = compute_metrics(measured, estimated)
+
+        fig.add_annotation(
+            x=0.97,
+            y=0.03,
+            xref="x domain",
+            yref="y domain",
+            text=(
+                f"slope = {slope_m:.2f}<br>"
+                f"MBE = {mbe:.2f}<br>"
+                f"MAE = {mae:.2f}<br>"
+                f"RMSE = {rmse:.2f}<br>"
+                f"R2 = {r2:.2f}"
+            ),
+            showarrow=False,
+            align="right",
+            row=row,
+            col=col,
+        )
+
+    fig.update_xaxes(title_text=f"Measured {variable.upper()}")
+    fig.update_yaxes(title_text=f"Estimated {variable.upper()}")
+    fig.update_layout(
+        height=400 * nrows,
+        width=500 * ncols,
+        title=f"Measured vs Estimated {variable.upper()}",
+    )
+
+    fig.show()
+
+
+cluster_results = [
+    {"station": "BE-Bra", "altitude": np.float64(16.0), "cluster": 2},
+    {"station": "BE-Vie", "altitude": np.float64(490.0), "cluster": 0},
+    {"station": "BE-Lcr", "altitude": np.float64(6.25), "cluster": 2},
+    {"station": "BE-Dor", "altitude": np.float64(253.0), "cluster": 2},
+    {"station": "CH-Dav", "altitude": np.float64(1637.0), "cluster": 1},
+    {"station": "CH-BaK", "altitude": np.float64(273.0), "cluster": 2},
+    {"station": "CZ-wet", "altitude": np.float64(426.0), "cluster": 0},
+    {"station": "CZ-BK1", "altitude": np.float64(881.0), "cluster": 0},
+    {"station": "DE-RuW", "altitude": np.float64(610.0), "cluster": 0},
+    {"station": "DE-Tha", "altitude": np.float64(380.0), "cluster": 2},
+    {"station": "DE-RuS", "altitude": np.float64(106.0), "cluster": 2},
+    {"station": "DE-Har", "altitude": np.float64(201.0), "cluster": 2},
+    {"station": "DE-Brs", "altitude": np.float64(78.0), "cluster": 2},
+    {"station": "DE-Geb", "altitude": np.float64(163.0), "cluster": 2},
+    {"station": "DK-Vng", "altitude": np.float64(67.7), "cluster": 2},
+    {"station": "DK-Skj", "altitude": np.float64(2.0), "cluster": 2},
+    {"station": "DK-Gds", "altitude": np.float64(86.0), "cluster": 2},
+    {"station": "ES-LMa", "altitude": np.float64(265.0), "cluster": 2},
+    {"station": "FI-Tvm", "altitude": np.float64(1.0), "cluster": 2},
+    {"station": "FI-Sii", "altitude": np.float64(164.0), "cluster": 2},
+    {"station": "FI-Kmp", "altitude": np.float64(26.0), "cluster": 2},
+    {"station": "FI-Ken", "altitude": np.float64(347.0), "cluster": 2},
+    {"station": "FR-Tou", "altitude": np.float64(158.0), "cluster": 2},
+    {"station": "FR-Mej", "altitude": np.float64(40.0), "cluster": 2},
+    {"station": "FR-Lus", "altitude": np.float64(154.0), "cluster": 2},
+    {"station": "FR-Lqu", "altitude": np.float64(1040.0), "cluster": 0},
+    {"station": "FR-Hes", "altitude": np.float64(310.0), "cluster": 2},
+    {"station": "FR-Gri", "altitude": np.float64(125.0), "cluster": 2},
+    {"station": "FR-EM2", "altitude": np.float64(85.0), "cluster": 2},
+    {"station": "FR-CLt", "altitude": np.float64(2050.6), "cluster": 1},
+    {"station": "FR-Bil", "altitude": np.float64(39.18), "cluster": 2},
+    {"station": "UK-AMo", "altitude": np.float64(268.0), "cluster": 2},
+    {"station": "GF-Guy", "altitude": np.float64(40.0), "cluster": 2},
+    {"station": "GL-ZaH", "altitude": np.float64(41.0), "cluster": 2},
+    {"station": "GL-ZaF", "altitude": np.float64(42.0), "cluster": 2},
+    {"station": "GR-HeM", "altitude": np.float64(69.0), "cluster": 2},
+    {"station": "GR-HeK", "altitude": np.float64(30.0), "cluster": 2},
+    {"station": "IT-TrF", "altitude": np.float64(2100.0), "cluster": 1},
+    {"station": "IT-Tor", "altitude": np.float64(2168.0), "cluster": 1},
+    {"station": "IT-SR2", "altitude": np.float64(4.0), "cluster": 2},
+    {"station": "IT-Ren", "altitude": np.float64(1744.0), "cluster": 1},
+    {"station": "IT-OXm", "altitude": np.float64(66.0), "cluster": 2},
+    {"station": "IT-Niv", "altitude": np.float64(2750.0), "cluster": 1},
+    {"station": "IT-MBo", "altitude": np.float64(1550.0), "cluster": 1},
+    {"station": "IT-BCi", "altitude": np.float64(10.0), "cluster": 2},
+    {"station": "NL-Loo", "altitude": np.float64(33.0), "cluster": 2},
+    {"station": "NO-Hur", "altitude": np.float64(275.1308), "cluster": 2},
+    {"station": "SE-Htm", "altitude": np.float64(115.0), "cluster": 2},
+]
+
+# mapping station -> cluster
+station_to_cluster = {d["station"]: d["cluster"] for d in cluster_results}
+
+
+def plot_metrics_by_method_and_category(stations_ts, var="ta"):
+
+    enriched = []
+
+    for station, df in stations_ts.items():
+        cfg = get_stations_config(station)
+        alt = cfg.elev
+
+        if alt is None:
+            continue
+        logger.info(
+            f"station = {station}, altitude = {cfg.elev}, category = {
+                altitude_class(station, station_to_cluster)
+            }"
+        )
+
+        df_ = df.copy()
+        df_["category"] = altitude_class(
+            station, station_to_cluster
+        )  # altitude_class(alt)
+        df_["time"] = pd.to_datetime(df_["time"])
+        df_["station"] = station
+
+        enriched.append(df_)
+
+    if not enriched:
+        return
+
+    df_all = pd.concat(enriched, ignore_index=True)
+
+    methods = [
+        c
+        for c in df_all.columns
+        if c.startswith(f"{var}_") and c != f"{var}_icos"
+    ]
+
+    categories = sorted(df_all["category"].dropna().unique())
+
+    colors = px.colors.qualitative.Plotly
+    color_map = {
+        cat: colors[i % len(colors)] for i, cat in enumerate(categories)
+    }
+
+    for col in methods:
+        method = col.replace(f"{var}_", "")
+
+        ncols = 3
+        nrows = int(np.ceil(len(categories) / ncols))
+
+        fig = make_subplots(
+            rows=nrows,
+            cols=ncols,
+            subplot_titles=categories,
+            horizontal_spacing=0.06,
+            vertical_spacing=0.12,
+        )
+
+        for i, cat in enumerate(categories):
+            row = i // ncols + 1
+            col_pos = i % ncols + 1
+
+            df_cat = df_all[df_all["category"] == cat]
+
+            mask = df_cat[f"{var}_icos"].notna() & df_cat[col].notna()
+            if mask.sum() == 0:
+                continue
+
+            x = df_cat.loc[mask, f"{var}_icos"]
+            y = df_cat.loc[mask, col]
+            dates = df_cat.loc[mask, "time"]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=y,
+                    mode="markers",
+                    marker={
+                        "size": 6,
+                        "opacity": 0.6,
+                        "color": color_map[cat],
+                    },
+                    showlegend=False,
+                    customdata=dates,
+                    hovertemplate=(
+                        "Measured: %{x:.2f}<br>"
+                        "Estimated: %{y:.2f}<br>"
+                        "Date: %{customdata|%Y-%m-%d}<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col_pos,
+            )
+
+            lims = [
+                min(x.min(), y.min()),
+                max(x.max(), y.max()),
+            ]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=lims,
+                    y=lims,
+                    mode="lines",
+                    line={"dash": "dash", "color": "black"},
+                    showlegend=False,
+                ),
+                row=row,
+                col=col_pos,
+            )
+
+            idx = np.isfinite(x) & np.isfinite(y)
+            slope, intercept = np.polyfit(x[idx], y[idx], 1)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=lims,
+                    y=[
+                        lims[0] * slope + intercept,
+                        lims[1] * slope + intercept,
+                    ],
+                    mode="lines",
+                    line={"color": "red"},
+                    showlegend=False,
+                ),
+                row=row,
+                col=col_pos,
+            )
+
+            slope_m, mbe, mae, rmse, r2 = compute_metrics(x, y)
+
+            fig.add_annotation(
+                x=0.97,
+                y=0.03,
+                xref="x domain",
+                yref="y domain",
+                text=(
+                    f"slope = {slope_m:.2f}<br>"
+                    f"MBE = {mbe:.2f}<br>"
+                    f"MAE = {mae:.2f}<br>"
+                    f"RMSE = {rmse:.2f}<br>"
+                    f"R² = {r2:.2f}"
+                ),
+                showarrow=False,
+                align="right",
+                row=row,
+                col=col_pos,
+            )
+
+        fig.update_xaxes(title_text="ICOS")
+        fig.update_yaxes(title_text="Method")
+
+        fig.update_layout(
+            height=400 * nrows,
+            width=500 * ncols,
+            title=f"ICOS vs {method} ({var.upper()})",
+        )
+
+        fig.show()
+
+
+def plot_metrics_total(stations_ts, var="ta"):
+
+    enriched = []
+
+    for station, df in stations_ts.items():
+        cfg = get_stations_config(station)
+        alt = cfg.elev
+
+        if alt is None:
+            continue
+
+        df_ = df.copy()
+        df_["time"] = pd.to_datetime(df_["time"])
+        df_["station"] = station
+
+        enriched.append(df_)
+
+    if not enriched:
+        return
+
+    df_all = pd.concat(enriched, ignore_index=True)
+
+    methods = [
+        c
+        for c in df_all.columns
+        if c.startswith(f"{var}_") and c != f"{var}_icos"
+    ]
+
+    for col in methods:
+        method = col.replace(f"{var}_", "")
+
+        x = df_all[f"{var}_icos"]
+        y = df_all[col]
+        dates = df_all["time"]
+
+        mask = x.notna() & y.notna()
+        x = x[mask]
+        y = y[mask]
+        dates = dates[mask]
+
+        if len(x) == 0:
+            continue
+
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=y,
+                mode="markers",
+                marker={"size": 6, "opacity": 0.6},
+                customdata=dates,
+                hovertemplate=(
+                    "Measured: %{x:.2f}<br>"
+                    "Estimated: %{y:.2f}<br>"
+                    "Date: %{customdata|%Y-%m-%d}<extra></extra>"
+                ),
+            )
+        )
+
+        lims = [min(x.min(), y.min()), max(x.max(), y.max())]
+
+        fig.add_trace(
+            go.Scatter(
+                x=lims,
+                y=lims,
+                mode="lines",
+                line={"dash": "dash", "color": "black"},
+                showlegend=False,
+            )
+        )
+
+        idx = np.isfinite(x) & np.isfinite(y)
+        slope, intercept = np.polyfit(x[idx], y[idx], 1)
+
+        fig.add_trace(
+            go.Scatter(
+                x=lims,
+                y=[lims[0] * slope + intercept, lims[1] * slope + intercept],
+                mode="lines",
+                line={"color": "red"},
+                showlegend=False,
+            )
+        )
+
+        slope_m, mbe, mae, rmse, r2 = compute_metrics(x, y)
+
+        fig.add_annotation(
+            x=0.97,
+            y=0.03,
+            xref="paper",
+            yref="paper",
+            text=(
+                f"slope = {slope_m:.2f}<br>"
+                f"MBE = {mbe:.2f}<br>"
+                f"MAE = {mae:.2f}<br>"
+                f"RMSE = {rmse:.2f}<br>"
+                f"R² = {r2:.2f}"
+            ),
+            showarrow=False,
+            align="right",
+        )
+
+        fig.update_layout(
+            title=f"ICOS vs {method} ({var.upper()}) - all stations",
+            xaxis_title="ICOS",
+            yaxis_title="Method",
+            width=700,
+            height=600,
+        )
+
+        fig.show()
+
+
+def plot_metric_by_month(
+    df,
+    variable,
+    metric="rmse",
+    figsize=(20, 6),
+    rotate_xticks=45,
+):
+    """
+    Graphe clean par mois et par méthode.
+    """
+
+    data = df[df["variable"] == variable].copy()
+
+    data["month"] = pd.to_datetime(data["month"])
+    data = data.sort_values("month")
+
+    data["month_str"] = data["month"].dt.strftime("%Y-%m")
+
+    data["method_clean"] = data["method"].str.replace(
+        f"{variable}_", "", regex=False
+    )
+
+    palette = [
+        "#172E8BE6",
+        "#de1832",
+        "#0f9f1d",
+        "#f77f00",
+        "#6a4c93",
+        "#1982c4",
+        "#8ac926",
+        "#BB53B2",
+    ]
+
+    plt.figure(figsize=figsize)
+
+    ax = sns.barplot(
+        data=data,
+        x="month_str",
+        y=metric,
+        hue="method_clean",
+        palette=palette,
+    )
+
+    ax.set_xlabel("Months", fontsize=15)
+    ax.set_ylabel(metric.upper(), fontsize=15)
+
+    ax.set_title(f"{variable} {metric.upper()} by month", fontsize=18, pad=20)
+
+    plt.xticks(rotation=rotate_xticks)
+
+    ax.grid(axis="y", linestyle="--", alpha=1)
+    # ax.grid(axis="x", visible=False)
+
+    sns.despine()
+
+    plt.legend(
+        title="Method",
+        bbox_to_anchor=(1, 1),
+        loc="upper left",
+        frameon=False,
+        fontsize=14,
+        title_fontsize=16,
+        markerscale=1.5,
+    )
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_rmse_heatmap(
+    df,
+    variable,
+    metric="rmse",
+    figsize=(12, 8),
+    cmap="viridis_r",
+    annot=True,
+):
+    """
+    Heatmap des métriques par mois et méthode.
+    """
+
+    data = df[df["variable"] == variable].copy()
+
+    data["month"] = pd.to_datetime(data["month"])
+    data = data.sort_values("month")
+
+    data["month_str"] = data["month"].dt.strftime("%Y-%m")
+
+    data["method_clean"] = data["method"].str.replace(
+        f"{variable}_", "", regex=False
+    )
+
+    pivot = data.pivot(index="month_str", columns="method_clean", values=metric)
+
+    desired_order = [
+        "era5",
+        "base",
+        "method_1",
+        "method_2",
+        "method_3",
+        "method_4",
+        "method_5",
+        "method_6",
+    ]
+
+    existing_cols = [c for c in desired_order if c in pivot.columns]
+    pivot = pivot[existing_cols]
+
+    plt.figure(figsize=figsize)
+
+    sns.heatmap(
+        pivot,
+        annot=annot,
+        fmt=".2f",
+        cmap=cmap,
+        linewidths=0.5,
+        linecolor="white",
+        cbar_kws={"label": metric.upper()},
+    )
+
+    plt.title(
+        f"{metric.upper()} heatmap — {variable}",
+        fontsize=18,
+        weight="bold",
+        pad=20,
+    )
+
+    plt.xlabel("Method", fontsize=14)
+    plt.ylabel("Month", fontsize=14)
+
+    plt.xticks(rotation=30, ha="right")
+    plt.yticks(rotation=0)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_metric_lineplot(
+    df,
+    variable,
+    metric="rmse",
+    figsize=(16, 7),
+):
+    """
+    Courbes temporelles des métriques par méthode.
+    """
+
+    data = df[df["variable"] == variable].copy()
+
+    data["month"] = pd.to_datetime(data["month"])
+    data = data.sort_values("month")
+
+    data["month_str"] = data["month"].dt.strftime("%Y-%m")
+
+    data["method_clean"] = data["method"].str.replace(
+        f"{variable}_", "", regex=False
+    )
+
+    method_order = [
+        "era5",
+        "base",
+        "method_1",
+        "method_2",
+        "method_3",
+        "method_4",
+        "method_5",
+        "method_6",
+    ]
+
+    sns.set_theme(style="whitegrid")
+
+    palette = [
+        "#00429d",
+        "#d1495b",
+        "#2a9d8f",
+        "#f77f00",
+        "#6a4c93",
+        "#1982c4",
+        "#8ac926",
+        "#222222",
+    ]
+
+    plt.figure(figsize=figsize)
+
+    sns.lineplot(
+        data=data,
+        x="month_str",
+        y=metric,
+        hue="method_clean",
+        hue_order=method_order,
+        palette=palette,
+        marker="o",
+        linewidth=2.5,
+    )
+
+    plt.title(
+        f"{metric.upper()} by month — {variable}", fontsize=20, weight="bold"
+    )
+
+    plt.xlabel("Month", fontsize=14)
+    plt.ylabel(metric.upper(), fontsize=14)
+
+    plt.xticks(rotation=45)
+
+    plt.legend(
+        title="Method",
+        bbox_to_anchor=(1.01, 1),
+        loc="upper left",
+        frameon=False,
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_metric_boxplot(
+    df,
+    variable,
+    metric="rmse",
+    figsize=(12, 7),
+):
+    """
+    Distribution des métriques par méthode.
+    """
+
+    data = df[df["variable"] == variable].copy()
+
+    data["method_clean"] = data["method"].str.replace(
+        f"{variable}_", "", regex=False
+    )
+
+    method_order = [
+        "era5",
+        "base",
+        "method_1",
+        "method_2",
+        "method_3",
+        "method_4",
+        "method_5",
+        "method_6",
+    ]
+
+    sns.set_theme(style="whitegrid")
+
+    palette = [
+        "#00429d",
+        "#d1495b",
+        "#2a9d8f",
+        "#f77f00",
+        "#6a4c93",
+        "#1982c4",
+        "#8ac926",
+        "#E6C347",
+    ]
+
+    plt.figure(figsize=figsize)
+
+    sns.boxplot(
+        data=data,
+        x="method_clean",
+        y=metric,
+        order=method_order,
+        palette=palette,
+        width=0.7,
+    )
+
+    sns.stripplot(
+        data=data,
+        x="method_clean",
+        y=metric,
+        order=method_order,
+        color="black",
+        alpha=0.4,
+        size=4,
+    )
+
+    plt.title(
+        f"{metric.upper()} distribution — {variable}",
+        fontsize=20,
+        weight="bold",
+    )
+
+    plt.xlabel("Method", fontsize=14)
+    plt.ylabel(metric.upper(), fontsize=14)
+
+    plt.xticks(rotation=20)
+
+    plt.tight_layout()
+    plt.show()
+
+
+plt.rcParams.update(
+    {
+        "font.size": 16,
+        "axes.titlesize": 18,
+        "axes.labelsize": 16,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+    }
+)
+
+
+def compute_metrics_table(
+    dfs,
+    variable="ta",
+    methods=None,
+):
+
+    truth_col = f"{variable}_icos"
+
+    if methods is None:
+        sample_df = next(iter(dfs.values()))
+
+        methods = [
+            c
+            for c in sample_df.columns
+            if c.startswith(variable) and c != truth_col
+        ]
+
+    rows = []
+
+    for method in methods:
+        y_true = []
+        y_pred = []
+
+        for df in dfs.values():
+            tmp = df[[truth_col, method]].dropna()
+
+            y_true.append(tmp[truth_col])
+            y_pred.append(tmp[method])
+
+        y_true = pd.concat(y_true)
+        y_pred = pd.concat(y_pred)
+
+        errors = y_pred - y_true
+
+        rows.append(
+            {
+                "method": method,
+                "bias": errors.mean(),
+                "mae": mean_absolute_error(y_true, y_pred),
+                "rmse": np.sqrt(mean_squared_error(y_true, y_pred)),
+                "std": errors.std(),
+                "corr": np.corrcoef(y_true, y_pred)[0, 1],
+                "r2": r2_score(y_true, y_pred),
+                "median_error": np.median(errors),
+                "p95_abs_error": np.percentile(np.abs(errors), 95),
+                "n": len(errors),
+            }
+        )
+
+    metrics = pd.DataFrame(rows)
+
+    return metrics.sort_values("rmse")
+
+
+def plot_error_distributions(
+    dfs,
+    variable="ta",
+    methods=None,
+    bins=40,
+    kde=True,
+    fontsize=18,
+):
+
+    truth_col = f"{variable}_icos"
+
+    if methods is None:
+        sample_df = next(iter(dfs.values()))
+
+        methods = [
+            c
+            for c in sample_df.columns
+            if c.startswith(variable) and c != truth_col
+        ]
+
+    n_methods = len(methods)
+
+    nrows = 2
+    ncols = math.ceil(n_methods / nrows)
+
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(7 * ncols, 5 * nrows),
+        sharex=True,
+        sharey=True,
+    )
+
+    axes = np.array(axes).flatten()
+
+    fig.suptitle(
+        "Global Error Distributions",
+        fontsize=fontsize + 6,
+        fontweight="bold",
+    )
+
+    global_errors = []
+
+    for method in methods:
+        for df in dfs.values():
+            errors = (df[method] - df[truth_col]).dropna()
+
+            global_errors.extend(errors.values)
+
+    global_errors = np.array(global_errors)
+
+    xlim = (
+        np.percentile(global_errors, 0.1),
+        np.percentile(global_errors, 99.9),
+    )
+
+    max_count = 0
+
+    for ax, method in zip(axes, methods, strict=False):
+        all_errors = []
+
+        for df in dfs.values():
+            errors = (df[method] - df[truth_col]).dropna()
+
+            all_errors.append(errors)
+
+        all_errors = pd.concat(all_errors)
+
+        hist = sns.histplot(
+            all_errors,
+            bins=bins,
+            kde=kde,
+            ax=ax,
+        )
+
+        max_count = max(
+            max_count, *([p.get_height() for p in hist.patches] + [0])
+        )
+
+        ax.axvline(
+            0,
+            color="black",
+            linestyle="--",
+            linewidth=2,
+        )
+
+        mean_err = all_errors.mean()
+        std_err = all_errors.std()
+        rmse = np.sqrt((all_errors**2).mean())
+
+        ax.set_title(
+            f"{method}\n"
+            f"Bias = {mean_err:.2f} °C | "
+            f"Std = {std_err:.2f} °C | "
+            f"RMSE = {rmse:.2f} °C",
+            fontsize=fontsize + 3,
+        )
+
+        ax.set_xlabel(
+            "Error (°C)",
+            fontsize=fontsize,
+        )
+
+        ax.set_ylabel(
+            "Count",
+            fontsize=fontsize,
+        )
+
+        ax.tick_params(
+            axis="both",
+            labelsize=fontsize - 2,
+        )
+
+        ax.set_xlim(xlim)
+
+    # fixed y-axis
+    for ax in axes[:n_methods]:
+        ax.set_ylim(0, max_count * 1.1)
+
+    # hide unused
+    for ax in axes[n_methods:]:
+        ax.set_visible(False)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def cluster_stations_by_altitude(
+    stations,
+    n_clusters=3,
+    random_state=42,
+    plot=True,
+):
+    """
+    Clustering KMeans des stations selon leur altitude.
+    """
+
+    # -----------------------------
+    # Récupération des altitudes
+    # -----------------------------
+    station_names = []
+    altitudes = []
+
+    for station in stations:
+        cfg = get_stations_config(station)
+        alt = cfg.elev
+
+        station_names.append(station)
+        altitudes.append(alt)
+
+    quantiles = pd.qcut(altitudes, q=3)
+    altitudes = np.array(altitudes).reshape(-1, 1)
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(altitudes)
+
+    # KMeans
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        random_state=random_state,
+        n_init=1000,  # "auto",
+    )
+
+    labels = kmeans.fit_predict(X_scaled)
+
+    results = []
+
+    for station, alt, label in zip(
+        station_names, altitudes.flatten(), labels, strict=False
+    ):
+        results.append(
+            {
+                "station": station,
+                "altitude": alt,
+                "cluster": int(label),
+            }
+        )
+
+    if n_clusters > 1:
+        score = silhouette_score(X_scaled, labels)
+        logger.info(f"Silhouette score: {score:.3f}")
+
+    if plot:
+        plt.figure(figsize=(8, 7))
+
+        rng = np.random.default_rng(seed=random_state)
+        x_random = rng.uniform(0, 1, size=len(altitudes))
+
+        plt.scatter(
+            x_random,
+            altitudes.flatten(),
+            c=labels,
+            s=80,
+            alpha=0.8,
+        )
+
+        centers = scaler.inverse_transform(kmeans.cluster_centers_).flatten()
+
+        plt.scatter(
+            np.full(len(centers), 0.5),
+            centers,
+            marker="x",
+            s=30,
+            linewidths=1,
+            label="Kmeans centers",
+            color="red",
+        )
+
+    for x, station, alt in zip(
+        x_random,
+        station_names,
+        altitudes.flatten(),
+        strict=False,
+    ):
+        plt.text(
+            x - 0.02,
+            alt + 65,
+            str(station),
+            fontsize=8,
+            alpha=0.8,
+        )
+
+    plt.ylabel("Elevation (m)")
+    plt.xlabel("Randomized station position")
+    plt.title(f"KMeans clustering of stations by elevation (k={n_clusters})")
+
+    plt.xticks([])
+
+    plt.grid(True, axis="y", alpha=0.3)
+
+    plt.legend()
+
+    plt.show()
+
+    return results, kmeans, quantiles

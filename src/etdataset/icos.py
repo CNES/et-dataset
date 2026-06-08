@@ -10,7 +10,6 @@ Module for ICOS data
 import os
 import zipfile
 from dataclasses import dataclass
-from typing import overload
 
 import geopandas as gpd
 import numpy as np
@@ -213,7 +212,7 @@ def get_stations_config(id_station: str) -> StationConfig:
     try:
         station = df.loc[id_station]
     except KeyError:
-        raise ValueError("Station id is unknown: {id_station}")
+        raise ValueError(f"Station id is unknown: {id_station}")
     # convert to StationConfig
     return StationConfig(id=id_station, **station)
 
@@ -644,14 +643,14 @@ def compute_dewpoint_temp(
     return tp
 
 
-@overload
-def kelvin_to_celsius(kelvin: xr.DataArray) -> xr.DataArray: ...
-@overload
-def kelvin_to_celsius(kelvin: npt.ArrayLike) -> npt.NDArray: ...
+# @overload
+# def kelvin_to_celsius(kelvin: xr.DataArray) -> xr.DataArray: ...
+# @overload
+# def kelvin_to_celsius(kelvin: npt.NDArray) -> npt.NDArray: ...
 
 
 def kelvin_to_celsius(
-    kelvin: xr.DataArray | npt.ArrayLike,
+    kelvin: xr.DataArray | npt.NDArray,
 ) -> xr.DataArray | npt.NDArray:
     """
     Description
@@ -663,14 +662,14 @@ def kelvin_to_celsius(
     return np.array(kelvin) - 273.15
 
 
-@overload
-def celsius_to_kelvin(celsius: xr.DataArray) -> xr.DataArray: ...
-@overload
-def celsius_to_kelvin(celsius: npt.ArrayLike) -> npt.NDArray: ...
+# @overload
+# def celsius_to_kelvin(celsius: xr.DataArray) -> xr.DataArray: ...
+# @overload
+# def celsius_to_kelvin(celsius: npt.NDArray) -> npt.NDArray: ...
 
 
 def celsius_to_kelvin(
-    celsius: xr.DataArray | npt.ArrayLike,
+    celsius: xr.DataArray | npt.NDArray,
 ) -> xr.DataArray | npt.NDArray:
     """
     Description

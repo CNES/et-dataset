@@ -8,7 +8,6 @@ import datetime as dt
 import os
 import zipfile
 from collections.abc import Generator
-from typing import overload
 
 import numpy as np
 import numpy.typing as npt
@@ -376,14 +375,14 @@ def filter_dataset_by_location(
     return ds.sel(latitude=latitude, longitude=longitude, method="nearest")
 
 
-@overload
-def filter_dataset_by_roi(
-    ds: xr.DataArray, roi_bbox: rio.coords.BoundingBox, roi_crs: CRS
-) -> xr.DataArray: ...
-@overload
-def filter_dataset_by_roi(
-    ds: xr.Dataset, roi_bbox: rio.coords.BoundingBox, roi_crs: CRS
-) -> xr.Dataset: ...
+# @overload
+# def filter_dataset_by_roi(
+#     ds: xr.DataArray, roi_bbox: rio.coords.BoundingBox, roi_crs: CRS
+# ) -> xr.DataArray: ...
+# @overload
+# def filter_dataset_by_roi(
+#     ds: xr.Dataset, roi_bbox: rio.coords.BoundingBox, roi_crs: CRS
+# ) -> xr.Dataset: ...
 
 
 def filter_dataset_by_roi(
@@ -527,7 +526,7 @@ def create_era5_sub_dataset(era5_xrds: xr.Dataset) -> xr.Dataset:
     era5_sub = era5_sub.rename(
         {
             "t2m": "ta",
-            "d2m": "tdp",
+            "d2m": "td",
         }
     )
     return era5_sub
@@ -828,11 +827,19 @@ def get_ta_td_celsius_at_location(
     # location
 
     ta, td = (
-        kelvin_to_celsius(
-            data["ta"].interp({dims["x"]: x, dims["y"]: y}, method="nearest")
+        xr.DataArray(
+            kelvin_to_celsius(
+                data["ta"].interp(
+                    {dims["x"]: x, dims["y"]: y}, method="nearest"
+                )
+            )
         ),
-        kelvin_to_celsius(
-            data["tdp"].interp({dims["x"]: x, dims["y"]: y}, method="nearest")
+        xr.DataArray(
+            kelvin_to_celsius(
+                data["td"].interp(
+                    {dims["x"]: x, dims["y"]: y}, method="nearest"
+                )
+            )
         ),
     )
     return ta, td

@@ -201,18 +201,36 @@ def crop_ds(
         Cropped dataset
     """
     if ds is None:
-        raise ValueError("Dataset/ DataArray to crop is None")
+        raise ValueError("Dataset to crop is None")
+
     minx, miny, maxx, maxy = dem.rio.bounds()
 
     transformer = Transformer.from_crs(dem.rio.crs, "EPSG:4326", always_xy=True)
     minlon, minlat = transformer.transform(minx, miny)
     maxlon, maxlat = transformer.transform(maxx, maxy)
 
-    return ds.rio.clip_box(
-        minx=minlon,
-        miny=minlat,
-        maxx=maxlon,
-        maxy=maxlat,
+    minlon, maxlon = sorted([minlon, maxlon])
+    minlat, maxlat = sorted([minlat, maxlat])
+
+    dlon = float(abs(ds.longitude[1] - ds.longitude[0]))
+    dlat = float(abs(ds.latitude[1] - ds.latitude[0]))
+
+    minlon = np.floor(minlon / dlon) * dlon
+    maxlon = np.ceil(maxlon / dlon) * dlon
+    minlat = np.floor(minlat / dlat) * dlat
+    maxlat = np.ceil(maxlat / dlat) * dlat
+
+    if maxlon == minlon:
+        maxlon += dlon
+    if maxlat == minlat:
+        maxlat += dlat
+
+    logger.info(
+        f"Max longitude = {maxlon} | Min longitude = {minlon} | Max latitude = {maxlat} | Min latitude = {minlat}"  # noqa: E501
+    )
+    return ds.sel(
+        longitude=slice(minlon, maxlon),
+        latitude=slice(maxlat, minlat),  # ERA5 inversé
     )
 
 
@@ -643,7 +661,7 @@ def method_lr_profile_alt_dep(
         era5_pressure, ["700", "850"]
     )
     era5_925_850 = filter_dataset_by_pressure_levels(
-        era5_pressure, ["925", "850"]
+        era5_pressure, ["850", "925"]
     )
 
     # AIR TEMPERATURE
@@ -1134,6 +1152,8 @@ def method_interp_lr_hybrid(
         )
         # Interpolate vertically to DEM elevation
         res_ta = temp_a.interp(z=dem)
+        if res_ta is not None:
+            updated_data["ta"] = res_ta
 
     if TempVariable.TD in variables_set:
         temp_d = xr.DataArray(
@@ -1149,20 +1169,31 @@ def method_interp_lr_hybrid(
             dem, resampling=rio.enums.Resampling.bilinear
         )
         res_td = temp_d.interp(z=dem)
+        if res_td is not None:
+            updated_data["td"] = res_td
 
     if TempVariable.TA in variables_set:
-        mask_below_ta = dem < temp_a.z.min()
-        mask_above_ta = dem > temp_a.z.max()
+        logger.info(f"z = {z}")
+        logger.info(f"dem = {dem}")
+
+        mask_below_ta = dem < temp_a.z[0]
+        mask_above_ta = dem > temp_a.z[-1]
+        logger.info(f"mask_below_ta ={mask_below_ta}")
+
+        count_below = mask_below_ta.sum()
+
+        logger.info(f"mask_below_ta count = {count_below}")
 
     if TempVariable.TD in variables_set:
-        mask_below_td = dem < temp_d.z.min()
-        mask_above_td = dem > temp_d.z.max()
+        mask_below_td = dem < temp_d.z[0]
+        mask_above_td = dem > temp_d.z[-1]
+        logger.info(f"mask_below_td ={mask_below_td}")
 
     era5_975_950 = filter_dataset_by_pressure_levels(
         era5_pressure, ["975", "950"]
     )
     # Lapse rate correction (below era5 levels)
-    if TempVariable.TA in variables_set and mask_below_ta.any():
+    if TempVariable.TA in variables_set:
         lr_ta = compute_lapse_rate_from_2_levels_roi(era5_975_950)
         rescaled = rescale_temperature_with_variable_lapserate(
             dem=dem,
@@ -1172,12 +1203,17 @@ def method_interp_lr_hybrid(
             key="ta",
             description="2m air temperature",
         )
-
         if rescaled is not None:
             updated_data["ta"] = xr.where(mask_below_ta, rescaled, res_ta)
             logger.debug("Add temperature:OK")
+            logger.info(f"updata data ta {updated_data['ta']}")
+            logger.info(f"res ta = {res_ta}")
+            logger.info(f"rescaled ta = {rescaled}")
 
-    if TempVariable.TD in variables_set and mask_below_td.any():
+        else:
+            updated_data["ta"] = res_ta
+
+    if TempVariable.TD in variables_set:
         lr_td = compute_lapse_rate_from_2_levels_roi(era5_975_950, "td")
         rescaled = rescale_temperature_with_variable_lapserate(
             dem=dem,
@@ -1191,11 +1227,14 @@ def method_interp_lr_hybrid(
         if rescaled is not None:
             updated_data["td"] = xr.where(mask_below_td, rescaled, res_td)
             logger.debug("Add temperature:OK")
+        else:
+            updated_data["td"] = res_td
 
     if (TempVariable.TA in variables_set and mask_above_ta.any()) or (
         TempVariable.TD in variables_set and mask_above_td.any()
     ):
         logger.warning("DEM above ERA5 levels: add pressure levels")
+    logger.info(f"updated data fnal = {updated_data}")
     return updated_data
 
 

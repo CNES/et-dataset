@@ -22,6 +22,8 @@ prepare_landsat_*.ipynb
 method_*/
 metrics_*/
 base/
+Data_*/
+fluxnet_data/
 
 # Data
 *.tif

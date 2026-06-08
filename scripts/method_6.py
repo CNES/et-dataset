@@ -55,9 +55,6 @@ def run_stations_process_method_6(
     logger.info(f"Current station : {station}")
 
     cfg = get_stations_config(station)
-    ta_out = []
-    td_out = []
-    times = []
     for d in generate_dates(start_date, end_date, step_date):
         for h in list_hours:
             date = dt.datetime.combine(d, h)
@@ -65,7 +62,7 @@ def run_stations_process_method_6(
 
             # ROI
             roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
-                cfg.lat, cfg.lon, 25000, 25000, CRS.from_epsg(4326)
+                cfg.lat, cfg.lon, 50000, 50000, CRS.from_epsg(4326)
             )["utm"]
 
             # DEM
@@ -91,24 +88,20 @@ def run_stations_process_method_6(
             )
             T_station, Td_station = get_ta_td_celsius_at_location(updated, cfg)
 
-            ta_out.append(float(T_station.item()))
-            td_out.append(float(Td_station.item()))
-            times.append(date)
+            ds_out = xr.Dataset(
+                {
+                    "ta": ("time", [float(T_station.item())]),
+                    "tdp": ("time", [float(Td_station.item())]),
+                },
+                coords={"time": [date]},
+            )
 
-    ds_out = xr.Dataset(
-        {
-            "ta": ("time", ta_out),
-            "tdp": ("time", td_out),
-        },
-        coords={"time": times},
-    )
-
-    save_ta_td_csv(
-        ds_out,
-        cfg,
-        output,
-        name_dir="csv_era5_rescaled",
-    )
+            save_ta_td_csv(
+                ds_out,
+                cfg,
+                output,
+                name_dir="csv_era5_rescaled",
+            )
 
 
 def generate_timeseries_for_stations_multiprocess(
