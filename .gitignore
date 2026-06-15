@@ -30,7 +30,10 @@ prepare_landsat_*.ipynb
 *.nc
 *.zip
 *.zarr/
-
+*.xml
+*.gpkg
+pckg/
+method_*/
 # Package data
 !src/etdataset/data/geopotential_era5.nc
 !src/etdataset/data/geopotential_era5land.zarr/
