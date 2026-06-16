@@ -473,7 +473,7 @@ def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
     product: str
         Path to daily product
     """
-    # Ressource management
+    # Resource management
     mem_limit = int(
         np.ceil(
             len(data.x)
@@ -519,12 +519,14 @@ def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
     projected["daily_msg"].attrs.clear()
     projected["daily_msg"].attrs.update({"long_name": "DAILY DSSF"})
     # Add attributes
-    projected["daily_msg"].attrs["standard_name"] = "rld"
-    projected["daily_msg"].attrs["long_name"] = "Longwave downwelling radiation"
-    projected["daily_msg"].attrs["name"] = "rld"
-    projected["daily_msg"].attrs["unit"] = "W.m-2"
+    projected["daily_msg"].attrs["standard_name"] = "daily_rsd"
+    projected["daily_msg"].attrs["long_name"] = (
+        "Daily shortwave downwelling radiation"
+    )
+    projected["daily_msg"].attrs["name"] = "daily_rsd"
+    projected["daily_msg"].attrs["unit"] = "J.m-2"
     projected["daily_msg"].attrs["description"] = (
-        "Longwave downwelling radiation"
+        "Daily shortwave downwelling radiation"
     )
     return data.merge(projected)
 
@@ -546,7 +548,7 @@ def add_solar_data(
     products: list[str]
         List of paths to solar products
     """
-    # Ressource management
+    # Resource management
     mem_limit = int(
         np.ceil(
             len(data.x)
@@ -594,7 +596,7 @@ def add_solar_data(
         xrds = xrds.chunk(chunks=chunk_size_calc)
     # Get number of lines
     N = len(xrds.lat)
-    # Create time bias aray
+    # Create time bias array
     t_bias = da.empty(
         shape=(N, len(xrds.lon)),
         chunks=(chunk_size_calc["lat"], chunk_size_calc["lon"]),
@@ -684,7 +686,7 @@ def add_thermal_data(
     products: list[str]
         List of paths to thermal products
     """
-    # Ressource management
+    # source management
     mem_limit = int(
         np.ceil(
             len(data.x)
