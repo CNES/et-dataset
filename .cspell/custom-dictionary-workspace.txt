@@ -15,6 +15,9 @@ trishna
 # Provider
 usgs
 
+# Acronym
+DSSF
+
 # Variables
 latlon
 swir
@@ -28,3 +31,9 @@ lste
 mgrs
 rioxarray
 sensorsio
+
+# functions
+getaffinity
+
+# Words
+reproject
