@@ -997,4 +997,8 @@ def create_daily_radiation_dataset(
     ).rename_vars({"daily_msg": "daily_radiation"})
     # Select daily_radiation variable
     dst_rad = dst[["daily_radiation"]]
+    # TODO: Handle NaN values in daily radiation product (To be removed)
+    dst_rad["daily_radiation"] = dst_rad["daily_radiation"].interpolate_na(
+        dim="x", method="linear"
+    )
     return dst_rad
