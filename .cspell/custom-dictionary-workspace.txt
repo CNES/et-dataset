@@ -17,6 +17,7 @@ usgs
 
 # Acronym
 DSSF
+icos
 
 # Variables
 latlon
@@ -31,6 +32,11 @@ lste
 mgrs
 rioxarray
 sensorsio
+bvnet
+cdsapi
+icoscp
+contextily
+mapclassify
 
 # functions
 getaffinity
