@@ -552,7 +552,7 @@ def download(
     if path is None:
         path = os.getcwd()
     # Create a directory MSG products
-    era5_path = os.path.join(path, "ERA5_data")
+    era5_path = path
     os.makedirs(era5_path, exist_ok=True)
     # Filename
     filename = os.path.join(
@@ -833,7 +833,6 @@ def add(
     # ERA5/ERA5Land data path
     product_path = os.path.join(
         path,
-        "ERA5_data",
         f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
     )
     logger.debug(f"Product path: {product_path}")

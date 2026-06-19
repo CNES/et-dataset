@@ -399,7 +399,7 @@ def download(
     if path is None:
         path = os.getcwd()
     # Create a directory MSG products
-    msg_path = os.path.join(path, "MSG_data")
+    msg_path = path
     os.makedirs(msg_path, exist_ok=True)
     # Choose satellite
     satellite = get_satellite(latlon_bbox)
@@ -816,7 +816,7 @@ def add(
     satellite = get_satellite(latlon_bounds)
     # Data path
     product_path = os.path.join(
-        path, "MSG_data", f"{satellite.key}_{date.strftime('%Y-%m-%d')}"
+        path, f"{satellite.key}_{date.strftime('%Y-%m-%d')}"
     )
     logger.debug(f"Product path: {product_path}")
     if not os.path.isdir(product_path):
@@ -901,7 +901,7 @@ def download_date_by_date(
     roi_crs: CRS,
     output: str | None = None,
     daily_only: bool = True,
-) -> pd.DatetimeIndex:
+) -> None:
     """import datetime as dt
     Description
     -----------
@@ -933,7 +933,6 @@ def download_date_by_date(
     time = xr.date_range(date1, freq="1D", end=date2)
     for t in time:
         download(t.to_pydatetime().date(), roi_bbox_latlon, output, daily_only)
-    return time
 
 
 def create_daily_radiation_dataset(
@@ -962,7 +961,7 @@ def create_daily_radiation_dataset(
     # Get the path of the subdirectory where data have been downloaded
     if path is None:
         path = os.getcwd()
-    msg_path = os.path.join(path, "MSG_data")
+    msg_path = path
     if grid.rio.crs is None:
         if grid.attrs.get("crs") is not None:
             crs = grid.attrs["crs"]

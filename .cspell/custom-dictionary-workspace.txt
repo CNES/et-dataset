@@ -18,12 +18,15 @@ usgs
 # Acronym
 DSSF
 icos
+LSASAF
 
 # Variables
 latlon
 swir
 ndvi
 lai
+ecols
+ecos
 
 # Python package
 earthaccess
@@ -37,9 +40,18 @@ cdsapi
 icoscp
 contextily
 mapclassify
+ipynb
 
 # functions
 getaffinity
 
 # Words
 reproject
+shapefile
+narrowband
+untar
+geoscience
+
+# Nouns
+Liang
+Bonafoni

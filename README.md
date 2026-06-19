@@ -4,7 +4,7 @@
 **Table of Contents**
 
 - [Introduction](#introduction)
-- [Pre-requistes](#pre-requistes)
+- [Pre-requisites](#pre-requistes)
 - [Installation](#installation)
 - [Usage](#usage)
 
@@ -18,7 +18,7 @@ Python package to prepare datasets for evapotranspiration processing:
 * Select products between 2 collections that satisfy criteria
 * Create ET dataset from products
 
-## Pre-requistes
+## Pre-requisites
 
 To search and download products and auxiliary data, you need accounts and set environment variables corresponding to login and password for each catalog:
 * [USGS machine to machine](https://m2m.cr.usgs.gov/): required to define `USGS_USERNAME` and `USGS_PASSWORD` (the api key is used as a password here)
@@ -57,7 +57,7 @@ To use notebook
 pip install .[notebook]
 ```
 
-To install in a developper mode
+To install in a developer mode
 ```console
 pixi install -e dev
 ```
@@ -72,7 +72,7 @@ pixi shell
 pip install .[notebook]
 ```
 
-For a developper installtion
+For a developer installation
 ```console
 cd et-dataset
 git pull
@@ -186,7 +186,7 @@ options:
   -h, --help            show this help message and exit
   -v, --verbose         Verbose mode
   --coll1 {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSSENTINEL2,Collection.HLSLANDSAT}
-                        Fisrt collection of products
+                        First collection of products
   --coll2 {Collection.ECOSTRESS,Collection.LANDSAT,Collection.SENTINEL2,Collection.HLSSENTINEL2,Collection.HLSLANDSAT}
                         Second collection of products
   --min_date MIN_DATE   Minimum date for acquisition in YYYY-MM-DD format
@@ -221,7 +221,7 @@ Compatible VIS products are:
 
 Compatible TIR products are:
 * Landsat L2A
-* ECOSTRESS collectin V2 only
+* ECOSTRESS collection V2 only
 
 LAI is calculated from the spectral reflectances with the [pyBVNET](https://forge.ird.fr/cesbio/modelisation/pybvnet) package, using the BVNET neural networks.
 
@@ -270,17 +270,20 @@ A complete notebook is available to describe landsat data preparation: [prepare_
 ## Scripts
 
 Several scripts are available:
-* [prepare_landsat.py](scripts/prepare_landsat.py): Prepare landsat data
+* [download_landsat.py](scripts/download_landsat.py): Download Landsat product and auxiliary data
+* [prepare_landsat.py](scripts/prepare_landsat.py): Prepare ET dataset from Landsat product and auxiliary data
 * [get_dem.py](scripts/get_dem.py): Extract DEM based on a ROI from the copernicus DEM.
 * [copy_dem.py](scripts/copy_dem.py): Copy DEM tiles from the tiled copernicus DEM to a directory.
+* [download_timeseries.py](scripts/download_timeseries.py): Download ERA5land ET product, MSG daily radiation and extra ERA5land variables data for a period of time
+* [prepare_timeseries.py](scripts/prepare_timeseries.py): Prepare ET timeseries from ERA5land ET products, MSG daily radiation and extra ERA5land variables data
 
-### Prepare landsat
+### Download Landsat
 
 ```bash
-python scripts/prepare_landsat.py -h
-usage: prepare_landsat.py [-h] [-v] -r ROI -s START_DATE -e END_DATE [-o OUTPUT] [--max_cloud_cover MAX_CLOUD_COVER] [--min_roi_overlap MIN_ROI_OVERLAP] [--mnt_path MNT_PATH]
+scripts/download_landsat.py -h
+usage: download_landsat.py [-h] [-v] -r ROI -s START_DATE -e END_DATE [-o OUTPUT] [--max_cloud_cover MAX_CLOUD_COVER] [--min_roi_overlap MIN_ROI_OVERLAP]
 
-Prepare Landsat data
+Download Landsat product and auxiliary data
 
 options:
   -h, --help            show this help message and exit
@@ -296,12 +299,38 @@ options:
                         Maximum cloud cover (default: 25)
   --min_roi_overlap MIN_ROI_OVERLAP
                         Minimum overlap between ROI and a product (default: 33)
+```
+
+Example
+```bash
+python scripts/download_landsat.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2023-03-01" -e "2023-03-12" -o notebooks/out
+```
+
+### Prepare Landsat
+```bash
+python scripts/prepare_landsat.py -h
+usage: prepare_landsat.py [-h] [-v] -r ROI [-o OUTPUT] [--landsat_path LANDSAT_PATH] [--era5_path ERA5_PATH] [--radiation_path RADIATION_PATH] [--mnt_path MNT_PATH]
+
+Prepare Landsat data
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Verbose mode
+  -r ROI, --roi ROI     Path of the region of interest in Shapefile format
+  -o OUTPUT, --output OUTPUT
+                        Output dataset directory path (default: current directory)
+  --landsat_path LANDSAT_PATH
+                        Directory of Landsat products
+  --era5_path ERA5_PATH
+                        Directory of ERA5 data
+  --radiation_path RADIATION_PATH
+                        Directory of radiation data
   --mnt_path MNT_PATH   Directory of DEM tiles
 ```
 
 Example
 ```bash
-python scripts/prepare_landsat.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2023-03-01" -e "2023-03-12" -o notebooks/out --mnt_path $HOME/data/MNT/DEM_Copercinus_30m/
+python scripts/prepare_landsat.py -r notebooks/data/Zone_Senegal_Centre.shp -o notebooks/out --landsat_path notebooks/out/LANDSAT_data --mnt_path $HOME/data/MNT/DEM_Copernicus_30m/
 ```
 
 ### Get DEM
@@ -336,4 +365,52 @@ options:
   --mnt_path MNT_PATH   Path to the DEM directory
   -o OUTPUT, --output OUTPUT
                         Output directory
+```
+
+### Download timeseries
+
+```bash
+scripts/download_timeseries.py -h
+usage: Prepare timeseries [-h] -s START_DATE -e END_DATE -r ROI [-o OUTPUT]
+
+options:
+  -h, --help            show this help message and exit
+  -s START_DATE, --start_date START_DATE
+                        start date (YY-MM-DD)
+  -e END_DATE, --end_date END_DATE
+                        end date (YY-MM-DD)
+  -r ROI, --roi ROI     Path of the region of interest in Shapefile format
+  -o OUTPUT, --output OUTPUT
+                        Output directory
+```
+
+Example
+```bash
+python scripts/download_timeseries.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2024-03-01" -e "2024-03-12" -o notebooks/out_ts
+```
+
+### Prepare timeseries
+
+```bash
+scripts/prepare_timeseries.py -h
+usage: Prepare timeseries [-h] -s START_DATE -e END_DATE -r ROI [-o OUTPUT] [--era5_path ERA5_PATH] [--radiation_path RADIATION_PATH]
+
+options:
+  -h, --help            show this help message and exit
+  -s START_DATE, --start_date START_DATE
+                        start date (YY-MM-DD)
+  -e END_DATE, --end_date END_DATE
+                        end date (YY-MM-DD)
+  -r ROI, --roi ROI     Path of the region of interest in Shapefile format
+  -o OUTPUT, --output OUTPUT
+                        Output directory
+  --era5_path ERA5_PATH
+                        Directory of ERA5 data
+  --radiation_path RADIATION_PATH
+                        Directory of radiation data
+```
+
+Example
+```bash
+python scripts/prepare_timeseries.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2024-03-01" -e "2024-03-12" -o notebooks/out_ts
 ```
