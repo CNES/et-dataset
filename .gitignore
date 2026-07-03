@@ -24,6 +24,8 @@ metrics_*/
 base/
 Data_*/
 fluxnet_data/
+validation/temperature/notebooks/stage_liaise/
+validation/radiation/notebooks/SAC_GlobalSolarradiation.ipynb
 
 # Data
 *.tif
@@ -36,6 +38,7 @@ fluxnet_data/
 *.mat
 *.nc
 *.zip
+*.dat
 *.zarr/
 pckg/
 

@@ -13,7 +13,6 @@ import logging
 import os
 from multiprocessing import Process
 
-import pandas as pd
 import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 from pyproj import CRS
@@ -21,7 +20,10 @@ from pyproj import CRS
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
 from etdataset.era5 import ERA5Dataset
-from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
+from etdataset.fluxnet import (
+    get_fluxnet_stations_config,
+    get_fluxnet_stations_list,
+)
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
     RescalTempMethod,
@@ -38,8 +40,10 @@ from etdataset.utils import (
 
 logger = LoggerManager.get_logger(__name__)
 
+G_CST = 9.80665
 
-def run_stations_process(
+
+def run_stations_process_method_4(
     start_date: dt.date,
     end_date: dt.date,
     step_date: int,
@@ -48,28 +52,26 @@ def run_stations_process(
     mnt_path: str,
     data_path: str,
     output: str,
-):  # Get metadats of the station
+):
     logger.info(f"Current station : {station}")
-    # Get metadats of the station
-    cfg = get_stations_config(station)
 
+    cfg = get_fluxnet_stations_config(station)
+    # ROI
+    roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
+        cfg.lat, cfg.lon, 25000, 25000, CRS.from_epsg(4326)
+    )["utm"]
+
+    # DEM
+    data = get_dem_from_roi(
+        roi_bbox=roi_bbox_utm,
+        roi_crs=roi_crs_utm,
+        base_dir=mnt_path,
+        resolution=60,
+    )
     for d in generate_dates(start_date, end_date, step_date):
         for h in list_hours:
             date = dt.datetime.combine(d, h)
             logger.info(f"Processing {date}")
-
-            # ROI
-            roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
-                cfg.lat, cfg.lon, 25000, 25000, CRS.from_epsg(4326)
-            )["utm"]
-
-            # DEM
-            data = get_dem_from_roi(
-                roi_bbox=roi_bbox_utm,
-                roi_crs=roi_crs_utm,
-                base_dir=mnt_path,
-                resolution=60,
-            )
 
             # attributes nécessaires
             data.attrs["vis_date"] = date.date()
@@ -82,7 +84,7 @@ def run_stations_process(
                 path=data_path,
                 dataset=ERA5Dataset.ERA5,
                 variables=[TempVariable.TD, TempVariable.TA],
-                method=RescalTempMethod.CONST_LR,
+                method=RescalTempMethod.VERTICAL_INTERP,
             )
             T_station, Td_station = get_ta_td_celsius_at_location(
                 updated, cfg.lat, cfg.lon
@@ -120,9 +122,7 @@ def generate_timeseries_for_stations_multiprocess(
     list_hours = generate_hours(hour_start, hour_end, hour_step)
 
     # Station
-    csv_path = get_csv_with_valid_icos_stations()
-    df = pd.read_csv(csv_path)
-    valid_stations_list = df["id"].tolist()
+    valid_stations_list = get_fluxnet_stations_list()
 
     if stations == "all":
         ids = valid_stations_list
@@ -138,7 +138,7 @@ def generate_timeseries_for_stations_multiprocess(
     procs = []
     for station_id in ids:
         p = Process(
-            target=run_stations_process,
+            target=run_stations_process_method_4,
             args=(
                 start_date,
                 end_date,
@@ -187,7 +187,6 @@ def get_parser() -> argparse.ArgumentParser:
         help="End date (dt.date(YYYY,MM,DD))",
         required=True,
     )
-
     parser.add_argument(
         "-p",
         "--mnt_path",
@@ -206,7 +205,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--output",
         type=str,
         help="Output directory",
-        default=os.getcwd(),
+        default="method_3",
     )
 
     parser.add_argument(
@@ -289,10 +288,6 @@ if __name__ == "__main__":
     if not os.path.isdir(args.output):
         logger.debug(f"Create output path: {args.output}")
         os.makedirs(args.output, exist_ok=True)
-
-    # DEM directory
-    if args.mnt_path is not None and not os.path.isdir(args.mnt_path):
-        raise FileNotFoundError(f"DEM directory not found {args.mnt_path}")
 
     if args.id_stations == ["all"]:
         stations = "all"

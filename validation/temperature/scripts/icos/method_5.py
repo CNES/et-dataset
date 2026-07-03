@@ -38,8 +38,10 @@ from etdataset.utils import (
 
 logger = LoggerManager.get_logger(__name__)
 
+G_CST = 9.80665
 
-def run_stations_process(
+
+def run_stations_process_method_5(
     start_date: dt.date,
     end_date: dt.date,
     step_date: int,
@@ -48,11 +50,10 @@ def run_stations_process(
     mnt_path: str,
     data_path: str,
     output: str,
-):  # Get metadats of the station
+):
     logger.info(f"Current station : {station}")
-    # Get metadats of the station
-    cfg = get_stations_config(station)
 
+    cfg = get_stations_config(station)
     for d in generate_dates(start_date, end_date, step_date):
         for h in list_hours:
             date = dt.datetime.combine(d, h)
@@ -82,7 +83,7 @@ def run_stations_process(
                 path=data_path,
                 dataset=ERA5Dataset.ERA5,
                 variables=[TempVariable.TD, TempVariable.TA],
-                method=RescalTempMethod.CONST_LR,
+                method=RescalTempMethod.INTERP_PROFILE_SURF,
             )
             T_station, Td_station = get_ta_td_celsius_at_location(
                 updated, cfg.lat, cfg.lon
@@ -138,7 +139,7 @@ def generate_timeseries_for_stations_multiprocess(
     procs = []
     for station_id in ids:
         p = Process(
-            target=run_stations_process,
+            target=run_stations_process_method_5,
             args=(
                 start_date,
                 end_date,
@@ -187,7 +188,6 @@ def get_parser() -> argparse.ArgumentParser:
         help="End date (dt.date(YYYY,MM,DD))",
         required=True,
     )
-
     parser.add_argument(
         "-p",
         "--mnt_path",
@@ -206,7 +206,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--output",
         type=str,
         help="Output directory",
-        default=os.getcwd(),
+        default="method_5",
     )
 
     parser.add_argument(
@@ -289,10 +289,6 @@ if __name__ == "__main__":
     if not os.path.isdir(args.output):
         logger.debug(f"Create output path: {args.output}")
         os.makedirs(args.output, exist_ok=True)
-
-    # DEM directory
-    if args.mnt_path is not None and not os.path.isdir(args.mnt_path):
-        raise FileNotFoundError(f"DEM directory not found {args.mnt_path}")
 
     if args.id_stations == ["all"]:
         stations = "all"

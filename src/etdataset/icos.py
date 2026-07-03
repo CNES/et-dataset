@@ -12,11 +12,8 @@ import zipfile
 from dataclasses import dataclass
 
 import geopandas as gpd
-import numpy as np
-import numpy.typing as npt
 import pandas as pd
 import requests
-import xarray as xr
 from icoscp_core.icos import meta
 from pyproj import CRS
 from shapely.geometry import Point
@@ -525,8 +522,7 @@ def create_geopckg_from_gdf(gdf: gpd.GeoDataFrame, path: str | None = None):
     """
     Description
     ----------
-    Create a geopackage of a GeoDataFrame
-    ICOS stations
+    Create a geopackage of a GeoDataFrame stations
 
     Parameters
     ----------
@@ -587,95 +583,3 @@ def save_station_data(
     data.to_csv(csv_path, index=False)
 
     return csv_path
-
-
-#########################################
-##                                     ##
-##                                     ##
-## Calculations related to temperature ##
-##                                     ##
-##                                     ##
-#########################################
-
-
-def compute_dewpoint_temp(
-    ta: npt.ArrayLike, rh: npt.ArrayLike, f: float = 243.04, d: float = 17.625
-) -> npt.NDArray:
-    """
-    Description
-    -----------
-    Compute dew point temperature Tp from air temperature Ta (°C) and
-    relative humidity RH (%):
-
-            RH = 100 * exp[d*Td/(Td+f)-d*Ta/(Ta+f)]
-
-            it gives:
-
-            Td = f*(I + d*Ta/(Ta+f))/(d-I-d*Ta/(Ta+f))
-
-            with I = ln(RH/100)
-
-    from "The Relationship between Relative Humidity and the Dewpoint
-    Temperature in Moist Air: A Simple Conversion and Applications"
-    by Mark G. Lawrence
-
-    Parameters
-    -----------
-    ta : ntp.ArrayLike
-        Air temperature from ICOS
-    rh : ntp.ArrayLike
-        Relative humidity from ICOS
-
-    Return
-    -----------
-    tp : ntp.NDArray
-        Dew point temperature
-    """
-    ta = np.array(ta)
-    rh = np.array(rh)
-    L = np.log(rh / 100)
-    gamma = L + d * ta / (ta + f)
-
-    num = f * gamma
-    den = d - gamma
-    tp = num / den
-
-    return tp
-
-
-# @overload
-# def kelvin_to_celsius(kelvin: xr.DataArray) -> xr.DataArray: ...
-# @overload
-# def kelvin_to_celsius(kelvin: npt.NDArray) -> npt.NDArray: ...
-
-
-def kelvin_to_celsius(
-    kelvin: xr.DataArray | npt.NDArray,
-) -> xr.DataArray | npt.NDArray:
-    """
-    Description
-    -----------
-    Compute the temperature in celsius from a temperature in kelvin
-    """
-    if isinstance(kelvin, xr.DataArray):
-        return kelvin - 273.15
-    return np.array(kelvin) - 273.15
-
-
-# @overload
-# def celsius_to_kelvin(celsius: xr.DataArray) -> xr.DataArray: ...
-# @overload
-# def celsius_to_kelvin(celsius: npt.NDArray) -> npt.NDArray: ...
-
-
-def celsius_to_kelvin(
-    celsius: xr.DataArray | npt.NDArray,
-) -> xr.DataArray | npt.NDArray:
-    """
-    Description
-    -----------
-    Compute the temperature in kelvin from a temperature in celsius
-    """
-    if isinstance(celsius, xr.DataArray):
-        return celsius + 273.15
-    return np.array(celsius) + 273.15

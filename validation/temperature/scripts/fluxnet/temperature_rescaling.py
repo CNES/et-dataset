@@ -13,7 +13,6 @@ import logging
 import os
 from multiprocessing import Process
 
-import pandas as pd
 import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 from pyproj import CRS
@@ -21,7 +20,10 @@ from pyproj import CRS
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
 from etdataset.era5 import ERA5Dataset
-from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
+from etdataset.fluxnet import (
+    get_fluxnet_stations_config,
+    get_fluxnet_stations_list,
+)
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
     RescalTempMethod,
@@ -51,8 +53,10 @@ def run_stations_process(
 ):  # Get metadats of the station
     logger.info(f"Current station : {station}")
     # Get metadats of the station
-    cfg = get_stations_config(station)
-
+    cfg = get_fluxnet_stations_config(station)
+    ta_out = []
+    td_out = []
+    times = []
     for d in generate_dates(start_date, end_date, step_date):
         for h in list_hours:
             date = dt.datetime.combine(d, h)
@@ -88,20 +92,24 @@ def run_stations_process(
                 updated, cfg.lat, cfg.lon
             )
 
-            ds_out = xr.Dataset(
-                {
-                    "ta": ("time", [float(T_station.item())]),
-                    "tdp": ("time", [float(Td_station.item())]),
-                },
-                coords={"time": [date]},
-            )
+            ta_out.append(float(T_station.item()))
+            td_out.append(float(Td_station.item()))
+            times.append(date)
 
-            save_ta_td_csv(
-                ds_out,
-                cfg,
-                output,
-                name_dir="csv_era5_rescaled",
-            )
+    ds_out = xr.Dataset(
+        {
+            "ta": ("time", ta_out),
+            "tdp": ("time", td_out),
+        },
+        coords={"time": times},
+    )
+
+    save_ta_td_csv(
+        ds_out,
+        cfg,
+        output,
+        name_dir="csv_era5_rescaled",
+    )
 
 
 def generate_timeseries_for_stations_multiprocess(
@@ -120,9 +128,7 @@ def generate_timeseries_for_stations_multiprocess(
     list_hours = generate_hours(hour_start, hour_end, hour_step)
 
     # Station
-    csv_path = get_csv_with_valid_icos_stations()
-    df = pd.read_csv(csv_path)
-    valid_stations_list = df["id"].tolist()
+    valid_stations_list = get_fluxnet_stations_list()
 
     if stations == "all":
         ids = valid_stations_list

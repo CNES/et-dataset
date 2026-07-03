@@ -19,7 +19,8 @@ import requests
 from pyproj import CRS
 from shapely.geometry import Point
 
-from etdataset.icos import StationConfig, compute_dewpoint_temp
+from etdataset.dewpoint_temp import compute_dewpoint_temp
+from etdataset.icos import StationConfig
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
@@ -39,17 +40,27 @@ COLUMN_RENAME = {
     "location_long": "lon",
 }
 
+FLUXNET_COLUMNS = {
+    "TIMESTAMP_START": "time",
+    "TA_F": "ta_gapfilled",
+    "TA_F_QC": "ta_gapfilled_qc",
+    "TA_F_MDS": "ta",
+    "TA_F_MDS_QC": "ta_qc",
+    "RH": "rh",
+}
 DATA_DIR = Path(__file__).parent / "data"
 STATIONS_CSV = DATA_DIR / "fluxnet_shuttle.csv"
 
 
 def get_fluxnet_stations_list():
+    """Load the stations CSV and return a list of all station site IDs"""
     csv_path = STATIONS_CSV
     data = pd.read_csv(csv_path, index_col="site_id")
     return list(data.index)
 
 
 def load_fluxnet_stations_csv() -> pd.DataFrame:
+    """Load the stations CSV as a pandas DataFrame with renamed columns"""
     df = pd.read_csv(STATIONS_CSV)
     df = df.rename(columns=COLUMN_RENAME)
     # df = df.set_index("id")
@@ -69,7 +80,7 @@ def get_fluxnet_stations_config(id_station: str) -> StationConfig:
     """
     Description
     ----------
-    Load station configurations from a CSV file.
+    Load station configurations from a CSV file
 
     For each row, this function creates a StationConfig entry with:
         - id of the station
@@ -86,7 +97,7 @@ def get_fluxnet_stations_config(id_station: str) -> StationConfig:
     Returns
     -------
     StationConfig
-        A dictionary mapping station IDs to their corresponding StationConfig.
+        A dictionary mapping station IDs to their corresponding StationConfig
     """
     df = load_fluxnet_stations_csv()
     df = df.set_index("id")
@@ -137,14 +148,14 @@ def filter_fluxnet_stations_by_sources(src_code: str):
     """
     Description
     ----------
-    Filter stations from a CSV file based on their source code.
+    Filter stations from a CSV file based on their source code
 
     Parameters
     ----------
     csv_path : str
         Path to the CSV file
     src_code : str
-        Source code used to filter the stations (e.g., "AmeriFlux", "ICOS").
+        Source code used to filter the stations (e.g., "AmeriFlux", "ICOS")
 
     Returns
     -------
@@ -162,13 +173,13 @@ def filter_fluxnet_stations_by_years(
     """
     Description
     ----------
-    Filter stations from a CSV file based on their data year range.
+    Filter stations from a CSV file based on their data year range
     Parameters
     ----------
     first_year : int
-        Start year to filter the stations (e.g., 2022).
+        Start year to filter the stations (e.g., 2022)
     last_year : int
-        End year to filter the stations (e.g., 2023).
+        End year to filter the stations (e.g., 2023)
     Returns
     -------
     data_filtered: pd.DataFrame
@@ -194,21 +205,23 @@ def download_zip(
     download_link: str, file_path: str, id_station: str
 ) -> str | None:
     """
-    Download a zip file from a URL and save it to a local path.
+    Description
+    ----------
+    Download a zip file from a URL and save it to a local path
 
     Parameters
     ----------
     download_link : str
-        URL to download the file from.
+        URL to download the file from
     file_path : str
-        Local path where the file will be saved.
+        Local path where the file will be saved
     id_station : str
-        Station ID (used for logging).
+        Station ID (used for logging)
 
     Returns
     -------
     str | None
-        The file path if download succeeded, None otherwise.
+        The file path if download succeeded
     """
     logger.info(f"Download url = {download_link}")
     try:
@@ -236,7 +249,27 @@ def download_fluxnet_data(
     csv_path: Path | str | None = None,
     output_dir: str = "fluxnet_data",
 ) -> None:
+    """
+    Description
+    ----------
+    Download, save, and extract Fluxnet station ZIP archives based on a
+    metadata CSV
 
+    Parameters
+    ----------
+    stations : str or list of str (or "all")
+        Station ID or list of station IDs to download. If "all", downloads all
+        valid stations found in the database.
+    csv_path : Path or str, optional
+        Path to the local CSV file containing stations metadata. If None,
+        defaults to global STATIONS_CSV.
+    output_dir : str, default "fluxnet_data"
+        Directory where downloaded ZIP files and extracted folders will be saved
+
+    Returns
+    -------
+    None
+    """
     # Stations
     valid_stations_list = get_fluxnet_stations_list()
     if stations == "all":
@@ -260,6 +293,7 @@ def download_fluxnet_data(
     if "id" not in df.columns or "download_link" not in df.columns:
         raise KeyError("CSV file must contain 'id' and 'download_link'")
 
+    # Filter metadata to keep only the requested stations
     df_filtered = df[df["id"].isin(ids)]
     if df_filtered.empty:
         logger.info("Stations not found")
@@ -267,10 +301,12 @@ def download_fluxnet_data(
 
     os.makedirs(output_dir, exist_ok=True)
 
+    ## Process downloads and extractions
     for _, row in df_filtered.iterrows():
         id_station = row["id"]
         download_link = row["download_link"]
 
+        # Skip stations missing a valid download link
         if pd.isna(download_link):
             logger.warning(
                 f"No download link for station {id_station}. Ignored."
@@ -315,20 +351,24 @@ def get_fluxnet_archive(
     station_id: str | list[str] = "all", data_dir: str = "fluxnet_data"
 ) -> str | None:
     """
-    Find the HH CSV file path for a given station ID in the fluxnet_data folder.
+    Description
+    ----------
+    Find the HH (half hourly) CSV file path for a given station ID in the
+    fluxnet_data folder
 
     Parameters
     ----------
     station_id : str
-        Station ID (e.g. 'FR-Pue').
+        Station ID (e.g. 'FR-Pue')
     fluxnet_dir : str
-        Path to the fluxnet_data directory.
+        Path to the fluxnet_data directory
 
     Returns
     -------
     str | None
         Path to the HH CSV file, or None if not found.
     """
+    # Look for matching station directories
     folder_pattern = os.path.join(data_dir, f"*_{station_id}_*")
     folders = [f for f in glob.glob(folder_pattern) if os.path.isdir(f)]
 
@@ -340,7 +380,7 @@ def get_fluxnet_archive(
 
     station_folder = folders[0]
 
-    # 2. Chercher le fichier CSV HH directement à l'intérieur de ce dossier
+    # Search for the specific HH (half hourly) CSV file inside the folder
     csv_pattern = os.path.join(station_folder, "*_FLUXNET_FLUXMET_HH_*.csv")
     csv_files = glob.glob(csv_pattern)
 
@@ -348,7 +388,6 @@ def get_fluxnet_archive(
         logger.warning(f"No HH CSV found in folder {station_folder}")
         return None
 
-    # Retourne le chemin complet vers le premier fichier CSV trouvé
     return csv_files[0]
 
 
@@ -357,22 +396,24 @@ def get_fluxnet_archives(
     fluxnet_dir: str = "fluxnet_data",
 ) -> dict[str, str | None]:
     """
-    Find HH CSV file paths for one or multiple stations.
+    Description
+    ----------
+    Find HH (half-hourly) CSV file paths for one or multiple stations
 
     Parameters
     ----------
     stations : str | list[str]
-        A station ID, a list of station IDs, or 'all'.
+        A station ID, a list of station IDs, or 'all'
     fluxnet_dir : str
-        Path to the fluxnet_data directory.
+        Path to the fluxnet_data directory
 
     Returns
     -------
     dict[str, str | None]
-        Mapping of station_id -> CSV path (or None if not found).
+        Mapping of station_id -> CSV path
     """
     if stations == "all":
-        # Infer station IDs from all zips present in the directory
+        # get station IDs from all zips present in the directory
         zips = glob.glob(os.path.join(fluxnet_dir, "*.zip"))
         ids = []
         for z in zips:
@@ -390,35 +431,55 @@ def get_fluxnet_archives(
     }
 
 
-FLUXNET_COLUMNS = {
-    "TIMESTAMP_START": "start",
-    "TIMESTAMP_END": "end",
-    "TA_F": "ta_gapfilled",
-    "TA_F_QC": "ta_gapfilled_qc",
-    "TA_F_MDS": "TA",
-    "TA_F_MDS_QC": "TA_qc",
-    "RH": "RH",
-}
-
-
 def read_fluxnet_data(file_path: str) -> pd.DataFrame:
+    """
+    Description
+    ----------
+    Read a Fluxnet CSV file and compute dewpoint temperature
 
+    Parameters
+    ----------
+    file_path : str
+        Path to the target Fluxnet CSV data file
+
+    Returns
+    -------
+    pd.DataFrame
+    """
     df = pd.read_csv(file_path, usecols=list(FLUXNET_COLUMNS.keys()))
     df = df.rename(columns=FLUXNET_COLUMNS)
     df = df.replace(-9999, np.nan)
 
-    df["start"] = pd.to_datetime(df["start"], format="%Y%m%d%H%M")
-    df["end"] = pd.to_datetime(df["end"], format="%Y%m%d%H%M")
+    df["time"] = pd.to_datetime(df["time"], format="%Y%m%d%H%M")  # start
+    # df["end"] = pd.to_datetime(df["end"], format="%Y%m%d%H%M")
 
     # Compute dewpoint temperature
-    df["tdp_gpfilled"] = compute_dewpoint_temp(df["ta_gapfilled"], df["RH"])
-    df["tdp_mds"] = compute_dewpoint_temp(df["TA"], df["RH"])
+    df["tdp_gpfilled"] = compute_dewpoint_temp(df["ta_gapfilled"], df["rh"])
+    df["tdp"] = compute_dewpoint_temp(df["ta"], df["rh"])
     return df
 
 
 def save_fluxnet_station(
     cfg: StationConfig, df: pd.DataFrame, output_dir: str = "fluxnet_processed"
 ) -> str:
+    """
+    Description
+    ----------
+    Save the processed station DataFrame to a CSV file
+
+    Parameters
+    ----------
+    cfg : StationConfig
+        Configuration holding the station metadata (e.g., ID)
+    df : pd.DataFrame
+        The processed data to be saved
+    output_dir : str, default "fluxnet_processed"
+        Directory where the output file will be saved
+
+    Returns
+    -------
+    str : path
+    """
     if os.path.isabs(output_dir):
         folder = output_dir
     else:

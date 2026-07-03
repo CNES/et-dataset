@@ -39,7 +39,7 @@ from etdataset.utils import (
 logger = LoggerManager.get_logger(__name__)
 
 
-def run_stations_process(
+def run_stations_process_method_2(
     start_date: dt.date,
     end_date: dt.date,
     step_date: int,
@@ -50,7 +50,6 @@ def run_stations_process(
     output: str,
 ):  # Get metadats of the station
     logger.info(f"Current station : {station}")
-    # Get metadats of the station
     cfg = get_stations_config(station)
 
     for d in generate_dates(start_date, end_date, step_date):
@@ -82,7 +81,7 @@ def run_stations_process(
                 path=data_path,
                 dataset=ERA5Dataset.ERA5,
                 variables=[TempVariable.TD, TempVariable.TA],
-                method=RescalTempMethod.CONST_LR,
+                method=RescalTempMethod.LR_PROFILE_FIXED_LEVELS,
             )
             T_station, Td_station = get_ta_td_celsius_at_location(
                 updated, cfg.lat, cfg.lon
@@ -138,7 +137,7 @@ def generate_timeseries_for_stations_multiprocess(
     procs = []
     for station_id in ids:
         p = Process(
-            target=run_stations_process,
+            target=run_stations_process_method_2,
             args=(
                 start_date,
                 end_date,
@@ -194,6 +193,7 @@ def get_parser() -> argparse.ArgumentParser:
         type=str,
         help="Directory of DEM tiles",
     )
+
     parser.add_argument(
         "-d",
         "--data_path",
@@ -206,7 +206,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--output",
         type=str,
         help="Output directory",
-        default=os.getcwd(),
+        default="method_2",
     )
 
     parser.add_argument(

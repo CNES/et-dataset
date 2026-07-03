@@ -18,18 +18,18 @@ import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 
 from etdataset.cli import CLIException
-from etdataset.era5 import ERA5Dataset
+from etdataset.era5 import create_era5_sub_dataset, read
 from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
 from etdataset.logging import LoggerManager
-from etdataset.validation_temp.temperature_rescaling import (
-    create_era5_sub_dataset,
+from etdataset.temperature import (
+    save_ta_td_csv,
+)
+from etdataset.utils import (
     filter_dataset_by_hours,
     generate_dates,
     generate_hours,
     get_ta_td_celsius_at_location,
     normalize_longitude_latitude,
-    read_era5_file,
-    save_ta_td_csv,
 )
 
 logger = LoggerManager.get_logger(__name__)
@@ -48,11 +48,12 @@ def run_stations_process(
     cfg = get_stations_config(station)
     for d in generate_dates(start_date, end_date, step_date):
         logger.info(f"Current date : {d}")
-        era5_xrds = read_era5_file(
-            d,
-            ERA5Dataset.ERA5,
+        product_path = os.path.join(
             data_path,
+            "ERA5_data",
+            f"download_era5_{d.strftime('%Y-%m-%d')}.zip",
         )
+        era5_xrds = read(product=product_path)
         if era5_xrds is None:
             logger.warning(
                 "Skipping date %s because ERA5 file is unavailable", d
@@ -65,7 +66,7 @@ def run_stations_process(
         # FOR ERA5 data only ###################################################
         era5_sub = create_era5_sub_dataset(era5_filtered)
         # get ta and td in celsius at station location
-        ta, td = get_ta_td_celsius_at_location(era5_sub, cfg)
+        ta, td = get_ta_td_celsius_at_location(era5_sub, cfg.lat, cfg.lon)
         # logger.info(f"TA:{ta} and TD :{td}")
         ds_era5_grid = xr.Dataset(
             {

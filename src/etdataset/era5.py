@@ -325,6 +325,7 @@ def interpolate_temperature(
     src_dem: xr.DataArray,
     dst_dem: xr.DataArray,
     lapse_rate: float,
+    interp_type: str,
 ) -> xr.DataArray:
     """
     Description
@@ -366,7 +367,11 @@ def interpolate_temperature(
     # Project into the coordinate system of the destination DEM
     projected_temp = ref_temp.rio.reproject_match(
         dst_dem,
-        resampling=rio.enums.Resampling.bilinear,
+        resampling=getattr(
+            rio.enums.Resampling,
+            interp_type,
+            rio.enums.Resampling.cubic_spline,
+        ),
     )
     # Adjust temperatures to DEM elevation
     dem_temp = projected_temp + lapse_rate * dst_dem
@@ -662,6 +667,7 @@ def rescale_temperature_with_lapserate(
     era5_data=xr.DataArray | None,
     era5_dem=xr.DataArray | None,
     lapse_rate=float,
+    interp_type: str = "cubic_spline",
     key=str,
     description=str,
 ) -> xr.DataArray | None:
@@ -700,6 +706,7 @@ def rescale_temperature_with_lapserate(
         src_dem=era5_dem,
         dst_dem=dem,
         lapse_rate=lapse_rate,
+        interp_type=interp_type,
     )
     data.attrs.clear()
     data.attrs["standard_name"] = key
@@ -762,6 +769,7 @@ def add(
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
     variables: list[ERA5Var] | None = None,
     path: str | None = None,
+    interp_type: str = "bilinear",
 ) -> xr.Dataset:
     """
     Description
@@ -893,6 +901,7 @@ def add(
             era5_data=era5_xrds.get(ERA5Var.TEMPERATURE.key, None),
             era5_dem=era5_dem,
             lapse_rate=-0.0065,
+            interp_type=interp_type,
             key="ta",
             description="2m air temperature",
         )
@@ -906,6 +915,7 @@ def add(
             era5_data=era5_xrds.get(ERA5Var.DEWPOINT_TEMPERATURE.key, None),
             era5_dem=era5_dem,
             lapse_rate=-0.0052,
+            interp_type=interp_type,
             key="tdp",
             description="dewpoint temperature",
         )
@@ -1047,3 +1057,32 @@ def download_date_by_date(
         )
 
     return time
+
+
+def create_era5_sub_dataset(era5_xrds: xr.Dataset) -> xr.Dataset:
+    """
+    Description
+    -----------
+    Create a subset of an ERA5 xarray Dataset containing only selected variables
+    and rename them to standardized names
+
+    It renames 't2m' and 'd2m' to 'ta' and 'tdp'.
+
+    Parameters
+    ----------
+    era5_xrds : xr.Dataset
+        The original ERA5 dataset containing multiple data variables.
+
+    Returns
+    -------
+    era5_sub : xr.Dataset
+        A new xarray Dataset
+    """
+    era5_sub = era5_xrds[["t2m", "d2m"]]
+    era5_sub = era5_sub.rename(
+        {
+            "t2m": "ta",
+            "d2m": "td",
+        }
+    )
+    return era5_sub

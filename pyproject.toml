@@ -75,7 +75,7 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/etdataset"]
+packages = ["src/etdataset", "validation/temperature/src/temperature"]
 
 [tool.pytest.ini_options]
 addopts = ["-m", "not skip or not slow"]
@@ -136,6 +136,8 @@ module = [
     "icoscp_core.*",
     "cdsapi",
     "pytest",
+    "math",
+    "numpy",
         ]
 ignore_missing_imports = true
 

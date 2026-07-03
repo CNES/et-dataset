@@ -159,3 +159,63 @@ def interpolate_on_grid(
         grid,
         resampling=algorithm,
     )
+
+
+def reproject_era5_grid(
+    data: xr.DataArray, dst_data: xr.DataArray
+) -> xr.DataArray:
+    """
+    Description
+    -----------
+    Reproject an ERA5 grid (in EPSG:4326) to match the grid/CRS of a
+    destination DataArray (in EPSG:32631), using nearest-neighbor resampling.
+
+    Parameters
+    ----------
+    data: Source ERA5 DataArray with 'latitude'/'longitude' dimensions,
+        assumed to be in EPSG:4326.
+    dst_data: Destination DataArray whose grid/CRS (EPSG:32631) the
+        source data will be reprojected to match.
+
+    Returns
+    -------
+    The source data reprojected onto the destination grid.
+    """
+
+    data = data.rename({"latitude": "y", "longitude": "x"})
+    data = data.rio.write_crs("EPSG:4326")
+    data = data.rio.write_nodata(np.nan)
+    dst_data = dst_data.rio.write_crs("EPSG:32631")
+    # Reproject the source data to match the destination grid
+    res = data.rio.reproject_match(
+        dst_data, resampling=rio.enums.Resampling.nearest
+    )
+
+    return res
+
+
+def get_era5_grid(
+    bounds: rio.coords.BoundingBox, crs: CRS, resolution: float
+) -> xr.Dataset:
+    """
+    Description
+    -----------
+    Get a ERA5 grid for interpolation, given bounds and special resolution
+
+    Parameters
+    ----------
+    bounds : rio.coords.BoundingBox
+        Bounds of the grid
+    crs : CRS
+        CRS of the grid
+    resolution : float
+        Resolution of the grid
+
+    Return
+    -----------
+    grid : xr.Dataset
+        Grid for ERA5 data
+    """
+    grid = create_grid_dataset(bounds, crs, resolution)
+    grid["height"] = grid["grid"].copy()
+    return grid

@@ -11,7 +11,6 @@ import logging
 import os
 
 from etdataset.fluxnet import (
-    download_fluxnet_data,
     get_fluxnet_archive,
     get_fluxnet_stations_config,
     get_fluxnet_stations_list,
@@ -32,7 +31,8 @@ def prepare_fluxnet_stations(
     Prepare ICOS data
     """
     # download files
-    download_fluxnet_data(stations, data_dir)
+    # if data_dir is not None:
+    #     download_fluxnet_data(stations, output_dir=data_dir)
     # Valid stations only
     valid_stations_list = get_fluxnet_stations_list()
     if stations == "all":
@@ -53,12 +53,17 @@ def prepare_fluxnet_stations(
         # for each stations, get it configuration (latitude, longitude,
         # elevation)
         cfg = get_fluxnet_stations_config(station_id)
-        path = get_fluxnet_archive(cfg.id)
+        logger.info(f"cfg = {cfg}")
+        if data_dir is not None:
+            path = get_fluxnet_archive(cfg.id, data_dir=data_dir)
+        logger.info(f"path = {path}")
 
-        if path is not None:
-            # From the station's CSV, get its data
-            data = read_fluxnet_data(path)
+        if path is None:
+            logger.warning(f"No archive for station {station_id}")
+            continue
 
+        data = read_fluxnet_data(path)
+        csv_saved = save_fluxnet_station(cfg, data, out_dir)
         csv_saved = save_fluxnet_station(cfg, data, out_dir)
         csv_paths.append(csv_saved)
 
@@ -70,7 +75,7 @@ def get_parser() -> argparse.ArgumentParser:
     """
     Generate argument parser for cli
     """
-    parser = argparse.ArgumentParser(description="Prepare ICOS data")
+    parser = argparse.ArgumentParser(description="Prepare Fluxnet data")
 
     parser.add_argument(
         "-v",
@@ -84,14 +89,14 @@ def get_parser() -> argparse.ArgumentParser:
         "--stations",
         nargs="+",
         type=str,
-        help="ICOS ID Stations to prepare (ex: CH-Dav, DE-Geb)",
+        help="Fluxnet ID Stations to prepare",
         required=True,
     )
     parser.add_argument(
         "-d",
         "--data_dir",
         type=str,
-        help="Downloaded ICOS data directory path",
+        help="Downloaded Fluxnet data directory path",
         default=os.getcwd(),
         required=False,
     )
@@ -100,7 +105,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--out_dir",
         type=str,
         help="Output directory path where prepared ICOS data will be stocked",
-        default="icos_data",
+        default="fluxnet_processed",
         required=False,
     )
 

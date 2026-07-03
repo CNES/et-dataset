@@ -13,7 +13,6 @@ import logging
 import os
 from multiprocessing import Process
 
-import pandas as pd
 import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 from pyproj import CRS
@@ -21,7 +20,10 @@ from pyproj import CRS
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
 from etdataset.era5 import ERA5Dataset
-from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
+from etdataset.fluxnet import (
+    get_fluxnet_stations_config,
+    get_fluxnet_stations_list,
+)
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
     RescalTempMethod,
@@ -39,7 +41,7 @@ from etdataset.utils import (
 logger = LoggerManager.get_logger(__name__)
 
 
-def run_stations_process(
+def run_stations_process_method_3(
     start_date: dt.date,
     end_date: dt.date,
     step_date: int,
@@ -50,9 +52,8 @@ def run_stations_process(
     output: str,
 ):  # Get metadats of the station
     logger.info(f"Current station : {station}")
-    # Get metadats of the station
-    cfg = get_stations_config(station)
 
+    cfg = get_fluxnet_stations_config(station)
     for d in generate_dates(start_date, end_date, step_date):
         for h in list_hours:
             date = dt.datetime.combine(d, h)
@@ -82,7 +83,7 @@ def run_stations_process(
                 path=data_path,
                 dataset=ERA5Dataset.ERA5,
                 variables=[TempVariable.TD, TempVariable.TA],
-                method=RescalTempMethod.CONST_LR,
+                method=RescalTempMethod.LR_PROFILE_ALT_DEP,
             )
             T_station, Td_station = get_ta_td_celsius_at_location(
                 updated, cfg.lat, cfg.lon
@@ -120,9 +121,7 @@ def generate_timeseries_for_stations_multiprocess(
     list_hours = generate_hours(hour_start, hour_end, hour_step)
 
     # Station
-    csv_path = get_csv_with_valid_icos_stations()
-    df = pd.read_csv(csv_path)
-    valid_stations_list = df["id"].tolist()
+    valid_stations_list = get_fluxnet_stations_list()
 
     if stations == "all":
         ids = valid_stations_list
@@ -138,7 +137,7 @@ def generate_timeseries_for_stations_multiprocess(
     procs = []
     for station_id in ids:
         p = Process(
-            target=run_stations_process,
+            target=run_stations_process_method_3,
             args=(
                 start_date,
                 end_date,
@@ -206,7 +205,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--output",
         type=str,
         help="Output directory",
-        default=os.getcwd(),
+        default="method_3",
     )
 
     parser.add_argument(
