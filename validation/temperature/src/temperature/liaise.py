@@ -139,7 +139,12 @@ def read_netcdf_liaise_data(file_path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     ds = xr.open_mfdataset(files, combine="by_coords")
-    ds = ds.rename(NAME_MAP)
+    rename_map = {
+        old: new
+        for old, new in NAME_MAP.items()
+        if old in ds.variables or old in ds.dims
+    }
+    ds = ds.rename(rename_map)
 
     # logger.info(f"ds : {ds}")
     # logger.info(f"Dimensions: {dict(ds.dims)}")

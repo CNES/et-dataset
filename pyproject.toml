@@ -75,7 +75,7 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/etdataset", "validation/temperature/src/temperature"]
+packages = ["src/etdataset","validation/temperature/src/temperature"]
 
 [tool.pytest.ini_options]
 addopts = ["-m", "not skip or not slow"]
@@ -164,3 +164,4 @@ netcdf4 = ">=1.7.2,<2"
 h5netcdf = ">=1.6.1,<2"
 rasterio = ">=1.4,<2"
 seaborn = ">=0.13.2,<0.14"
+awscli = ">=2.36.4,<3"

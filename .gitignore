@@ -26,6 +26,16 @@ Data_*/
 fluxnet_data/
 validation/temperature/notebooks/stage_liaise/
 validation/radiation/notebooks/SAC_GlobalSolarradiation.ipynb
+validation/radiation/notebooks/docs
+daily_radiation.ipynb
+goes_data.ipynb
+himawari_data.ipynb
+
+
+# src
+daily_radiation.py
+goes.py
+himawari.py
 
 # Data
 *.tif
