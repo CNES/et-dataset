@@ -26,6 +26,7 @@ Data_*/
 fluxnet_data/
 validation/temperature/notebooks/stage_liaise/
 validation/radiation/notebooks/SAC_GlobalSolarradiation.ipynb
+validation/temperature/notebooks/maroc.ipynb
 validation/radiation/notebooks/docs
 daily_radiation.ipynb
 goes_data.ipynb
@@ -50,7 +51,7 @@ himawari.py
 *.zip
 *.dat
 *.zarr/
-pckg/
+!validation/temperature/notebooks/roi_maroc.gpkg
 
 # Package data
 !src/etdataset/data/geopotential_era5.nc
