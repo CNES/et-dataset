@@ -29,6 +29,7 @@ validation/temperature/notebooks/maroc.ipynb
 validation/radiation/notebooks/docs
 validation/radiation/notebooks/data
 validation/temperature/notebooks/data
+aeris-catalogue-prod/data/wget
 daily_radiation.ipynb
 goes_data.ipynb
 himawari_data.ipynb
