@@ -39,6 +39,7 @@ dependencies = [
   "pyarrow",
   "numcodecs",
   "zarr",
+  "awscli",
 ]
 
 [project.optional-dependencies]
@@ -58,7 +59,8 @@ notebook = [
   "ipywidgets",
   "contextily>=1.7.0,<2",
   "folium >=0.20.0,<0.21",
-  "mapclassify >=2.10.0,<3"
+  "mapclassify >=2.10.0,<3",
+  "seaborn",
 ]
 
 [project.urls]
@@ -163,5 +165,3 @@ hdf5 = ">=1.14.4,<2"
 netcdf4 = ">=1.7.2,<2"
 h5netcdf = ">=1.6.1,<2"
 rasterio = ">=1.4,<2"
-seaborn = ">=0.13.2,<0.14"
-awscli = ">=2.36.4,<3"
