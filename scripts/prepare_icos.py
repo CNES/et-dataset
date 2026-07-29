@@ -12,8 +12,8 @@ import os
 
 import pandas as pd
 
+from etdataset.dewpoint_temp import compute_dewpoint_temp
 from etdataset.icos import (
-    compute_dewpoint_temp,
     download_icos_station,
     filter_valid_data,
     get_csv_with_valid_icos_stations,

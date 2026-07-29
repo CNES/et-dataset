@@ -247,7 +247,7 @@ def download_zip(
 def download_fluxnet_data(
     stations: str | list[str] = "all",
     csv_path: Path | str | None = None,
-    output_dir: str = "fluxnet_data",
+    output_dir: str | None = None,
 ) -> None:
     """
     Description
@@ -257,13 +257,13 @@ def download_fluxnet_data(
 
     Parameters
     ----------
-    stations : str or list of str (or "all")
+    stations : str | list[str]
         Station ID or list of station IDs to download. If "all", downloads all
         valid stations found in the database.
-    csv_path : Path or str, optional
+    csv_path : Path | str, optional
         Path to the local CSV file containing stations metadata. If None,
         defaults to global STATIONS_CSV.
-    output_dir : str, default "fluxnet_data"
+    output_dir : str | None, default "fluxnet_data"
         Directory where downloaded ZIP files and extracted folders will be saved
 
     Returns
@@ -287,6 +287,13 @@ def download_fluxnet_data(
         csv_path = STATIONS_CSV
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"CSV file is not found: {csv_path}")
+
+    if output_dir is None:
+        output_dir = os.path.join(os.getcwd(), "fluxnet_data")
+    else:
+        output_dir = os.path.abspath(os.path.join(output_dir, "fluxnet_data"))
+
+    os.makedirs(output_dir, exist_ok=True)
 
     df = pd.read_csv(csv_path)
     df = df.rename(columns=COLUMN_RENAME)

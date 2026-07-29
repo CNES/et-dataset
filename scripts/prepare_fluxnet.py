@@ -11,6 +11,7 @@ import logging
 import os
 
 from etdataset.fluxnet import (
+    download_fluxnet_data,
     get_fluxnet_archive,
     get_fluxnet_stations_config,
     get_fluxnet_stations_list,
@@ -31,8 +32,8 @@ def prepare_fluxnet_stations(
     Prepare ICOS data
     """
     # download files
-    # if data_dir is not None:
-    #     download_fluxnet_data(stations, output_dir=data_dir)
+
+    download_fluxnet_data(stations, output_dir=data_dir)
     # Valid stations only
     valid_stations_list = get_fluxnet_stations_list()
     if stations == "all":
@@ -63,7 +64,6 @@ def prepare_fluxnet_stations(
             continue
 
         data = read_fluxnet_data(path)
-        csv_saved = save_fluxnet_station(cfg, data, out_dir)
         csv_saved = save_fluxnet_station(cfg, data, out_dir)
         csv_paths.append(csv_saved)
 
@@ -104,7 +104,7 @@ def get_parser() -> argparse.ArgumentParser:
         "-o",
         "--out_dir",
         type=str,
-        help="Output directory path where prepared ICOS data will be stocked",
+        help="Output directory path where prepared Fluxnet data will be stocked",  # noqa: E501
         default="fluxnet_processed",
         required=False,
     )

@@ -26,6 +26,10 @@ To search and download products and auxiliary data, you need accounts and set en
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
 * [LSA SAF Data](https://datalsasaf.lsasvcs.ipma.pt/): required to define `LSASAF_USER` and `LSASAF_PASSWORD`
 * [Climate Data Store](https://cds.climate.copernicus.eu/): required to configure CDS API ([see instructions](https://cds.climate.copernicus.eu/how-to-api))
+* [ICOS Data](https://www.icos-cp.eu/data-services/data-portal) : required to define `ICOS_API_TOKEN` (generated from your ICOS account. Tokens expire after 24 hours)
+* [FLUXNET DATA](https://fluxnet.org/fluxnet-data-system/) : from Fluxnet Shuttle ([see instructions](https://github.com/fluxnet/shuttle)), no authentification required
+* [HIMAWARI DATA](https://www.data.jma.go.jp/mscweb/en/index.html) : required to define `JAXA_USER`, `JAXA_PASSWORD`and `JAXA_HOST, ([see instructions](https://www.eorc.jaxa.jp/ptree/registration_top.html))
+* [GOES DATA](https://www.nesdis.noaa.gov/our-satellites/currently-flying/geostationary-satellites) : no authentification required ([see information](https://github.com/NOAA-Big-Data-Program/nodd-data-docs/blob/main/GOES/))
 
 ## Installation
 
