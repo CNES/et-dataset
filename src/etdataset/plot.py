@@ -6,10 +6,11 @@
 """
 Functions for plotting
 """
-# Skip this file with mypy
 
+# Skip this file with mypy
 import math
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -301,3 +302,31 @@ def density_plot(
         ax.set_ylabel("Land Surface Temperature K")
 
     plt.show()
+
+
+def plot_station_map(gdf: gpd.GeoDataFrame):
+    """
+    Description
+    -----------
+    Plot station locations on an interactive map from a GeoDataFrame.
+
+    Parameters
+    ----------
+    gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing station geometries and attributes.
+
+    Returns
+    -------
+
+    """
+    has_elev = "elev" in gdf.columns and gdf["elev"].notna().any()
+    m = gdf.explore(
+        column="elev" if has_elev else None,
+        tooltip="name",
+        popup=True,
+        legend=True,
+        marker_kwds={"radius": 8},
+        style_kwds={"color": "black"},
+        figsize=(8, 8),
+    )
+    return m
