@@ -16,6 +16,10 @@ logger = LoggerManager.get_logger(__name__)
 G_CST = 9.80665
 
 # MONTHLY LAPSE RATE
+
+# Lapse rate values from "A Meteorological Distribution System for
+#    High-Resolution Terrestrial Modeling (MicroMet)", Journal of
+#    Hydrometeorology, by G.E. Liston, K. Elder
 LAPSE_RATE_BY_MONTH = {
     1: -0.0044,
     2: -0.0059,
@@ -30,6 +34,9 @@ LAPSE_RATE_BY_MONTH = {
     11: -0.0065,
     12: -0.0047,
 }
+# Vapor pressure values from "A Meteorological Distribution System for
+#    High-Resolution Terrestrial Modeling (MicroMet)", Journal of
+#    Hydrometeorology, by G.E. Liston, K. Elder
 VAPOR_PRESSURE_BY_MONTH = {
     1: 0.00041,
     2: 0.00042,
