@@ -133,7 +133,6 @@ module = [
     "earthaccess.*",
     "geopandas",
     "fiona.*",
-    "landsatxplore.*",
     "matplotlib.*",
     "scipy.*",
     "rasterio.*",
