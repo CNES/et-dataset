@@ -63,14 +63,13 @@ def load_fluxnet_stations_csv() -> pd.DataFrame:
     """Load the stations CSV as a pandas DataFrame with renamed columns"""
     df = pd.read_csv(STATIONS_CSV)
     df = df.rename(columns=COLUMN_RENAME)
-    # df = df.set_index("id")
     return df
 
 
 #####################################
 ##                                 ##
 ##                                 ##
-##    Get metadatas of a station   ##
+##    Get metadata of a station   ##
 ##                                 ##
 ##                                 ##
 #####################################
@@ -78,8 +77,6 @@ def load_fluxnet_stations_csv() -> pd.DataFrame:
 
 def get_fluxnet_stations_config(id_station: str) -> StationConfig:
     """
-    Description
-    ----------
     Load station configurations from a CSV file
 
     For each row, this function creates a StationConfig entry with:
@@ -120,8 +117,6 @@ def get_fluxnet_station_location(
     stations: str | list[str],
 ) -> gpd.GeoDataFrame:
     """
-    Description
-    ----------
     Create a geopandas DataFrame of all the given
     Fluxnet stations
 
@@ -146,14 +141,10 @@ def get_fluxnet_station_location(
 
 def filter_fluxnet_stations_by_sources(src_code: str):
     """
-    Description
-    ----------
     Filter stations from a CSV file based on their source code
 
     Parameters
     ----------
-    csv_path : str
-        Path to the CSV file
     src_code : str
         Source code used to filter the stations (e.g., "AmeriFlux", "ICOS")
 
@@ -171,15 +162,15 @@ def filter_fluxnet_stations_by_years(
     first_year: int, last_year: int
 ) -> pd.DataFrame:
     """
-    Description
-    ----------
     Filter stations from a CSV file based on their data year range
+
     Parameters
     ----------
     first_year : int
         Start year to filter the stations (e.g., 2022)
     last_year : int
         End year to filter the stations (e.g., 2023)
+
     Returns
     -------
     data_filtered: pd.DataFrame
@@ -205,8 +196,6 @@ def download_zip(
     download_link: str, file_path: str, id_station: str
 ) -> str | None:
     """
-    Description
-    ----------
     Download a zip file from a URL and save it to a local path
 
     Parameters
@@ -250,8 +239,6 @@ def download_fluxnet_data(
     output_dir: str | None = None,
 ) -> None:
     """
-    Description
-    ----------
     Download, save, and extract Fluxnet station ZIP archives based on a
     metadata CSV
 
@@ -260,15 +247,11 @@ def download_fluxnet_data(
     stations : str | list[str]
         Station ID or list of station IDs to download. If "all", downloads all
         valid stations found in the database.
-    csv_path : Path | str, optional
+    csv_path : Path | str | None
         Path to the local CSV file containing stations metadata. If None,
         defaults to global STATIONS_CSV.
     output_dir : str | None, default "fluxnet_data"
         Directory where downloaded ZIP files and extracted folders will be saved
-
-    Returns
-    -------
-    None
     """
     # Stations
     valid_stations_list = get_fluxnet_stations_list()
@@ -358,8 +341,6 @@ def get_fluxnet_archive(
     station_id: str | list[str] = "all", data_dir: str = "fluxnet_data"
 ) -> str | None:
     """
-    Description
-    ----------
     Find the HH (half hourly) CSV file path for a given station ID in the
     fluxnet_data folder
 
@@ -403,8 +384,6 @@ def get_fluxnet_archives(
     fluxnet_dir: str = "fluxnet_data",
 ) -> dict[str, str | None]:
     """
-    Description
-    ----------
     Find HH (half-hourly) CSV file paths for one or multiple stations
 
     Parameters
@@ -440,8 +419,6 @@ def get_fluxnet_archives(
 
 def read_fluxnet_data(file_path: str) -> pd.DataFrame:
     """
-    Description
-    ----------
     Read a Fluxnet CSV file and compute dewpoint temperature
 
     Parameters
@@ -470,8 +447,6 @@ def save_fluxnet_station(
     cfg: StationConfig, df: pd.DataFrame, output_dir: str = "fluxnet_processed"
 ) -> str:
     """
-    Description
-    ----------
     Save the processed station DataFrame to a CSV file
 
     Parameters
