@@ -1057,32 +1057,3 @@ def download_date_by_date(
         )
 
     return time
-
-
-def create_era5_sub_dataset(era5_xrds: xr.Dataset) -> xr.Dataset:
-    """
-    Description
-    -----------
-    Create a subset of an ERA5 xarray Dataset containing only selected variables
-    and rename them to standardized names
-
-    It renames 't2m' and 'd2m' to 'ta' and 'tdp'.
-
-    Parameters
-    ----------
-    era5_xrds : xr.Dataset
-        The original ERA5 dataset containing multiple data variables.
-
-    Returns
-    -------
-    era5_sub : xr.Dataset
-        A new xarray Dataset
-    """
-    era5_sub = era5_xrds[["t2m", "d2m"]]
-    era5_sub = era5_sub.rename(
-        {
-            "t2m": "ta",
-            "d2m": "td",
-        }
-    )
-    return era5_sub
