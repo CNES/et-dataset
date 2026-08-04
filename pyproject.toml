@@ -120,6 +120,10 @@ exclude_lines = [
   "if TYPE_CHECKING:",
 ]
 
+[tool.ruff]
+line-length = 88
+indent-width = 4
+
 [tool.mypy]
 disable_error_code = ["import-untyped"]
 
