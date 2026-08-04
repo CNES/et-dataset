@@ -1,6 +1,18 @@
-# Tutorial Access Himawari Data
+# Geostationary data
 
-## Overview
+We can download and process several radiation data from geostationary data provider.
+
+## MSG
+
+Data is accessed via FTP on [Eumetsat LSA-SAF](https://lsa-saf.eumetsat.int/en/)
+
+## GOES
+
+Data from NOAA's GOES-R series satellite is available on Amazon S3. Tutorial on : https://github.com/NOAA-Big-Data-Program/nodd-data-docs/blob/main/GOES/
+
+## HIMAWARI
+
+### Overview
 
 **Himawari** data (Japanese geostationary meteorological satellites) is accessible on:
 
@@ -18,13 +30,13 @@ JAXA reviews the application, then activates your access rights to Himawari data
 
 ---
 
-# Directory Structure and File Naming Convention
-## Level 2 (every 10 minutes)
+### Directory Structure and File Naming Convention
 
-### Short Wave Radiation (SWR)-Level 2
+#### Level 2 (every 10 minutes)
 
-**Himawari**
-```
+**Short Wave Radiation (SWR)-Level 2**
+
+```console
 /pub/himawari
   └── L2
        └── PAR
@@ -33,14 +45,11 @@ JAXA reviews the application, then activates your access rights to Himawari data
                       └── [DD]
 ```
 
----
+#### Level 3 (hourly, daily, monthly)
 
-## Level 3 (hourly, daily, monthly)
+**Short Wave Radiation (SWR)-Level 3**
 
-### Short Wave Radiation (SWR)-Level 3
-
-**Himawari**
-```
+```console
 /pub/himawari
   └── L3
        └── PAR
@@ -61,14 +70,14 @@ JAXA reviews the application, then activates your access rights to Himawari data
 | `DD` | 2-digit day of the timeline |
 | `hh` | 2-digit hour of the timeline |
 
----
 
-# File Naming Convention
+### File Naming Convention
 
-## Level 2
+#### Level 2
 
-### Short Wave Radiation
-```
+**Short Wave Radiation**
+
+```console
 Hnn_YYYYMMDD_hhmm_RFLVER_FLDK_xxxxx_yyyyy.nc   (5 km)
 Hnn_YYYYMMDD_hhmm_rFLVER_FLDK_xxxxx_yyyyy.nc   (1 km)
 ```
@@ -87,13 +96,11 @@ Hnn_YYYYMMDD_hhmm_rFLVER_FLDK_xxxxx_yyyyy.nc   (1 km)
 
 **Example:** `NC_H08_20150727_0800_RFL001_FLDK_02801_02401.nc`
 
----
+#### Level 3
 
-## Level 3
+**Short Wave Radiation**
 
-### Short Wave Radiation
-
-```
+```console
 Hnn_YYYYMMDD_hhmm_LL_RFLVER_FLDK.xxxxx_yyyyy.nc   (5 km)
 Hnn_YYYYMMDD_hhmm_LL_rFLVER_FLDK.xxxxx_yyyyy.nc   (1 km)
 ```
@@ -113,4 +120,4 @@ Hnn_YYYYMMDD_hhmm_LL_rFLVER_FLDK.xxxxx_yyyyy.nc   (1 km)
 
 **Example:** `H08_20150727_0800_1H_RFL001_FLDK.02801_02401.nc`
 
-for more information : https://www.eorc.jaxa.jp/ptree/userguide.html
+For more information : https://www.eorc.jaxa.jp/ptree/userguide.html

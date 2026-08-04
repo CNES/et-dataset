@@ -14,12 +14,26 @@ trishna
 
 # Provider
 usgs
+icos
+fluxnet
+goes
+himawari
+msg
+ameriflux
+eumetsat
+noaa
+jaxa
+eorc
 
 # Variables
 latlon
 swir
 ndvi
 lai
+rflver
+fldk
+flver
+stationid
 
 # Python package
 earthaccess
@@ -28,3 +42,6 @@ lste
 mgrs
 rioxarray
 sensorsio
+
+# Words
+micrometeorological
