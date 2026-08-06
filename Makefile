@@ -7,7 +7,7 @@ ruff:
 	$(RUN) ruff check . --fix
 
 mypy:
-	$(RUN) mypy src/ tests/
+	$(RUN) mypy src/ tests/ scripts/
 
 lint: ruff mypy
 
