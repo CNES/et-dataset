@@ -10,6 +10,7 @@ Module for ICOS data
 import os
 import zipfile
 from dataclasses import dataclass
+from typing import Any
 
 import geopandas as gpd
 import pandas as pd
@@ -44,7 +45,7 @@ class StationConfig:
 #####################################
 ##                                 ##
 ##                                 ##
-##   Get available ICOS datas      ##
+##   Get available ICOS data      ##
 ##                                 ##
 ##                                 ##
 #####################################
@@ -52,14 +53,17 @@ class StationConfig:
 
 def get_csv_with_valid_icos_stations(update: bool = False):
     """
-    Description
-    ----------
     Return the file path that contains all ICOS ecosystem stations (ES)
     that have available Meteo L2 dataset.
+
     If the file is not available or an update has been requested,
     fetch all ICOS ecosystem stations (ES) that have available Meteo L2 dataset,
     extract their metadata, save the list into a CSV file.
 
+    Parameters
+    ----------
+    update: bool
+        Update requested if True
     Returns
     -------
     csv_path : str
@@ -115,7 +119,9 @@ def get_csv_with_valid_icos_stations(update: bool = False):
 
 
 def get_station_list():
-    """ """
+    """
+    Get stations list
+    """
     csv_path = get_csv_with_valid_icos_stations()
     data = pd.read_csv(csv_path, index_col="id")
     return list(data.index)
@@ -123,14 +129,10 @@ def get_station_list():
 
 def filter_stations_by_country_code(country_code: str):
     """
-    Description
-    ----------
     Filter stations from a CSV file based on their country code.
 
     Parameters
     ----------
-    csv_path : str
-        Path to the CSV file
     country_code : str
         Country code used to filter the stations (e.g., "FR", "DE").
 
@@ -147,8 +149,6 @@ def filter_stations_by_country_code(country_code: str):
 
 def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Description
-    -----------
     Filter invalid RH and TA datas in station's data
 
     Parameters
@@ -165,7 +165,7 @@ def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
         data["TIMESTAMP_START"], format="%Y%m%d%H%M"
     )
 
-    # Select only valid mesures
+    # Select only valid measurements
     filtered_data = data[
         (data["TA"] != -9999) & (data["RH"] != -9999)
     ].reset_index(drop=True)
@@ -175,7 +175,7 @@ def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
 #####################################
 ##                                 ##
 ##                                 ##
-##    Get metadatas of a station   ##
+##    Get metadata of a station   ##
 ##                                 ##
 ##                                 ##
 #####################################
@@ -183,8 +183,6 @@ def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
 
 def get_stations_config(id_station: str) -> StationConfig:
     """
-    Description
-    ----------
     Load station configurations from a CSV file.
 
     For each row, this function creates a StationConfig entry with:
@@ -218,8 +216,6 @@ def get_station_location(
     stations: str | list[str],
 ) -> gpd.GeoDataFrame:
     """
-    Description
-    ----------
     Create a geopandas DataFrame of all the given
     ICOS stations
 
@@ -227,6 +223,7 @@ def get_station_location(
     ----------
     stations : str | list[str]
         the given ICOS stations
+
     Returns
     -------
     gdf : GeoDataFrame
@@ -254,16 +251,14 @@ def get_station_location(
 #####################################
 
 
-def _download_file(obj, path: str, id_station: str, cookies: dict):
+def _download_file(obj: Any, path: str, id_station: str, cookies: dict):
     """
-    Description
-    ----------
     Downloads a file associated with an ICOS object and saves it to the
     specified directory.
 
     Parameters
     ----------
-    obj : DataObject
+    obj : Any
         ICOS file metadata object containing at least the attributes
         "filename" (file name) and "uri" (download endpoint).
     path : str
@@ -309,32 +304,31 @@ def _download_file(obj, path: str, id_station: str, cookies: dict):
         )
         return file_path
     logger.error(
-        f"Failed to download file of the station {id_station}: {filename} with the status code : {response.status_code}"  # noqa: E501
+        f"Failed to download file of the station {id_station}: "
+        f"{filename} with the status code : {response.status_code}"
     )
     return None
 
 
 def download_file(
-    data_objects,
+    data_objects: list[Any],
     cookies: dict,
     id_station: str,
     path: str | None = None,
 ):
     """
-    Description
-    ----------
     Downloads all the files associated with ICOS objects and unzip them in
     the download folder.
 
     Parameters
     ----------
-    data_objects : DataObjectList
+    data_objects : list[Any]
         ICOS file metadata objects.
     cookies : dict
         Dictionary of HTTP cookies.
     station_id : str
         Id of the station.
-    path : str
+    path : str | None
         Local directory where the file should be saved.
 
     Returns
@@ -373,7 +367,8 @@ def download_file(
                     with zipfile.ZipFile(downloaded_file, "r") as zip_ref:
                         zip_ref.extractall(extract_folder)
                     logger.info(
-                        f"{id_station} station file unzipped in : {extract_folder}"  # noqa: E501
+                        f"{id_station} station file "
+                        f"unzipped in : {extract_folder}"
                     )
                     for f in os.listdir(extract_folder):
                         if f.lower().endswith(".csv"):
@@ -390,7 +385,8 @@ def download_file(
                     logger.exception(f"Non valid zip file: {downloaded_file}")
             else:
                 logger.info(
-                    f"{id_station} station file already extracted : {extract_folder}"  # noqa: E501
+                    f"{id_station} station file already "
+                    f"extracted : {extract_folder}"
                 )
 
 
@@ -399,8 +395,6 @@ def download_icos_station(
     output: str | None = None,
 ):
     """
-    Description
-    ----------
     Downloads all files associated with the specified ICOS stations.
 
     It uses the provided authentication token as a cookie for access to the ICOS
@@ -408,17 +402,10 @@ def download_icos_station(
 
     Parameters
     ----------
-    auth_token : str
-        ICOS authentication token (HTTP cookie). You can obtain this by
-        creating an ICOS account. Tokens are refreshed every 28 hours via
-        the API token section of your account.
-    ids : list of str
-        List of station IDs for which the files
-        should be downloaded.
-
-    Returns
-    -------
-    None
+    stations : list[str] | str
+        List of stations or station to download
+    output : str
+        Output directory
     """
     if os.environ.get("ICOS_API_TOKEN", None) is None:
         raise ValueError("ICOS_API_TOKEN is not provided")
@@ -474,8 +461,6 @@ def download_icos_station(
 
 def read_csv_data(cfg: StationConfig, path: str | None = None) -> pd.DataFrame:
     """
-    Description
-    -----------
     Read station's csv
 
     Parameters
@@ -516,35 +501,6 @@ def read_csv_data(cfg: StationConfig, path: str | None = None) -> pd.DataFrame:
 ##                                 ##
 ##                                 ##
 #####################################
-
-
-def create_geopckg_from_gdf(gdf: gpd.GeoDataFrame, path: str | None = None):
-    """
-    Description
-    ----------
-    Create a geopackage of a GeoDataFrame stations
-
-    Parameters
-    ----------
-    gdf : gpd.GeoDataFrame
-        GeoDataFrame of stations
-    path : str
-        Path where to csv the pckg
-    Returns
-    -------
-    """
-    if path is None:
-        file_path = os.path.join(os.getcwd(), "pckg")
-    else:
-        file_path = os.path.abspath(os.path.join(path, "pckg"))
-
-    os.makedirs(file_path, exist_ok=True)
-    pckg_name = "stations_package.gpkg"
-
-    pckg_path = os.path.join(file_path, pckg_name)
-
-    gdf.to_file(pckg_path, layer="stations", driver="GPKG")
-    logger.info(f"Stations package save : {pckg_path}")
 
 
 def save_station_data(

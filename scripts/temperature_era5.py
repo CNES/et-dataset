@@ -18,7 +18,7 @@ import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 
 from etdataset.cli import CLIException
-from etdataset.era5 import create_era5_sub_dataset, read
+from etdataset.era5 import read
 from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
@@ -35,6 +35,33 @@ from etdataset.utils import (
 logger = LoggerManager.get_logger(__name__)
 
 
+def create_era5_sub_dataset(era5_xrds: xr.Dataset) -> xr.Dataset:
+    """
+    Create a subset of an ERA5 xarray Dataset containing only selected variables
+    and rename them to standardized names
+
+    It renames 't2m' and 'd2m' to 'ta' and 'tdp'.
+
+    Parameters
+    ----------
+    era5_xrds : xr.Dataset
+        The original ERA5 dataset containing multiple data variables.
+
+    Returns
+    -------
+    era5_sub : xr.Dataset
+        A new xarray Dataset
+    """
+    era5_sub = era5_xrds[["t2m", "d2m"]]
+    era5_sub = era5_sub.rename(
+        {
+            "t2m": "ta",
+            "d2m": "td",
+        }
+    )
+    return era5_sub
+
+
 def run_stations_process(
     start_date: dt.date,
     end_date: dt.date,
@@ -43,7 +70,28 @@ def run_stations_process(
     list_hours: list[dt.time],
     data_path: str,
     output: str,
-):  # Get metadats of the station
+):
+    """
+    Process one station
+
+    Parameters
+    ----------
+    start_date: dt.date
+        Start date
+    end_date: dt.date
+        End date
+    step_date: int
+        Step for date
+    station: str
+        Station name
+    list_hours: list[dt.time]
+        List of hours
+    data_path: str
+        Data path
+    output: str
+        Output directory
+    """
+    # Get metadata of the station
     logger.info(f"Current station : {station}")
     cfg = get_stations_config(station)
     for d in generate_dates(start_date, end_date, step_date):
@@ -89,6 +137,30 @@ def generate_timeseries_for_stations_multiprocess(
     hour_step: int = 2,
     stations: list[str] | str = "all",
 ):
+    """
+    Process stations
+
+    Parameters
+    ----------
+    start_date: dt.date
+        Start date
+    end_date: dt.date
+        End date
+    data_path: str
+        Data path
+    output: str
+        Output directory
+    step_day: int
+        Step for date
+    hour_start: int
+        Start hour
+    hour_end: int
+        End hour
+    hour_step: int
+        Step for hour
+    stations: list[str] | str
+        Station names
+    """
     # download_date_by_date(start_date, end_date, ERA5Dataset.ERA5, output="out")  # noqa: E501
     list_hours = generate_hours(hour_start, hour_end, hour_step)
 

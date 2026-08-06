@@ -1,4 +1,4 @@
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
+# Copyright: (c) 2026 CESBIO / Centre National d'Etudes Spatiales
 
 """
 Module for temperature rescaling
@@ -41,6 +41,8 @@ from etdataset.utils import (
 )
 
 logger = LoggerManager.get_logger(__name__)
+
+# Constants
 G_CST = 9.80665
 
 
@@ -104,9 +106,9 @@ def rename_var_ds(ds: xr.Dataset, mapping: dict) -> xr.Dataset:
 
     Parameters
     ----------
-    ds : xr.Dataset
+    ds: xr.Dataset
         Input dataset
-    mapping : dict
+    mapping: dict
         Dictionary mapping original variable names to new names
 
     Returns
@@ -126,7 +128,7 @@ def normalize_variables(
 
     Parameters
     ----------
-    variables : iterable or None
+    variables: iterable or None
         Iterable of variable names (e.g., ["ta", "td"]) or None
 
     Returns
@@ -141,7 +143,8 @@ def normalize_variables(
         return {TempVariable(v) for v in variables}
     except ValueError as e:
         raise ValueError(
-            f"Invalid variable in {variables}. Allowed: {[v.value for v in TempVariable]}"  # noqa: E501
+            f"Invalid variable in {variables}. "
+            f"Allowed: {[v.value for v in TempVariable]}"
         ) from e
 
 
@@ -157,9 +160,9 @@ def crop_ds(
 
     Parameters
     ----------
-    ds : xr.Dataset
+    ds: xr.Dataset
         Input dataset to crop
-    dem : xr.DataArray
+    dem: xr.DataArray
         DEM used to define the area
 
     Returns
@@ -202,22 +205,22 @@ def interp_column(
     z_src: npt.ArrayLike,
     t_src: npt.ArrayLike,
     z_target: npt.ArrayLike,
-) -> np.ndarray:
+) -> npt.NDArray:
     """
     Perform 1D vertical interpolation of a variable along a column
 
     Parameters
     ----------
-    z_src : array-like
+    z_src: np.arraylike
         Source vertical coordinates
-    t_src : array-like
+    t_src: np.arraylike
         Source variable values
-    z_target : array-like
+    z_target: np.arraylike
         Target vertical coordinates
 
     Returns
     -------
-    np.ndarray
+    interp: np.ndarray
         Interpolated values at target heights
     """
     z_src = np.asarray(z_src)
@@ -239,28 +242,28 @@ def interpolate_variant_temperature(
     src_dem: xr.DataArray,
     dst_dem: xr.DataArray,
     lapse_rate: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.DataArray:
     """
-    Description
-    -----------
     Interpolate temperature on a new DEM using a potentially time- and
     space-varying lapse rate.
 
     Parameters
     ----------
-    src_temp : xr.DataArray
+    src_temp: xr.DataArray
         Temperature on source grid (dims: time, lat, lon)
-    src_dem : xr.DataArray
+    src_dem: xr.DataArray
         Elevation on source grid (dims: lat, lon)
-    dst_dem : xr.DataArray
+    dst_dem: xr.DataArray
         Elevation on destination DEM (dims: x, y )
-    lapse_rate : float or xr.DataArray
-        Lapse rate (can be scalar or dims=(time, lat, lon))
+    lapse_rate: xr.DataArray
+        Lapse rate (dims=(time, lat, lon))
+    interp_type: rio.enums.Resampling
+        Method used for resampling
 
     Returns
     -------
-    dem_temp : xr.DataArray
+    dem_temp: xr.DataArray
         Temperature interpolated on the destination DEM (dims: time, lat, lon)
     """
     # Compute reference temperature at src_ref = 0 (or any reference level)
@@ -268,29 +271,10 @@ def interpolate_variant_temperature(
     ref_temp = src_temp - lapse_rate * src_dem
 
     projected_temp = ref_temp.rio.reproject_match(
-        dst_dem,
-        resampling=getattr(
-            rio.enums.Resampling,
-            interp_type,
-            rio.enums.Resampling.cubic_spline,
-        ),
+        dst_dem, resampling=interp_type
     )
     logger.info(f"projected_temp = {projected_temp}")
-    if (
-        {"latitude", "longitude"} <= set(lapse_rate.dims)
-        and lapse_rate.sizes["latitude"] > 1
-        and lapse_rate.sizes["longitude"] > 1
-    ):
-        lr = lapse_rate.rio.reproject_match(
-            dst_dem,
-            resampling=getattr(
-                rio.enums.Resampling,
-                interp_type,
-                rio.enums.Resampling.cubic_spline,
-            ),
-        )
-    else:
-        lr = lapse_rate
+    lr = lapse_rate.rio.reproject_match(dst_dem, resampling=interp_type)
 
     # Adjust to actual DEM elevation
     dem_temp = projected_temp + lr * dst_dem
@@ -305,12 +289,35 @@ def rescale_temperature_with_variable_lapserate(
     era5_data: xr.DataArray | None,
     era5_dem: xr.DataArray | None,
     lapse_rate: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
     key: str = " ",
     description: str = " ",
 ) -> xr.DataArray | None:
     """
     Rescale temperature using a time-variable lapse rate.
+
+
+    Parameters
+    ----------
+    dem: xr.DataArray | None
+        DEM used to rescale data
+    era5_data: xr.DataArray | None
+        Data to rescaled
+    era5_dem: xr.DataArray | None
+        DEM corresponding to data to rescaled
+    lapse_rate: xr.DataArray
+        Lapse rate
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+    key: str
+        Variable name
+    description: str
+        Variable description
+
+    Returns
+    -------
+    data: xr.DataArray
+        Rescaled data
     """
 
     if era5_data is None:
@@ -339,7 +346,6 @@ def rescale_temperature_with_variable_lapserate(
             "long_name": description,
             "units": "K",
             "description": description,
-            "lapse_rate_type": "time-variable",
         }
     )
     return data
@@ -360,7 +366,7 @@ def method_const_lr(
     dem: xr.DataArray,
     era5_surface: xr.Dataset,
     era5_dem_surface: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.Dataset:
     """
     Apply a constant lapse rate correction to surface temperature variables
@@ -368,6 +374,12 @@ def method_const_lr(
     This method rescales ERA5 temperature to the target DEM elevation using
     fixed, predefined lapse rates. It assumes a constant vertical gradient for
     temperature
+
+    Notes
+    -----
+    - Uses constant lapse rates:
+        -> Air temperature: -6.5 K/km
+        -> Dew point: -5.2 K/km
 
     Parameters
     ----------
@@ -381,17 +393,13 @@ def method_const_lr(
         ERA5 surface dataset containing variables
     era5_dem_surface : xr.DataArray
         Surface geopotential height (in meters).
+    interp_type: rio.enums.Resampling
+        Method used for resampling
 
     Returns
     -------
     xr.Dataset
         Updated dataset with rescaled temperature variables.
-
-    Notes
-    -----
-    - Uses constant lapse rates:
-        -> Air temperature: -6.5 K/km
-        -> Dew point: -5.2 K/km
     """
     updated_data = data.copy()
 
@@ -435,11 +443,9 @@ def method_monthly_lr(
     dem: xr.DataArray,
     era5_surface: xr.Dataset,
     era5_dem_surface: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Apply a monthly varying lapse rate correction to temperature variables
 
     This method rescales ERA5 temperature using lapse rates that vary depending
@@ -452,18 +458,20 @@ def method_monthly_lr(
 
     Parameters
     ----------
-    data : xr.Dataset
+    data: xr.Dataset
         Input dataset to update
-    date : datetime
+    date: datetime
         Date used to determine the monthly lapse rate
-    variables_set : set[TempVariable]
+    variables_set: set[TempVariable]
         Set of temperature variables to process (e.g., TA, TD)
-    dem : xr.DataArray
+    dem: xr.DataArray
         Target Digital Elevation Model (DEM)
-    era5_surface : xr.Dataset
+    era5_surface: xr.Dataset
         ERA5 surface dataset
-    era5_dem_surface : xr.DataArray
+    era5_dem_surface: xr.DataArray
         Surface geopotential height (in meters)
+    interp_type: rio.enums.Resampling
+        Method used for resampling
 
     Returns
     -------
@@ -503,7 +511,7 @@ def method_monthly_lr(
             dem=dem,
             era5_data=era5_surface.get(TempVariable.TD, None),
             era5_dem=era5_dem_surface,
-            lapse_rate=lr_td_monthly,
+            lapse_rate=lr_td_monthly,  # type: ignore[arg-type]
             interp_type=interp_type,
             key="td",
             description="dewpoint temperature",
@@ -522,11 +530,9 @@ def method_lr_profile_fixed_levels(
     era5_dem_surface: xr.DataArray,
     era5_pressure: xr.Dataset,
     era5_dem_pressure: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Apply lapse rate correction using fixed pressure levels and altitude
     threshold
 
@@ -534,28 +540,30 @@ def method_lr_profile_fixed_levels(
     (700-925 hPa) and applies different rescaling strategies depending
     on elevation:
 
-    - < 1500 m: use surface data
-    - > 1500 m: use 850 hPa level as reference
+    - < 1500 m: use data at surface data
+    - > 1500 m: use data at 850 hPa level as reference
 
     from "Elevation correction of ERA5-Interim temperature data in complex
     terrain", L. Gao, M. Bernhardt, and K. Schulz
 
     Parameters
     ----------
-    data : xr.Dataset
+    data: xr.Dataset
         Input dataset to update
-    variables_set : set[TempVariable]
+    variables_set: set[TempVariable]
         Variables to process
-    dem : xr.DataArray
+    dem: xr.DataArray
         Target DEM
-    era5_surface : xr.Dataset
+    era5_surface: xr.Dataset
         ERA5 surface dataset
-    era5_dem_surface : xr.DataArray
+    era5_dem_surface: xr.DataArray
         Surface elevation (m)
-    era5_pressure : xr.Dataset
+    era5_pressure: xr.Dataset
         ERA5 pressure-level dataset
-    era5_dem_pressure : xr.DataArray
+    era5_dem_pressure: xr.DataArray
         Pressure-level heights (m)
+    interp_type: rio.enums.Resampling
+        Method used for resampling
 
     Returns
     -------
@@ -653,11 +661,9 @@ def method_lr_profile_alt_dep(
     era5_dem_surface: xr.DataArray,
     era5_pressure: xr.Dataset,
     era5_dem_pressure: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Apply altitude-dependent lapse rate correction using different pressure
     levels.
 
@@ -666,34 +672,35 @@ def method_lr_profile_alt_dep(
     - < 1500 m: lapse rate from 925-850 hPa levels
 
     Different reference levels are used for rescaling:
-    - > 1500 m : use 850 hPa level
-    - < 1500 m : use surface data
+    - > 1500 m: use 850 hPa level
+    - < 1500 m: use surface data
 
     from "Elevation correction of ERA5-Interim temperature data in complex
     terrain", L. Gao, M. Bernhardt, and K. Schulz
 
     Parameters
     ----------
-    data : xr.Dataset
+    data: xr.Dataset
         Input dataset.
-    variables_set : set[TempVariable]
+    variables_set: set[TempVariable]
         Variables to process
-    dem : xr.DataArray
+    dem: xr.DataArray
         Target DEM
-    era5_surface : xr.Dataset
+    era5_surface: xr.Dataset
         ERA5 surface dataset
-    era5_dem_surface : xr.DataArray
+    era5_dem_surface: xr.DataArray
         Surface elevation
-    era5_pressure : xr.Dataset
+    era5_pressure: xr.Dataset
         ERA5 pressure-level dataset
-    era5_dem_pressure : xr.DataArray
+    era5_dem_pressure: xr.DataArray
         Pressure-level heights
+    interp_type: rio.enums.Resampling
+        Method used for resampling
 
     Returns
     -------
     xr.Dataset
         Dataset
-
     """
     # Separate datasets for high and low elevation
     updated_data_high = data.copy()
@@ -792,12 +799,10 @@ def method_vertical_interp(
     dem: xr.DataArray,
     era5_pressure: xr.Dataset,
     era5_dem_pressure: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
     dz: int = 225,
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Vertical interpolation from ERA5 pressure levels to DEM elevation
 
     This method interpolates ERA5 temperature variables along vertical columns
@@ -811,15 +816,19 @@ def method_vertical_interp(
 
     Parameters
     ----------
-    variables_set : set[TempVariable]
+    data: xr.Dataset
+        Input dataset.
+    variables_set: set[TempVariable]
         Set of temperature variables to process (e.g., TA, TD)
-    dem : xr.DataArray
+    dem: xr.DataArray
         Target DEM
-    era5_pressure : xr.Dataset
+    era5_pressure: xr.Dataset
         ERA5 pressure-level dataset
-    era5_dem_pressure : xr.DataArray
+    era5_dem_pressure: xr.DataArray
         Geopotential height at pressure levels (in meters)
-    dz : int
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+    dz: int
         Vertical resolution of the interpolation grid (in meters)
 
     Returns
@@ -892,14 +901,7 @@ def method_vertical_interp(
                 "longitude": era5_pressure.longitude,
             },
         ).rio.write_crs(CRS(4326))
-        temp_a = temp_a.rio.reproject_match(
-            dem,
-            resampling=getattr(
-                rio.enums.Resampling,
-                interp_type,
-                rio.enums.Resampling.cubic_spline,
-            ),
-        )
+        temp_a = temp_a.rio.reproject_match(dem, resampling=interp_type)
 
         res_ta = temp_a.interp(z=dem, kwargs={"fill_value": "extrapolate"})
         if res_ta is not None:
@@ -915,14 +917,7 @@ def method_vertical_interp(
                 "longitude": era5_pressure.longitude,
             },
         ).rio.write_crs(CRS(4326))
-        temp_d = temp_d.rio.reproject_match(
-            dem,
-            resampling=getattr(
-                rio.enums.Resampling,
-                interp_type,
-                rio.enums.Resampling.cubic_spline,
-            ),
-        )
+        temp_d = temp_d.rio.reproject_match(dem, resampling=interp_type)
         res_td = temp_d.interp(z=dem, kwargs={"fill_value": "extrapolate"})
         if res_td is not None:
             updated_data["td"] = res_td
@@ -935,28 +930,26 @@ def _insert_surface_point(
     z_surface: float,
     t_surface: float,
     threshold: int = 100,
-) -> tuple[npt.ArrayLike, npt.ArrayLike]:
+) -> tuple[npt.NDArray, npt.NDArray]:
     """
-    Description
-    -----------
     Insert surface values
 
     Parameters
     ----------
-    z_profile : npt.ArrayLike
+    z_profile: np.ArrayLike
         Altitude profile values.
-    t_profile : npt.ArrayLike
+    t_profile: np.ArrayLike
         Temperature profile values corresponding to z_profile
-    z_surface : float
+    z_surface: float
         Surface altitude
-    t_surface : float
+    t_surface: float
         Surface temperature value
-    threshold : int, default 100
+    threshold: int, default 100
         Minimum vertical distance required between levels
 
     Returns
     -------
-    tuple of npt.ArrayLike
+    tuple[np.ndarray,np.array]
     """
     mask = np.isfinite(z_profile) & np.isfinite(t_profile)
 
@@ -989,28 +982,26 @@ def _interp_col_surf(
     z_surface: float,
     t_surface: float,
     z_target: npt.ArrayLike,
-) -> npt.ArrayLike:
+) -> npt.NDArray:
     """
-    Description
-    -----------
     Interpolate a temperature profile to target levels after adding surface data
 
     Parameters
     ----------
-    z_profile : npt.ArrayLike
+    z_profile : np.ArrayLike
         height profile levels
-    t_profile : npt.ArrayLike
+    t_profile : np.ArrayLike
         temperature profile values
     z_surface : float
         surface height coordinate
     t_surface : float
         Surface temperature value
-    z_target : npt.ArrayLike
+    z_target : np.ArrayLike
         Target vertical levels where temperature should be interpolated
 
     Returns
     -------
-    npt.ArrayLike
+    np.ndarray
     """
     if not np.any(np.isfinite(z_profile) & np.isfinite(t_profile)):
         return np.full(len(np.asarray(z_target)), np.nan)
@@ -1028,7 +1019,7 @@ def method_interp_profile_surf(
     era5_dem_surface: xr.DataArray,
     era5_pressure: xr.Dataset,
     era5_dem_pressure: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
     dz: int = 225,
 ) -> xr.Dataset:
     """
@@ -1042,19 +1033,23 @@ def method_interp_profile_surf(
 
     Parameters
     ----------
-    variables_set : set[TempVariable]
+    data: xr.Dataset
+        Input dataset.
+    variables_set: set[TempVariable]
         Set of variables (e.g., TA, TD)
-    dem : xr.DataArray
+    dem: xr.DataArray
         Target DEM
-    era5_surface : xr.Dataset
+    era5_surface: xr.Dataset
         ERA5 surface dataset
-    era5_dem_surface : xr.DataArray
+    era5_dem_surface: xr.DataArray
         Surface geopotential height converted to meters
-    era5_pressure : xr.Dataset
+    era5_pressure: xr.Dataset
         ERA5 pressure-level dataset
-    era5_dem_pressure : xr.DataArray
+    era5_dem_pressure: xr.DataArray
         Geopotential height at pressure levels
-    dz : int, optional
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+    dz: int, optional
         Vertical resolution of the interpolation grid (in meters)
 
     Ref . Fiddes, J. and Gruber, S.: TopoSCALE v.1.0: downscaling gridded
@@ -1157,14 +1152,7 @@ def method_interp_profile_surf(
         ).rio.write_crs(CRS(4326))
 
         # Reproject to match DEM grid
-        temp_a = temp_a.rio.reproject_match(
-            dem,
-            resampling=getattr(
-                rio.enums.Resampling,
-                interp_type,
-                rio.enums.Resampling.cubic_spline,
-            ),
-        )
+        temp_a = temp_a.rio.reproject_match(dem, resampling=interp_type)
         res_ta = temp_a.interp(z=dem, kwargs={"fill_value": "extrapolate"})
         if res_ta is not None:
             updated_data["ta"] = res_ta
@@ -1179,14 +1167,7 @@ def method_interp_profile_surf(
                 "longitude": era5_pressure.longitude,
             },
         ).rio.write_crs(CRS(4326))
-        temp_d = temp_d.rio.reproject_match(
-            dem,
-            resampling=getattr(
-                rio.enums.Resampling,
-                interp_type,
-                rio.enums.Resampling.cubic_spline,
-            ),
-        )
+        temp_d = temp_d.rio.reproject_match(dem, resampling=interp_type)
         res_td = temp_d.interp(z=dem, kwargs={"fill_value": "extrapolate"})
         if res_td is not None:
             updated_data["td"] = res_td
@@ -1202,7 +1183,7 @@ def method_interp_lr_hybrid(
     era5_dem_surface: xr.DataArray,
     era5_pressure: xr.Dataset,
     era5_dem_pressure: xr.DataArray,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
     dz: int = 225,
 ) -> xr.Dataset:
     """
@@ -1222,26 +1203,29 @@ def method_interp_lr_hybrid(
 
     Parameters
     ----------
-    data : xr.Dataset
+    data: xr.Dataset
         Input dataset to update
-    variables_set : set[TempVariable]
+    variables_set: set[TempVariable]
         Set of variables (e.g., TA, TD)
-    dem : xr.DataArray
+    dem: xr.DataArray
         Target DEM used
-    era5_surface : xr.Dataset
+    era5_surface: xr.Dataset
         ERA5 surface dataset
-    era5_dem_surface : xr.DataArray
+    era5_dem_surface: xr.DataArray
         Surface geopotential height
-    era5_pressure : xr.Dataset
+    era5_pressure: xr.Dataset
         ERA5 pressure-level dataset
-    era5_dem_pressure : xr.DataArray
+    era5_dem_pressure: xr.DataArray
         Geopotential height at pressure levels
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+    dz: int, optional
+        Vertical resolution of the interpolation grid (in meters)
 
     Returns
     -------
     xr.Dataset
         Updated dataset with rescaled temperature variables.
-
     """
 
     updated_data = data.copy()
@@ -1321,14 +1305,7 @@ def method_interp_lr_hybrid(
             },
         ).rio.write_crs(CRS(4326))
 
-        temp_a = temp_a.rio.reproject_match(
-            dem,
-            resampling=getattr(
-                rio.enums.Resampling,
-                interp_type,
-                rio.enums.Resampling.cubic_spline,
-            ),
-        )
+        temp_a = temp_a.rio.reproject_match(dem, resampling=interp_type)
         # Interpolate vertically to DEM elevation
         res_ta = temp_a.interp(z=dem)
         if res_ta is not None:
@@ -1344,14 +1321,7 @@ def method_interp_lr_hybrid(
                 "longitude": era5_pressure.longitude,
             },
         ).rio.write_crs(CRS(4326))
-        temp_d = temp_d.rio.reproject_match(
-            dem,
-            resampling=getattr(
-                rio.enums.Resampling,
-                interp_type,
-                rio.enums.Resampling.cubic_spline,
-            ),
-        )
+        temp_d = temp_d.rio.reproject_match(dem, resampling=interp_type)
         res_td = temp_d.interp(z=dem)
         if res_td is not None:
             updated_data["td"] = res_td
@@ -1367,7 +1337,6 @@ def method_interp_lr_hybrid(
             logger.info(f"mask_below_ta count = {mask_below_ta.sum()}")
         if mask_above_ta is not None:
             logger.info(f"mask_above_ta count = {mask_above_ta.sum()}")
-        # logger.info(f"mask_below_ta ={mask_below_ta}")
 
     if TempVariable.TD in variables_set:
         mask_below_td = dem < temp_d.z[0]
@@ -1432,11 +1401,9 @@ def add_temp(
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
     variables: TempVariable | Iterable[TempVariable] | None = None,
     method: RescalTempMethod = RescalTempMethod.CONST_LR,
-    interp_type: str = "cubic_spline",
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ):
     """
-    Description
-    -----------
     Add temperature variables to a dataset using ERA5/ERA5-Land data
 
     This function retrieves the required ERA5 datasets (surface and/or pressure)
@@ -1445,34 +1412,27 @@ def add_temp(
 
     Parameters
     ----------
-    data : xr.Dataset
+    data: xr.Dataset
         Input dataset containing at least:
         - 'height' variable (DEM)
         - 'vis_date' and 'vis_time' attributes
         - CRS information
-
-    path : str | None
+    path: str | None
         Path to a directory containing ERA5 data files
-
-    dataset : ERA5Dataset
+    dataset: ERA5Dataset
         Surface dataset to use (ERA5 or ERA5-Land)
-
-    variables : TempVariable | Iterable[TempVariable] | None,
+    variables: TempVariable | Iterable[TempVariable] | None,
         Temperature variables to compute (e.g., TA, TD)
-
-    method : RescalTempMethod
+    method: RescalTempMethod
         Temperature rescaling method to apply
-
-    interp_type : str
-        Type of wanted interpolation :
-            "nearest", "bilinear", "cubic", "cubic_spline", etc
-            By default, "cubic_spline"
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+        By default, "cubic_spline"
 
     Returns
     -------
     xr.Dataset
         Dataset with added/rescaled temperature variables.
-
     """
 
     logger.info(f"ADD TEMP | method={method}")
@@ -1494,7 +1454,7 @@ def add_temp(
 
     date = dt.datetime.combine(data.attrs["vis_date"], data.attrs["vis_time"])
 
-    ###################### GET ERA5 DATAS ####################################
+    ###################### GET ERA5 DATA ####################################
     # Download data
     if path is None:
         logger.debug("Download only required ERA5 data")
@@ -1780,8 +1740,6 @@ def save_ta_td_csv(
     name_dir: str | None = None,
 ):
     """
-    Description
-    -----------
     Save Air Temperature (TA) and Dewpoint Temperature (TDP) timeseries into a
     csv file
 
@@ -1795,7 +1753,6 @@ def save_ta_td_csv(
         Path to save th csv file
     name_dir : str
         Name of the directory
-
     """
     if name_dir is None:
         name_dir = "csv"

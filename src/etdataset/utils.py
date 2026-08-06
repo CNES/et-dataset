@@ -35,6 +35,11 @@ MGRS_FORMAT = re.compile(r"[0-6][0-9][C-X][A-Z]{2}")
 def check_mgrs_format(tile: str) -> None:
     """
     Check MGRS tile format
+
+    Parameters
+    ----------
+    tile: str
+        Tile ID to check
     """
     if MGRS_FORMAT.match(tile) is None:
         raise ValueError(f"Wrong format for MGRS tile ID (got: {tile})")
@@ -56,6 +61,33 @@ def create_polygon(
     lr_lat: float,
     lr_long: float,
 ) -> Polygon:
+    """
+    Create a polygon from coordinates
+
+    Parameters
+    ----------
+    ul_lat: float
+        Upper left corner latitude
+    ul_long: float
+        Upper left corner longitude
+    ur_lat: float
+        Upper right corner latitude
+    ur_long: float
+        Upper right corner longitude
+    ll_lat: float
+        Lower left corner latitude
+    ll_long: float
+        Lower left corner longitude
+    lr_lat: float
+        Lower right corner latitude
+    lr_long: float
+        Lower right corner longitude
+
+    Returns
+    -------
+    polygon: Polygon
+        Created polygon
+    """
     ul = Point(ul_long, ul_lat)
     ur = Point(ur_long, ur_lat)
     ll = Point(ll_long, ll_lat)
@@ -65,6 +97,19 @@ def create_polygon(
 
 
 def bbox_to_polygon(bounds: list[float] | rio.coords.BoundingBox) -> Polygon:
+    """
+    Convert bounding box to polygon
+
+    Parameters
+    ----------
+    bounds: list[float] | rio.coords.BoundingBox
+        Bounding box
+
+    Returns
+    -------
+    polygon: Polygon
+        Created polygon
+    """
     # Convert bounds to polygon
     return Polygon(
         [
@@ -80,6 +125,18 @@ def get_bbox_from_roi(roi_path: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a ROI shapefile
+
+    Parameters
+    ----------
+    roi_path: str
+        ROI file path
+
+    Returns
+    -------
+    bbox: rio.coords.BoundingBox
+        ROI Bounding box
+    crs: pyproj.CRS
+        ROI coordinate reference system
     """
     # Roi shapefile
     try:
@@ -95,6 +152,18 @@ def get_utm_bbox_from_roi(roi_path: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS) in UTM coordinates
     from a ROI shapefile
+
+    Parameters
+    ----------
+    roi_path: str
+        ROI file path
+
+    Returns
+    -------
+    bbox: rio.coords.BoundingBox
+        ROI Bounding box
+    crs: pyproj.CRS
+        ROI coordinate reference system
     """
     # Roi shapefile
     try:
@@ -119,6 +188,18 @@ def get_bbox_from_mgrs_tile(tile: str) -> tuple[rio.coords.BoundingBox, CRS]:
     """
     Get bounding box information (bbox and CRS)
     from a MGRS_tile
+
+    Parameters
+    ----------
+    tile: str
+        Tile ID to check
+
+    Returns
+    -------
+    bbox: rio.coords.BoundingBox
+        ROI Bounding box
+    crs: pyproj.CRS
+        ROI coordinate reference system
     """
     # Tile
     try:
@@ -132,6 +213,20 @@ def get_mgrs_tile_names_overlapping_roi(
 ) -> list[str]:
     """
     Get list of MGRS tiles that overlap a ROI with a minimum overlap area
+
+    Parameters
+    ----------
+    bbox: rio.coords.BoundingBox
+        ROI Bounding box
+    crs: pyproj.CRS
+        ROI coordinate reference system
+    overlap: float
+        Minimum overlap with the ROI to include a tile
+
+    Returns
+    -------
+    tiles: list[str]
+        List of tiles ID
     """
     # Get MGRS tiles
     mgrs_tiles = mgrs.get_mgrs_tiles_from_roi(roi_bbox, roi_crs)
@@ -140,11 +235,20 @@ def get_mgrs_tile_names_overlapping_roi(
     return list(mgrs_tiles.Name.values)
 
 
-def get_mgrs_tile_names_from_roi(roi_bbox: rio.coords.BoundingBox, roi_crs):
+def get_mgrs_tile_names_from_roi(
+    roi_bbox: rio.coords.BoundingBox, roi_crs: CRS
+):
     """
     List of MGRS tiles corresponding to a ROI.
     The objective is to get a list of tiles that covers or
     intersects a given ROI while avoiding redundant overlapping
+
+    Parameters
+    ----------
+    bbox: rio.coords.BoundingBox
+        ROI Bounding box
+    crs: pyproj.CRS
+        ROI coordinate reference system
     """
     # Convert bounds to 4326
     wgs84_bounds = transform_bounds(roi_crs, 4326, *roi_bbox)
@@ -187,6 +291,16 @@ def get_mgrs_tile_names_from_roi(roi_bbox: rio.coords.BoundingBox, roi_crs):
 def check_theia_tiles(tile_ids: list[str]) -> list[str]:
     """
     Given a list of MGRS tile IDs, return the tiles available on THEIA platform
+
+    Parameters
+    ----------
+    tile_ids: list[str]
+        List of tiles ID
+
+    Returns
+    -------
+    tiles: list[str]
+        List of tiles ID available on THEIA
     """
     theia_tiles = get_theia_tiles()
     return list(set(tile_ids) & set(theia_tiles.index))
@@ -198,6 +312,20 @@ def read_product_list(
     """
     Read a product list in CSV format and convert it to
     GeoDataFrame.
+
+    Parameters
+    ----------
+    path: str
+        File path to product list
+    crs: pyproj.CRS | int
+        ROI coordinate reference system
+    geometry: str
+        Name of the column containing geometry data
+
+    Returns
+    -------
+    gdf: gpd.GeoDataFrame
+        Data
     """
     # Read to DataFrame
     df = pd.read_csv(path)
@@ -243,6 +371,20 @@ def mask_bits(arr: npt.ArrayLike, pos: int, mask: str = "1") -> npt.NDArray:
     """
     Search for a binary code at a specific position in bytes array and
     return a mask array
+
+    Parameters
+    ----------
+    arr: np.arraylike
+        Bytes array
+    pos: int
+        Position in the byte array
+    mask: int
+        Binary code value to used for the mask
+
+    Returns
+    -------
+    mask: np.ndarray
+        Mask extracted
     """
     if pos < 0:
         raise ValueError("Position fo bits extraction must be positive")
@@ -258,6 +400,18 @@ def mask_bits(arr: npt.ArrayLike, pos: int, mask: str = "1") -> npt.NDArray:
 def dilate_mask(data: xr.DataArray, dilation: int = 1) -> xr.DataArray:
     """
     Dilate a binary mask
+
+    Parameters
+    ----------
+    data: xr.Dataarray
+        Data
+    dilation: int
+        Dilation parameter
+
+    Returns
+    -------
+    updated: np.ndarray
+        Dilated data
     """
     # Ensure the data is boolean (binary image)
     binary_mask = data.values.astype(bool)
@@ -268,14 +422,26 @@ def dilate_mask(data: xr.DataArray, dilation: int = 1) -> xr.DataArray:
     return xr.DataArray(binary_mask, dims=data.dims, coords=data.coords)
 
 
-def close_mask(data: xr.DataArray, dilation: int = 1) -> xr.DataArray:
+def close_mask(data: xr.DataArray, closing: int = 1) -> xr.DataArray:
     """
     Perform a binary closing mask
+
+    Parameters
+    ----------
+    data: xr.Dataarray
+        Data
+    closing: int
+        Closing parameter
+
+    Returns
+    -------
+    updated: np.ndarray
+        Dilated data
     """
     # Ensure the data is boolean (binary image)
     binary_mask = data.values.astype(bool)
     # Apply binary dilation
-    footprint = skm.footprint_rectangle((2 * dilation + 1, 2 * dilation + 1))
+    footprint = skm.footprint_rectangle((2 * closing + 1, 2 * closing + 1))
     binary_mask = skm.binary_closing(binary_mask, footprint=footprint)
 
     return xr.DataArray(binary_mask, dims=data.dims, coords=data.coords)
@@ -284,6 +450,16 @@ def close_mask(data: xr.DataArray, dilation: int = 1) -> xr.DataArray:
 def get_utm_crs_from_roi(roi: rio.coords.BoundingBox):
     """
     Get UTM zone from a ROI
+
+    Parameters
+    ----------
+    roi: rio.coords.BoundingBox
+        Bounding box
+
+    Returns
+    -------
+    crs: pyproj.CRS
+        Coordinate reference system
     """
     geom = box(*roi)
     lon, lat = geom.centroid.x, geom.centroid.y
@@ -293,11 +469,9 @@ def get_utm_crs_from_roi(roi: rio.coords.BoundingBox):
     return CRS.from_epsg(epsg)
 
 
-def get_utm_crs_from_lat_lon(lat: float, lon: float) -> pyproj.CRS:
+def get_utm_crs_from_lat_lon(lat: float, lon: float) -> CRS:
     """
-    Description
-    -----------
-    Determines the appropriate UTM CRS based on the station's latitude and
+    Determine the appropriate UTM CRS based on the station's latitude and
     longitude.
 
     It creates an Area of Interest (AOI) around the point and
@@ -312,8 +486,8 @@ def get_utm_crs_from_lat_lon(lat: float, lon: float) -> pyproj.CRS:
 
     Returns
     -------
-    pyproj.CRS
-        The UTM crs
+    crs: pyproj.CRS
+        UTM coordinate reference system
     """
     # Query the PROJ database to obtain UTM CRS info that matches the point
     info_utm = pyproj.database.query_utm_crs_info(
@@ -323,28 +497,35 @@ def get_utm_crs_from_lat_lon(lat: float, lon: float) -> pyproj.CRS:
             south_lat_degree=lat,
             east_lon_degree=lon,
             north_lat_degree=lat,
-        ),  # Thearea of interest reduces the CRS selection to exactly the
+        ),  # The area of interest reduces the CRS selection to exactly the
         # UTM zone covering this location.
     )[0]
-    return pyproj.CRS.from_epsg(info_utm.code)
+    return CRS.from_epsg(info_utm.code)
 
 
 def create_bbox_from_lat_lon(
-    lat: float, lon: float, width_m: float, height_m: float, crs: CRS
-) -> rio.coords.BoundingBox:
+    lat: float,
+    lon: float,
+    width_m: float,
+    height_m: float,
+) -> tuple[rio.coords.BoundingBox, CRS, rio.coords.BoundingBox]:
     """
-    Description
-    ----------
-    Creates a rectangular bounding box around the station's geographic
-    location with a specified width and height (in meters), returned UTM
+    Creates a rectangular bounding box around a lat/lon location
+
+    The bounding box is created around the lat/lon location
+    with a specified width and height (in meters), returned UTM
     coordinates and geographic (lat/lon) coordinates.
 
     Parameters
     ----------
-    width_m : float
-        width of the bounding box in meters.
-    height_m : float
-        height of the bounding box in meters.
+    lat: float
+        Location latitude
+    lon: float
+        Location longitude
+    width_m: float
+        Width of the bounding box in meters.
+    height_m: float
+        Height of the bounding box in meters.
 
     Returns
     -------
@@ -355,11 +536,12 @@ def create_bbox_from_lat_lon(
     bbox_lat_lon : rio.coords.BoundingBox
         Bounding box transformed back to geographic coordinates
     """
+    latlon_crs = CRS.from_epsg(4326)
     utm_crs = get_utm_crs_from_lat_lon(lat, lon)
 
     # For the UTM bounding box
     transformer_to_utm = pyproj.Transformer.from_crs(
-        crs, utm_crs, always_xy=True
+        latlon_crs, utm_crs, always_xy=True
     )
     x, y = transformer_to_utm.transform(lon, lat)
 
@@ -369,7 +551,7 @@ def create_bbox_from_lat_lon(
     )
     # For the lat/lon bounding box
     transformer_to_lat_lon = pyproj.Transformer.from_crs(
-        utm_crs, crs, always_xy=True
+        utm_crs, latlon_crs, always_xy=True
     )
     lon_min, lat_min = transformer_to_lat_lon.transform(
         bbox_utm.left, bbox_utm.bottom
@@ -385,26 +567,25 @@ def create_bbox_from_lat_lon(
 
 
 def work_area_from_coord_point(
-    lat: float, lon: float, w: float, h: float, crs: CRS
-):
+    lat: float,
+    lon: float,
+    w: float,
+    h: float,
+) -> dict[str, tuple[rio.coords.BoundingBox, CRS]]:
     """
-    Description
-    ----------
     Get the working area around the given lat/lon point with UTM coordinates and
     geographic coordinates.
 
     Parameters
     ----------
-    lat : float
+    lat: float
         latitude
-    lon : float
+    lon: float
         longitude
-    w : float
+    w: float
         width of the bounding box in meters.
-    h : float
+    h: float
         height of the bounding box in meters.
-    crs : CRS
-        crs of the point in lat/lon
 
     Returns
     -------
@@ -412,81 +593,12 @@ def work_area_from_coord_point(
         - "utm" : UTM coordinates and CRS
         - "lat/lon" : geographic coordinates and CRS
     """
-    bbox_utm, utm_crs, bbox_lat_lon = create_bbox_from_lat_lon(
-        lat, lon, w, h, crs
-    )
+    latlon_crs = CRS.from_epsg(4326)
+    bbox_utm, utm_crs, bbox_lat_lon = create_bbox_from_lat_lon(lat, lon, w, h)
     return {
         "utm": (bbox_utm, utm_crs),
-        "lat/lon": (bbox_lat_lon, crs),
+        "lat/lon": (bbox_lat_lon, latlon_crs),
     }
-
-
-def filter_dataset_by_roi(
-    ds: xr.Dataset | xr.DataArray,
-    roi_bbox: rio.coords.BoundingBox,
-    roi_crs: CRS,
-    target_crs: str = "EPSG:4326",
-) -> xr.Dataset | xr.DataArray:
-    """
-    Description
-    -----------
-    Filter Dataset to keep only data inside ROI.
-
-    Handles ROI in:
-    - lat/lon (EPSG:4326)
-    - UTM or any other CRS
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Input dataset.
-    roi_bbox : rio.BoundingBox
-        Bounding box of the ROI
-    roi_crs : CRS
-        CRS of the bounding box
-
-    Returns
-    -------
-    xr.Dataset
-        Dataset filtered to include only the ROI
-    """
-
-    if ds.rio.crs is None:
-        ds = ds.rio.write_crs(target_crs)
-    dataset_crs = ds.rio.crs
-    roi_crs = CRS.from_user_input(roi_crs)
-
-    if dataset_crs is None:
-        raise ValueError("Dataset does not have defined CRS")
-
-    if roi_crs != dataset_crs:
-        min_lon, min_lat, max_lon, max_lat = transform_bounds(
-            roi_crs,
-            dataset_crs,
-            roi_bbox.left,
-            roi_bbox.bottom,
-            roi_bbox.right,
-            roi_bbox.top,
-        )
-    else:
-        min_lon = roi_bbox.left
-        max_lon = roi_bbox.right
-        min_lat = roi_bbox.bottom
-        max_lat = roi_bbox.top
-
-    if ds.longitude.max() > 180:
-        min_lon, max_lon = np.mod([min_lon, max_lon], 360)
-
-    latitudes = ds.latitude.values
-
-    if latitudes[0] > latitudes[-1]:
-        lat_slice = slice(max_lat, min_lat)
-    else:
-        lat_slice = slice(min_lat, max_lat)
-    ds = ds.rio.write_crs(target_crs, inplace=False)
-    return ds.sel(
-        latitude=lat_slice,
-        longitude=slice(min_lon, max_lon),
-    )
 
 
 def filter_dataset_by_hours(
@@ -496,18 +608,18 @@ def filter_dataset_by_hours(
     name_column: str = "time",
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Filter a dataset by a given list of hours
 
     Parameters
     -----------
     ds : xr.Dataset
         Dataset to filter
-    list_dt : list[dt.datetime]
-        List of datetimes
+    date: dt.date
+        Date
+    times: list[dt.times]
+        List of times
     name_column : str
-        Name of the datetime column of the dataset
+        Name of the datetime column in the dataset
 
     Returns
     -------
@@ -528,19 +640,18 @@ def filter_dataset_by_pressure_levels(
     pressure_dim: str = "pressure_level",
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Filter an xarray Dataset to retain only the specified pressure level(s).
 
     Parameters
     ----------
     ds : xr.Dataset
         Input dataset.
-    pressure_levels : str or list of str
+    pressure_levels : str | list [str]
         Pressure level(s) to keep. Values must match the dataset's
         pressure coordinate labels (e.g., "500" or ["1000", "850", "500"]).
     pressure_dim : str, default "pressure_level"
         Name of the pressure dimension or coordinate in the dataset.
+
     Returns
     -------
     xr.Dataset
@@ -577,29 +688,45 @@ def filter_dataset_by_pressure_levels(
 
 
 def kelvin_to_celsius(
-    kelvin: xr.DataArray | npt.NDArray,
+    kelvin: xr.DataArray | npt.ArrayLike,
 ) -> xr.DataArray | npt.NDArray:
     """
-    Description
-    -----------
     Compute the temperature in celsius from a temperature in kelvin
+
+    Parameters
+    ----------
+    kelvin: float
+        Temperature in Kelvin
+
+    Returns
+    -------
+    celsius: float
+        Temperature in Celsius
     """
     if isinstance(kelvin, xr.DataArray):
         return kelvin - 273.15
-    return np.array(kelvin) - 273.15
+    return np.asarray(kelvin) - 273.15
 
 
 def celsius_to_kelvin(
-    celsius: xr.DataArray | npt.NDArray,
+    celsius: xr.DataArray | npt.ArrayLike,
 ) -> xr.DataArray | npt.NDArray:
     """
-    Description
-    -----------
     Compute the temperature in kelvin from a temperature in celsius
+
+    Parameters
+    ----------
+    celsius: float
+        Temperature in Celsius
+
+    Returns
+    -------
+    kelvin: float
+        Temperature in Kelvin
     """
     if isinstance(celsius, xr.DataArray):
         return celsius + 273.15
-    return np.array(celsius) + 273.15
+    return np.asarray(celsius) + 273.15
 
 
 def normalize_longitude_latitude(
@@ -609,8 +736,6 @@ def normalize_longitude_latitude(
     target: str = "-180_180",
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Normalize longitude coordinates of an xarray ERA5 Dataset to a desired range
 
     Parameters
@@ -625,6 +750,7 @@ def normalize_longitude_latitude(
         Target longitude convention:
         - "-180_180": longitudes in [-180, 180]
         - "0_360": longitudes in [0, 360]
+
     Returns
     -------
     xr.Dataset
@@ -671,8 +797,6 @@ def generate_dates(
     day_step: int = 1,
 ) -> Generator[dt.date, None, None]:
     """
-    Description
-    -----------
     Generate dates between two dates with a given step
 
     This function yields one date at a time, starting from 'start_date'
@@ -704,8 +828,6 @@ def generate_hours(
     hour_step: int = 2,
 ) -> list[dt.time]:
     """
-    Description
-    -----------
     Generate hours between two hours with a given step.
 
     Parameters
@@ -735,8 +857,6 @@ def filter_dataset_by_location(
     longitude: float,
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Filter Dataset to keep only the specified latitude and longitude
 
     Parameters
@@ -754,13 +874,15 @@ def filter_dataset_by_location(
         Dataset filtered to include only the requested location
 
     """
+    if "latitude" not in ds.dims and "longitude" not in ds.dims:
+        raise ValueError(
+            "Dataset does not contain latitude/longitude in its dimensions"
+        )
     return ds.sel(latitude=latitude, longitude=longitude, method="nearest")
 
 
 def get_xy_dims(ds: xr.Dataset) -> dict[str, str]:
     """
-    Description
-    -----------
     Determine the names of the spatial dimensions for interpolation in an
     xarray Dataset
 
@@ -784,6 +906,8 @@ def get_xy_dims(ds: xr.Dataset) -> dict[str, str]:
         return {"x": "x", "y": "y"}
     if "latitude" in ds.dims and "longitude" in ds.dims:
         return {"x": "longitude", "y": "latitude"}
+    if "lat" in ds.dims and "lon" in ds.dims:
+        return {"x": "lon", "y": "lat"}
     raise ValueError("Unable to detect spatial dimensions")
 
 
@@ -793,22 +917,20 @@ def get_ta_td_celsius_at_location(
     lon: float,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """
-    Description
-    -----------
     Get Air temperature and dewpoint temperature at a specified location
     from data
 
     Parameters
     ----------
-     data: xr.Dataset
+    data: xr.Dataset
         Data
-     x : float
-        Coord x (longitude or utm)
-     y : float
-        Coord y  (latitude or utm)
+    lon: float
+        Longitude
+    lat: float
+        Latitude
 
-    Return
-    -----------
+    Returns
+    -------
     ta, td : tuple[xr.DataArray,xr.DataArray]
         Air temperature and dewpoint temperature at station location
     """
@@ -818,25 +940,22 @@ def get_ta_td_celsius_at_location(
     # If the dataset uses projected coordinates (x/y)
     if dims["x"] == "x" and dims["y"] == "y":
         x, y = (
-            work_area_from_coord_point(lat, lon, 0, 0, CRS.from_epsg(4326))[
-                "utm"
-            ][0].left,
-            work_area_from_coord_point(lat, lon, 0, 0, CRS.from_epsg(4326))[
-                "utm"
-            ][0].bottom,
+            work_area_from_coord_point(lat, lon, 0, 0)["utm"][0].left,
+            work_area_from_coord_point(lat, lon, 0, 0)["utm"][0].bottom,
         )
 
     # If the dataset uses geographic coordinates (longitude/latitude)
-    if dims["x"] == "longitude" and dims["y"] == "latitude":
+    if (dims["x"] == "longitude" and dims["y"] == "latitude") or (
+        dims["x"] == "lon" and dims["y"] == "lat"
+    ):
         x = lon
         y = lat
 
         if data[dims["x"]].max() > 180:
-            # x = (x + 360) % 360
             x = ((x + 180) % 360) - 180
+
     # Interpolate air temperature and dewpoint temperature at the specified
     # location
-
     ta, td = (
         xr.DataArray(
             kelvin_to_celsius(
@@ -856,10 +975,8 @@ def get_ta_td_celsius_at_location(
     return ta, td
 
 
-def fix_hour_format(s: pd.Series):
+def fix_hour_format(s: pd.Series) -> pd.Series:
     """
-    Description
-    -----------
     Fix timestamps using the "24:00:00" hour convention (end of day) by
     converting them to "00:00:00" of the next day
 

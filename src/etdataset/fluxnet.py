@@ -220,15 +220,15 @@ def download_zip(
                 f.write(response.content)
             logger.info(f"Station {id_station}: downloaded to {file_path}")
             return file_path
-        logger.error(
-            f"Failed to download station {id_station}: {file_path} "
-            f"(status code: {response.status_code})"
-        )
-        return None  # noqa: TRY300
-
     except Exception:
         logger.exception(
             f"Error during the downloading of station {id_station}"
+        )
+        return None
+    else:
+        logger.error(
+            f"Failed to download station {id_station}: {file_path} "
+            f"(status code: {response.status_code})"
         )
         return None
 
@@ -306,7 +306,10 @@ def download_fluxnet_data(
         filename = (
             row["filename"]
             if "filename" in row and pd.notna(row["filename"])
-            else f"{row['data_hub']}_{id_station}_{row['first_year']}_{row['last_year']}.zip"  # noqa: E501
+            else (
+                f"{row['data_hub']}_{id_station}_"
+                f"{row['first_year']}_{row['last_year']}.zip"
+            )
         )
         file_path = os.path.join(output_dir, filename)
 
@@ -327,13 +330,15 @@ def download_fluxnet_data(
                     with zipfile.ZipFile(downloaded_file, "r") as zip_ref:
                         zip_ref.extractall(extract_folder)
                     logger.info(
-                        f"{id_station} station file unzipped in: {extract_folder}"  # noqa: E501
+                        f"{id_station} station file unzipped "
+                        f"in: {extract_folder}"
                     )
                 except zipfile.BadZipFile:
                     logger.exception(f"Non valid zip file: {downloaded_file}")
             else:
                 logger.info(
-                    f"{id_station} station files already extracted: {extract_folder}"  # noqa: E501
+                    f"{id_station} station files already "
+                    f"extracted: {extract_folder}"
                 )
 
 

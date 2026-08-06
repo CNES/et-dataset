@@ -1,4 +1,3 @@
-# type: ignore
 #
 # Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales /
 #             Université Paul Sabatier (UT3)
@@ -19,6 +18,23 @@ from matplotlib.colors import ListedColormap
 
 
 def rescale(data: np.ndarray, qmin: float, qmax: float) -> np.ndarray:
+    """
+    Rescale data
+
+    Parameters
+    ----------
+    data: np.array
+        Data
+    qmin: float
+        Minimum value
+    qmax: float
+        Maximum value
+
+    Returns
+    -------
+    rescaled: no.array
+        Rescaled data
+    """
     arr = np.clip(data, qmin, qmax)
     min_value = np.nanmin(arr)
     max_value = np.nanmax(arr)
@@ -26,16 +42,29 @@ def rescale(data: np.ndarray, qmin: float, qmax: float) -> np.ndarray:
     return arr
 
 
-def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
+def plot_images(
+    arr: xr.Dataset, title: str = "Dataset", outfname: str | None = None
+):
     """
     Plot dataset
+
+    Parameters
+    ----------
+    arr: xr.Dataset
+        Data
+    title: str
+        Plot title
+    outfnale: str | None
+        Filename to save the plot
     """
     # Compute number of plot
     bands = list(arr.data_vars)
     nb_plots = 0
-    if set(["red", "green", "blue"]).intersection(set(bands)) == set(  # noqa
-        ["red", "green", "blue"]
-    ):
+    if {"red", "green", "blue"}.intersection(set(bands)) == {
+        "red",
+        "green",
+        "blue",
+    }:
         nb_plots += 1
     for band in bands:
         if band in [
@@ -62,9 +91,11 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
     # RGB
     icol = 0
     irow = 0
-    if set(["red", "green", "blue"]).intersection(set(bands)) == set(  # noqa
-        ["red", "green", "blue"]
-    ):
+    if {"red", "green", "blue"}.intersection(set(bands)) == {
+        "red",
+        "green",
+        "blue",
+    }:
         rgb = xr.DataArray(
             np.dstack((arr.red.data, arr.green.data, arr.blue.data)),
             arr.coords.assign(band=["r", "g", "b"]),
@@ -169,8 +200,6 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
     if "lai" in bands:
         arr.lai.plot(
             ax=axes[irow, icol],
-            # vmin=arr.lai.quantile(0.01),
-            # vmax=arr.lai.quantile(0.99),
         )
         axes[irow, icol].set_title("LAI")
         axes[irow, icol].grid(True)
@@ -183,8 +212,6 @@ def plot_images(arr: xr.Dataset, title: str = "Dataset", outfname=None):
     if "fcover" in bands:
         arr.fcover.plot(
             ax=axes[irow, icol],
-            # vmin=arr.lai.quantile(0.01),
-            # vmax=arr.lai.quantile(0.99),
         )
         axes[irow, icol].set_title("FCOVER")
         axes[irow, icol].grid(True)
@@ -205,6 +232,11 @@ def plot_dataset(
 ):
     """
     Plot EF models
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Data
     """
     # Set figure subplots
     nb = len(data.data_vars)
@@ -215,7 +247,7 @@ def plot_dataset(
     i = 0
     j = 0
     # Loop over variables
-    for var in sorted(data.data_vars):
+    for var in sorted(data.data_vars):  # type:ignore[type-var]
         ax = plt.subplot2grid((row, col), (i, j))
         if var in ["water", "cloud", "qa"]:
             valid_cmap = ListedColormap(
@@ -243,6 +275,14 @@ def plot_dataset(
 
 
 def plot_dem(xrds_dem: xr.Dataset):
+    """
+    Plot DEM
+
+    Parameters
+    ----------
+    xrds_dem: xr.Dataset
+        DEM data
+    """
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
     xrds_dem["height"].plot(  # type: ignore
         ax=axes[0],
@@ -268,7 +308,12 @@ def density_plot(
     data: xr.Dataset,
 ):
     """
-    Plot
+    Plot density
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Data
     """
     # dimensions
     _, axes = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
@@ -285,15 +330,15 @@ def density_plot(
         # Flatten and mask values
         x = df["var"].values
         mask = np.isfinite(x) & np.isfinite(y)  # type: ignore
-        x = x[mask]
-        y = y[mask]
+        x_masked = x[mask]
+        y_masked = y[mask]
         ax.hist2d(x, y, (150, 150), cmap="viridis", cmin=1)
 
         # Fix limits
-        xmin = np.nanmin(x) - 0.05
-        xmax = np.nanmax(x) + 0.05
-        ymin = np.nanmin(y) - 5
-        ymax = np.nanmax(y) + 5
+        xmin = np.nanmin(x_masked) - 0.05
+        xmax = np.nanmax(x_masked) + 0.05
+        ymin = np.nanmin(y_masked) - 5
+        ymax = np.nanmax(y_masked) + 5
         ax.set_xlim([xmin, xmax])
         ax.set_ylim([ymin, ymax])
 
@@ -306,8 +351,6 @@ def density_plot(
 
 def plot_station_map(gdf: gpd.GeoDataFrame):
     """
-    Description
-    -----------
     Plot station locations on an interactive map from a GeoDataFrame.
 
     Parameters

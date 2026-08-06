@@ -29,7 +29,15 @@ def prepare_fluxnet_stations(
     out_dir: str = "fluxnet_processed",
 ):
     """
-    Prepare ICOS data
+    Prepare fluxnet data
+
+    Parameters
+    ----------
+    stations: list[str] | str
+        Stations to process
+    data_dir: str| None
+        Downlaod ICOS directory
+    out_dir: str
     """
     # download files
 
@@ -68,7 +76,6 @@ def prepare_fluxnet_stations(
         csv_paths.append(csv_saved)
 
     logger.info(f"All stations are completed {csv_paths}")
-    return csv_paths
 
 
 def get_parser() -> argparse.ArgumentParser:

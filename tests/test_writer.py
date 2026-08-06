@@ -6,10 +6,12 @@ Test writer module
 
 import datetime as dt
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from shapely.geometry import Point
 
 from etdataset import writer
 
@@ -323,3 +325,18 @@ def test_write_dataset_to_netcdf(
     files = list(d.iterdir())
     assert len(files) == 1
     assert files[0].name == expected
+
+
+@pytest.mark.unit
+def test_create_geopckg_from_gdf(tmp_path):
+    gdf = gpd.GeoDataFrame(
+        {"id": ["toto"]},
+        geometry=[Point(1, 2)],
+        crs="EPSG:4326",
+    )
+
+    writer.create_geopckg_from_gdf(
+        gdf, output="stations_package.gpkg", path=tmp_path
+    )
+
+    assert (tmp_path / "pckg" / "stations_package.gpkg").exists()

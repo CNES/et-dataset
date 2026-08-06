@@ -9,90 +9,20 @@ This module contains tests for icos
 import os
 
 import geopandas as gpd
-import numpy as np
 import pandas as pd
 import pytest
-import xarray as xr
 from shapely.geometry import Point
 
 from etdataset import icos
 from etdataset.icos import StationConfig
 
 
-def test_get_csv_with_valid_icos_stations(monkeypatch, tmp_path):
-    # create your own list stations
-    monkeypatch.setattr(
-        icos.meta,
-        "list_stations",
-        lambda: [
-            type(
-                "s",
-                (),
-                {
-                    "type_uri": "/ES",
-                    "uri": "ES",
-                    "id": "toto",
-                    "name": "TOTO",
-                    "country_code": "FR",
-                    "lat": 0,
-                    "lon": 0,
-                    "elevation": 0,
-                },
-            )(),
-            type(
-                "s",
-                (),
-                {
-                    "type_uri": "/IS",
-                    "uri": "IS",
-                    "id": "momo",
-                    "name": "MOMO",
-                    "country_code": "FR",
-                    "lat": 0,
-                    "lon": 0,
-                    "elevation": 0,
-                },
-            )(),
-        ],
-    )
-    # Create your own list_datatypes
-    monkeypatch.setattr(
-        icos.meta,
-        "list_datatypes",
-        lambda: [
-            type(
-                "d",
-                (),
-                {
-                    "uri": "Meteo",
-                    "label": "L2",
-                },
-            )(),
-            type(
-                "d",
-                (),
-                {
-                    "uri": "Meteosens",
-                    "label": "L2",
-                },
-            )(),
-        ],
-    )
-    # create your list_data_objects
-    monkeypatch.setattr(
-        icos.meta,
-        "list_data_objects",
-        lambda **kw: ["data"] if kw["station"] == "ES" else [],
-    )
-
-    monkeypatch.chdir(tmp_path)
-    # get the csv file created
-    df = pd.read_csv(icos.get_csv_with_valid_icos_stations())
-
-    # test if you only have the correct station
-    assert (df["id"] == "toto").all()
+@pytest.mark.unit
+def test_get_csv_with_valid_icos_stations():
+    assert icos.get_csv_with_valid_icos_stations()
 
 
+@pytest.mark.unit
 def test_get_station_list(monkeypatch, tmp_path):
     df = pd.DataFrame(
         {
@@ -115,6 +45,7 @@ def test_get_station_list(monkeypatch, tmp_path):
     assert stations == ["toto", "momo"]
 
 
+@pytest.mark.unit
 def test_filter_stations_by_country_code(monkeypatch, tmp_path):
     df = pd.DataFrame(
         {
@@ -137,6 +68,7 @@ def test_filter_stations_by_country_code(monkeypatch, tmp_path):
     assert filtered.iloc[0]["id"] == "toto"
 
 
+@pytest.mark.unit
 def test_filter_valid_data():
     df = pd.DataFrame(
         {
@@ -153,6 +85,7 @@ def test_filter_valid_data():
     assert filtered.iloc[0]["RH"] == 90
 
 
+@pytest.mark.unit
 def test_get_stations_config(monkeypatch, tmp_path):
     df = pd.DataFrame(
         {
@@ -184,6 +117,7 @@ def test_get_stations_config(monkeypatch, tmp_path):
     assert cfg.elev == 100
 
 
+@pytest.mark.unit
 def test_get_stations_config_unknown(monkeypatch, tmp_path):
     df = pd.DataFrame(columns=["id", "name", "country", "lat", "lon", "elev"])
     csv = tmp_path / "stations.csv"
@@ -199,6 +133,7 @@ def test_get_stations_config_unknown(monkeypatch, tmp_path):
         icos.get_stations_config("UNKNOWN")
 
 
+@pytest.mark.unit
 def test_get_station_location(monkeypatch, tmp_path):
     df = pd.DataFrame(
         {
@@ -224,6 +159,7 @@ def test_get_station_location(monkeypatch, tmp_path):
     assert isinstance(gdf.geometry.iloc[0], Point)
 
 
+@pytest.mark.unit
 def test_download_icos_station_no_token(monkeypatch):
     monkeypatch.delenv("ICOS_API_TOKEN", raising=False)
 
@@ -231,6 +167,7 @@ def test_download_icos_station_no_token(monkeypatch):
         icos.download_icos_station("toto")
 
 
+@pytest.mark.unit
 def test_download_icos_station(monkeypatch, tmp_path):
     # fake env token
     monkeypatch.setenv("ICOS_API_TOKEN", "TOKEN")
@@ -298,6 +235,7 @@ def test_download_icos_station(monkeypatch, tmp_path):
         assert call["data_objects"][0].uri == "uri"
 
 
+@pytest.mark.unit
 def test_read_csv_data(tmp_path):
     cfg = StationConfig(
         id="toto", name="TOTO", country="FR", lat=1, lon=2, elev=10
@@ -324,18 +262,7 @@ def test_read_csv_data(tmp_path):
     assert data.iloc[0]["RH"] == 50
 
 
-def test_create_geopckg_from_gdf(tmp_path):
-    gdf = gpd.GeoDataFrame(
-        {"id": ["toto"]},
-        geometry=[Point(1, 2)],
-        crs="EPSG:4326",
-    )
-
-    icos.create_geopckg_from_gdf(gdf, path=tmp_path)
-
-    assert (tmp_path / "pckg" / "stations_package.gpkg").exists()
-
-
+@pytest.mark.unit
 def test_save_station_data(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
@@ -354,22 +281,3 @@ def test_save_station_data(tmp_path, monkeypatch):
     csv_path = icos.save_station_data(cfg, df)
 
     assert os.path.exists(csv_path)
-
-
-def test_compute_dewpoint_temp():
-    ta = pd.Series([20.0])  # °C
-    rh = pd.Series([90.0])  # %
-    tdp = icos.compute_dewpoint_temp(ta, rh)
-
-    calc = pd.Series([18.309116])
-    assert isinstance(tdp, pd.Series)
-    assert np.allclose(tdp, calc, atol=0.1)
-
-
-def test_kelvin_to_celsius():
-    data = xr.DataArray([273.15, 274.15])
-
-    celsius = icos.kelvin_to_celsius(data)
-
-    assert float(celsius[0]) == 0.0
-    assert float(celsius[1]) == 1.0

@@ -66,6 +66,23 @@ def get_vapor_pressure_monthly(dt: dt.date) -> float:
 def compute_dewpoint_lr(
     coeff: float | npt.ArrayLike, b: float = 17.502, c: float = 240.97
 ) -> float | npt.NDArray[np.float64]:
+    """
+    Compute lapse rate for dewpoint temperature
+
+    Parameters
+    ----------
+    coeff : float | np.arraylike
+        Coefficielt
+    b : float
+        Parameter
+    c : float
+        Parameter
+
+    Returns
+    -------
+    lr: float | npt.NDArray[np.float64]
+        Dewpoint lapse rate
+    """
     arr = np.asarray(coeff, dtype=float)
     result = -arr * c / b
 
@@ -81,8 +98,6 @@ def compute_lapse_rate_from_2_levels_roi(
     level_dim: str = "pressure_level",
 ) -> xr.DataArray:
     """
-    Description
-    -----------
     Compute time-dependent lapse rate between two pressure levels
 
     The lapse rate is computed as:

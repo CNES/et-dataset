@@ -16,7 +16,6 @@ from multiprocessing import Process
 import pandas as pd
 import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
-from pyproj import CRS
 
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
@@ -48,9 +47,32 @@ def run_stations_process(
     mnt_path: str,
     data_path: str,
     output: str,
-):  # Get metadats of the station
+):
+    """
+    Process one station
+
+    Parameters
+    ----------
+    start_date: dt.date
+        Start date
+    end_date: dt.date
+        End date
+    step_date: int
+        Step for date
+    station: str
+        Station name
+    list_hours: list[dt.time]
+        List of hours
+    mnt_path: str
+        DEM directory
+    data_path: str
+        Data path
+    output: str
+        Output directory
+    """
+    # Get metadata of the station
     logger.info(f"Current station : {station}")
-    # Get metadats of the station
+    # Get metadata of the station
     cfg = get_stations_config(station)
 
     for d in generate_dates(start_date, end_date, step_date):
@@ -60,7 +82,7 @@ def run_stations_process(
 
             # ROI
             roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
-                cfg.lat, cfg.lon, 25000, 25000, CRS.from_epsg(4326)
+                cfg.lat, cfg.lon, 25000, 25000
             )["utm"]
 
             # DEM
@@ -71,7 +93,7 @@ def run_stations_process(
                 resolution=60,
             )
 
-            # attributes nécessaires
+            # attributes required
             data.attrs["vis_date"] = date.date()
             data.attrs["vis_time"] = date.time()
             data.attrs["tir_date"] = date.date()
@@ -116,6 +138,32 @@ def generate_timeseries_for_stations_multiprocess(
     hour_step: int = 2,
     stations: list[str] | str = "all",
 ):
+    """
+    Process stations
+
+    Parameters
+    ----------
+    start_date: dt.date
+        Start date
+    end_date: dt.date
+        End date
+    mnt_path: str
+        DEM directory
+    data_path: str
+        Data path
+    output: str
+        Output directory
+    step_day: int
+        Step for date
+    hour_start: int
+        Start hour
+    hour_end: int
+        End hour
+    hour_step: int
+        Step for hour
+    stations: list[str] | str
+        Station names
+    """
     # download_date_by_date(start_date, end_date, ERA5Dataset.ERA5, output="out")  # noqa: E501
     list_hours = generate_hours(hour_start, hour_end, hour_step)
 

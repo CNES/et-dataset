@@ -33,6 +33,15 @@ def prepare_icos_stations(
 ):
     """
     Prepare ICOS data
+
+    Parameters
+    ----------
+    stations: list[str] | str
+        Stations to process
+    data_dir: str| None
+        Downlaod ICOS directory
+    out_dir: str
+        Output directory
     """
     # download files
     download_icos_station(stations, data_dir)
@@ -73,7 +82,6 @@ def prepare_icos_stations(
         csv_paths.append(csv_saved)
 
     logger.info(f"All stations are completed {csv_paths}")
-    return csv_paths
 
 
 def get_parser() -> argparse.ArgumentParser:
