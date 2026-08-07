@@ -42,6 +42,17 @@ flver
 stationid
 ecols
 ecos
+xrds
+dataarray
+qmin
+qmax
+outfname
+interp
+zout
+zdem
+tdem
+zref
+tcvw
 
 # Python package
 earthaccess
@@ -56,6 +67,9 @@ icoscp
 contextily
 mapclassify
 ipynb
+coeff
+xarr
+geopackage
 
 # functions
 getaffinity
@@ -70,10 +84,19 @@ geoscience
 # Nouns
 Liang
 Bonafoni
+Deering
+Schell
+Fiddes
+Gruber
 
 # Words
 micrometeorological
 hydrometeorology
 reprojection
 reproject
+reprojects
+reprojected
 docstrings
+geopotential
+topo
+orthometric
