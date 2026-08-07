@@ -24,7 +24,6 @@ from etdataset.era5 import (
     get_era5_dem,
     get_era5land_dem,
     read,
-    rescale_temperature_with_lapserate,
 )
 from etdataset.icos import StationConfig
 from etdataset.interpolation import interpolate_time
@@ -282,6 +281,121 @@ def interpolate_variant_temperature(
     # Keep attributes
     dem_temp.attrs.update(src_temp.attrs)
     return dem_temp
+
+
+def interpolate_temperature(
+    src_temp: xr.DataArray,
+    src_dem: xr.DataArray,
+    dst_dem: xr.DataArray,
+    lapse_rate: float,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
+) -> xr.DataArray:
+    """
+    This method interpolates temperature data on a new grid
+    by taking into account altitude.
+
+    First, the ERA5 temperature is adjusted to a common level,
+    using the formula  Tref = Tin + rate x (Zref - Zin).
+    Zout is a reference elevation taken as Zout = 0.
+    The reference-level temperature is then projected
+    from the original geographic coordinate system (i.e. WGS84 for ERA5)
+    onto the projection coordinate system of the destination DEM
+    using bilinear interpolation.
+    The DEM data and lapse rate are then used to adjust the
+    reference-level gridded temperature to the elevations provided
+    by the DEM, using  Tdem = Tref + rate x (Zdem - Zref), where
+    where Tref is now the gridded temperature at the reference elevation Zref,
+    and Tdem is the gridded temperature at the elevation of the DEM Zdem.
+
+    Parameters
+    ----------
+    src_temp: xr.DataArray
+        Temperature (reference grid)
+    src_dem: xr.DataArray
+        Elevation associated to the temperature (reference grid)
+    dst_dem: xr.DataArray
+        Elevation associated to the temperature (projection grid)
+    lapse_rate: float
+        Gradient of temperature per unit of elevation
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+
+    Return
+    ------
+    dem_temp: xr.DataArray
+        Temperature projected on the new DEM
+    """
+    # Compute temperature at reference elevation
+    ref_temp = src_temp - lapse_rate * src_dem
+    # Project into the coordinate system of the destination DEM
+    projected_temp = ref_temp.rio.reproject_match(
+        dst_dem,
+        resampling=interp_type,
+    )
+    # Adjust temperatures to DEM elevation
+    dem_temp = projected_temp + lapse_rate * dst_dem
+    return dem_temp
+
+
+def rescale_temperature_with_lapserate(
+    dem: xr.DataArray | None,
+    era5_data: xr.DataArray | None,
+    era5_dem: xr.DataArray | None,
+    lapse_rate: float,
+    key: str,
+    description: str,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
+) -> xr.DataArray | None:
+    """
+    Resacle temperature using constant lapse rate
+
+    Parameters
+    ----------
+    dem: xr.DataArray | None
+        DEM used to rescale data
+    era5_data: xr.DataArray | None
+        Data to rescaled
+    era5_dem: xr.DataArray | None
+        DEM corresponding to data to rescaled
+    lapse_rate: float
+        Lapse rate
+    key: str
+        Variable name
+    description: str
+        Variable description
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+
+    Returns
+    -------
+    data: xr.DataArray
+        Rescaled data
+    """
+    if era5_data is None:
+        msg = f"Skip {description} interpolation because data is missing"
+        logger.warning(msg)
+        return None
+    if era5_dem is None:
+        msg = f"Skip {description} interpolation because dem data is missing"
+        logger.warning(msg)
+        return None
+    if dem is None:
+        logger.warning("Skip temperature interpolation because DEM is missing")
+        return None
+    data = interpolate_temperature(
+        src_temp=era5_data,
+        src_dem=era5_dem,
+        dst_dem=dem,
+        lapse_rate=lapse_rate,
+        interp_type=interp_type,
+    )
+    data.attrs.clear()
+    data.attrs["standard_name"] = key
+    data.attrs["long_name"] = description
+    data.attrs["name"] = key
+    data.attrs["unit"] = "K"
+    data.attrs["description"] = description
+    return data
 
 
 def rescale_temperature_with_variable_lapserate(
