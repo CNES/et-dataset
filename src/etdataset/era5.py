@@ -196,8 +196,6 @@ class ERA5pressureVar(ERA5DataInfo, Enum):
 
 def read(product: str) -> xr.Dataset:
     """
-    Description
-    -----------
     Read ERA5 product
 
     Parameter
@@ -272,8 +270,6 @@ def interpolate_time(
     data: xr.Dataset, date: dt.datetime, variables: list[ERA5Var] | None = None
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Compute a linear time interpolation on data
     at a specific date for a list of variables.
 
@@ -283,7 +279,7 @@ def interpolate_time(
         Dataset all the variables and the dates
     date: dt.datetime
         Date at which interpolation is computed
-    variables: list[ERA5Var]
+    variables: list[ERA5Var] | None
         List of Variables to consider for the interpolation
 
     Return
@@ -325,10 +321,9 @@ def interpolate_temperature(
     src_dem: xr.DataArray,
     dst_dem: xr.DataArray,
     lapse_rate: float,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.DataArray:
     """
-    Description
-    -----------
     This method interpolates temperature data on a new grid
     by taking into account altitude.
 
@@ -355,6 +350,8 @@ def interpolate_temperature(
         Elevation associated to the temperature (projection grid)
     lapse_rate: float
         Gradient of temperature per unit of elevation
+    interp_type: rio.enums.Resampling
+        Method used for resampling
 
     Return
     ------
@@ -366,7 +363,7 @@ def interpolate_temperature(
     # Project into the coordinate system of the destination DEM
     projected_temp = ref_temp.rio.reproject_match(
         dst_dem,
-        resampling=rio.enums.Resampling.bilinear,
+        resampling=interp_type,
     )
     # Adjust temperatures to DEM elevation
     dem_temp = projected_temp + lapse_rate * dst_dem
@@ -378,8 +375,6 @@ def interpolate_ozone(
     dem: xr.DataArray,
 ) -> xr.DataArray:
     """
-    Description
-    -----------
     This method interpolates ozone on a new grid.
 
     The reference-level ozone is projected
@@ -412,8 +407,6 @@ def interpolate_tcvw(
     dem: xr.DataArray,
 ) -> xr.DataArray:
     """
-    Description
-    -----------
     This method interpolates total column
     vapor water on a new grid.
 
@@ -447,8 +440,6 @@ def interpolate_radiation(
     dem: xr.DataArray,
 ) -> xr.DataArray:
     """
-    Description
-    -----------
     This method interpolates radiation data on a new grid.
 
     The reference-level ozone is projected
@@ -479,8 +470,6 @@ def interpolate_radiation(
 
 def _download(dataset: str, request: dict, target: str) -> None:
     """
-    Description
-    -----------
     Download data from ERA5
 
     Parameters
@@ -529,7 +518,7 @@ def _download(dataset: str, request: dict, target: str) -> None:
 
 def download(
     date: dt.datetime,
-    dataset,
+    dataset: ERA5Dataset,
     variables: list[str] | None = None,
     path: str | None = None,
 ) -> None:
@@ -544,9 +533,9 @@ def download(
         Date
     dataset: ERA5Dataset
         ERA5 Dataset used for download
-    variables: list[str]
+    variables: list[str] | None
         List of product to download
-    path: str
+    path: str | None
         Directory path to store data
     """
     if path is None:
@@ -659,22 +648,23 @@ def download(
 
 def rescale_temperature_with_lapserate(
     dem: xr.DataArray | None,
-    era5_data=xr.DataArray | None,
-    era5_dem=xr.DataArray | None,
-    lapse_rate=float,
-    key=str,
-    description=str,
+    era5_data: xr.DataArray | None,
+    era5_dem: xr.DataArray | None,
+    lapse_rate: float,
+    key: str,
+    description: str,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.DataArray | None:
     """
     Resacle temperature using constant lapse rate
 
     Parameters
     ----------
-    dem: xr.DataArray
+    dem: xr.DataArray | None
         DEM used to rescale data
-    era5_data: xr.DataArray
+    era5_data: xr.DataArray | None
         Data to rescaled
-    era5_dem: xr.DataArray
+    era5_dem: xr.DataArray | None
         DEM corresponding to data to rescaled
     lapse_rate: float
         Lapse rate
@@ -682,6 +672,8 @@ def rescale_temperature_with_lapserate(
         Variable name
     description: str
         Variable description
+    interp_type: rio.enums.Resampling
+        Method used for resampling
 
     Returns
     -------
@@ -689,7 +681,11 @@ def rescale_temperature_with_lapserate(
         Rescaled data
     """
     if era5_data is None:
-        msg = f"Skip {description} interpolation because  data is missing"
+        msg = f"Skip {description} interpolation because data is missing"
+        logger.warning(msg)
+        return None
+    if era5_dem is None:
+        msg = f"Skip {description} interpolation because dem data is missing"
         logger.warning(msg)
         return None
     if dem is None:
@@ -700,6 +696,7 @@ def rescale_temperature_with_lapserate(
         src_dem=era5_dem,
         dst_dem=dem,
         lapse_rate=lapse_rate,
+        interp_type=interp_type,
     )
     data.attrs.clear()
     data.attrs["standard_name"] = key
@@ -712,9 +709,9 @@ def rescale_temperature_with_lapserate(
 
 def rescale_radiation(
     dem: xr.DataArray,
-    era5_data=xr.DataArray | None,
-    key=str,
-    description=str,
+    era5_data: xr.DataArray | None,
+    key: str,
+    description: str,
 ) -> xr.DataArray | None:
     """
     Rescale radiation using constant lapse rate
@@ -723,7 +720,7 @@ def rescale_radiation(
     ----------
     dem: xr.DataArray
         DEM or grid used to rescale data
-    era5_data: xr.DataArray
+    era5_data: xr.DataArray | None
         Data to rescaled
     key: str
         Variable name
@@ -762,6 +759,7 @@ def add(
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
     variables: list[ERA5Var] | None = None,
     path: str | None = None,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.Dataset:
     """
     Description
@@ -774,10 +772,17 @@ def add(
         Data
     dataset: ERA5Dataset
         ERA5 Dataset used for download
-    variables: list[ERA5Var]
+    variables: list[ERA5Var] | None
         List of variables to add
-    path: str
+    path: str | None
         Directory where ERA5 data have been downloaded data
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+
+    Returns
+    -------
+    uodated_data: xr.Dataset
+        Updated data
     """
     ##############
     # Check inputs
@@ -892,6 +897,7 @@ def add(
             era5_data=era5_xrds.get(ERA5Var.TEMPERATURE.key, None),
             era5_dem=era5_dem,
             lapse_rate=-0.0065,
+            interp_type=interp_type,
             key="ta",
             description="2m air temperature",
         )
@@ -905,6 +911,7 @@ def add(
             era5_data=era5_xrds.get(ERA5Var.DEWPOINT_TEMPERATURE.key, None),
             era5_dem=era5_dem,
             lapse_rate=-0.0052,
+            interp_type=interp_type,
             key="tdp",
             description="dewpoint temperature",
         )
@@ -1000,7 +1007,7 @@ def add(
 def download_date_by_date(
     date1: dt.datetime,
     date2: dt.datetime,
-    dataset,
+    dataset: ERA5Dataset,
     variables: list[str] | None = None,
     output: str | None = None,
 ) -> pd.DatetimeIndex:
@@ -1011,16 +1018,16 @@ def download_date_by_date(
     Parameters
     ----------
     date1 : datetime.datetime
-        Start date.
+        Start date
     date2 : datetime.datetime
-        End date.
-    dataset :
+        End date
+    dataset : ERA5Dataset
         ERA5 dataset class to use (e.g. ERA5Dataset.ERA5,
         ERA5Dataset.ERA5LAND, ERA5Dataset.ERA5PRESSURE).
-    variables : list[str], optional
+    variables : list[str] | None
         List of variables to download. If None, all variables
         available in the dataset are downloaded.
-    output : str
+    output : str | None
         Directory path to store data
     Returns
     -------

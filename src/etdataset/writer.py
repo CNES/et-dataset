@@ -7,10 +7,11 @@ Common function
 
 import os
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio as rio
-import rioxarray  # noqa # Import to activate rio attributes
+import rioxarray  # noqa F401 # Import to activate rio attributes
 import xarray as xr
 from rasterio.enums import ColorInterp
 from scipy.io import savemat
@@ -481,3 +482,30 @@ def write_dataset_to_netcdf(
         xrds = xrds.rio.write_crs(crs)  # write crs if necessary
     # Save to netCDF4
     xrds.to_netcdf(os.path.join(directory, filename))
+
+
+def create_geopckg_from_gdf(
+    gdf: gpd.GeoDataFrame, output: str = "package.gpkg", path: str | None = None
+):
+    """
+    Create a geopackage file from a GeoDataFrame
+
+    Parameters
+    ----------
+    gdf : gpd.GeoDataFrame
+        GeoDataFrame of stations
+    output : str
+        Filename
+    path : str
+        Path where to csv the pckg
+    """
+    if path is None:
+        file_path = os.path.join(os.getcwd(), "pckg")
+    else:
+        file_path = os.path.abspath(os.path.join(path, "pckg"))
+
+    os.makedirs(file_path, exist_ok=True)
+
+    pckg_path = os.path.join(file_path, output)
+
+    gdf.to_file(pckg_path, layer="stations", driver="GPKG")

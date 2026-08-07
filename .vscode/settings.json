@@ -36,7 +36,6 @@
     "tests"
   ],
   "python-envs.defaultEnvManager": "ms-python.python:system",
-  "python-envs.pythonProjects": [],
   "cSpell.customDictionaries": {
     "custom-dictionary-workspace": {
       "name": "custom-dictionary-workspace",

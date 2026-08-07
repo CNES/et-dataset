@@ -10,7 +10,7 @@ from datetime import datetime
 
 import numpy as np
 import rasterio as rio
-import rioxarray  # noqa # Use to activate rioxarray accessors
+import rioxarray  # noqa F401 # Use to activate rioxarray accessors
 import xarray as xr
 from pyproj import CRS
 
@@ -23,8 +23,6 @@ def interpolate_time(
     data: xr.Dataset, date: datetime, variables: list[str] | None = None
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Compute a linear time interpolation on data
     at a specific date for a list of variables.
 
@@ -78,6 +76,20 @@ def create_grid_array(
 ) -> xr.DataArray:
     """
     Create a grid
+
+    Parameters
+    ----------
+    bounds: rio.coords.BoundingBox
+        Bounding box
+    crs: CRS
+        CRS for the bounding box
+    resolution: float
+        Resolution to used
+
+    Returns
+    -------
+    grid: xr.Dataarray
+        Grid over the ROI
     """
     # X coords
     width = int(np.ceil((bounds.right - bounds.left) / resolution))
@@ -114,6 +126,20 @@ def create_grid_dataset(
 ) -> xr.Dataset:
     """
     Create a grid
+
+    Parameters
+    ----------
+    bounds: rio.coords.BoundingBox
+        Bounding box
+    crs: CRS
+        CRS for the bounding box
+    resolution: float
+        Resolution to used
+
+    Returns
+    -------
+    grid: xr.Dataarray
+        Grid over the ROI
     """
     # X coords
     width = int(np.ceil((bounds.right - bounds.left) / resolution))
@@ -150,10 +176,18 @@ def interpolate_on_grid(
     """
     Method for spatial interpolation on a grid
 
-    :param data: Dataset or DataArray to to be spatially interpolated
-    :param grid: Grid used for interplation
-    :param algorithm: Algorithm used for resampling
-    :return: xr.Dataset or xr.DataArray
+    Parameters
+    data: xr.Dataset | xr.DataArray
+        Data to be spatially interpolated
+    grid: xr.Dataarray
+        Grid used for interplation
+    algorithm: rio.enums.Resampling
+        Algorithm used for resampling
+
+    Returns
+    -------
+    reprojected_data: xr.Dataset | xr.DataArray
+        Reprojected data
     """
     return data.rio.reproject_match(
         grid,

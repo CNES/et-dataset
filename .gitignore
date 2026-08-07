@@ -11,36 +11,46 @@ __pycache__/
 .ipynb_checkpoints/
 out/
 out_*/
-download/
 COP-DEM_GLO-30-DGED_S2_tiles/
 ICOS/
 mnt/
-data/
+notebooks/data/
 icos_data/
 test_*.ipynb
 prepare_landsat_*.ipynb
+method_*/
+metrics_*/
+base/
+pckg/
+Data_*/
+fluxnet_data/
+**/aeris-catalogue-prod/
 validation/
 
 # Data
 *.tif
 *.csv
+*.xml
+*.gpkg
 !notebooks/products.csv
 !notebooks/landsat_products.csv
 !src/etdataset/data/stations_meteoL2.csv
+!src/etdataset/data/fluxnet_shuttle.csv
 *.mat
 *.nc
 *.zip
+*.dat
 *.zarr/
-*.xml
-*.gpkg
-pckg/
-method_*/
+
 # Package data
 !src/etdataset/data/geopotential_era5.nc
 !src/etdataset/data/geopotential_era5land.zarr/
+!src/etdataset/data/stations_meteoL2.csv
+!src/etdataset/data/fluxnet_shuttle.csv
 
 # Test data
 !tests/data/**/
+
 # Re-allow specific file types
 !tests/data/**/*.csv
 

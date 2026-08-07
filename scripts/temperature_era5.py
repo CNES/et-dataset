@@ -18,24 +18,48 @@ import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 
 from etdataset.cli import CLIException
-from etdataset.dem import get_dem_from_roi
-from etdataset.era5 import ERA5Dataset
+from etdataset.era5 import read
 from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
-    RescalTempMethod,
-    TempVariable,
-    add_temp,
     save_ta_td_csv,
 )
 from etdataset.utils import (
+    filter_dataset_by_hours,
     generate_dates,
     generate_hours,
     get_ta_td_celsius_at_location,
-    work_area_from_coord_point,
+    normalize_longitude_latitude,
 )
 
 logger = LoggerManager.get_logger(__name__)
+
+
+def create_era5_sub_dataset(era5_xrds: xr.Dataset) -> xr.Dataset:
+    """
+    Create a subset of an ERA5 xarray Dataset containing only selected variables
+    and rename them to standardized names
+
+    It renames 't2m' and 'd2m' to 'ta' and 'tdp'.
+
+    Parameters
+    ----------
+    era5_xrds : xr.Dataset
+        The original ERA5 dataset containing multiple data variables.
+
+    Returns
+    -------
+    era5_sub : xr.Dataset
+        A new xarray Dataset
+    """
+    era5_sub = era5_xrds[["t2m", "d2m"]]
+    era5_sub = era5_sub.rename(
+        {
+            "t2m": "ta",
+            "d2m": "td",
+        }
+    )
+    return era5_sub
 
 
 def run_stations_process(
@@ -44,7 +68,6 @@ def run_stations_process(
     step_date: int,
     station: str,
     list_hours: list[dt.time],
-    mnt_path: str,
     data_path: str,
     output: str,
 ):
@@ -63,8 +86,6 @@ def run_stations_process(
         Station name
     list_hours: list[dt.time]
         List of hours
-    mnt_path: str
-        DEM directory
     data_path: str
         Data path
     output: str
@@ -72,64 +93,42 @@ def run_stations_process(
     """
     # Get metadata of the station
     logger.info(f"Current station : {station}")
-    # Get metadata of the station
     cfg = get_stations_config(station)
-
     for d in generate_dates(start_date, end_date, step_date):
-        for h in list_hours:
-            date = dt.datetime.combine(d, h)
-            logger.info(f"Processing {date}")
-
-            # ROI
-            roi_bbox_utm, roi_crs_utm = work_area_from_coord_point(
-                cfg.lat, cfg.lon, 25000, 25000
-            )["utm"]
-
-            # DEM
-            data = get_dem_from_roi(
-                roi_bbox=roi_bbox_utm,
-                roi_crs=roi_crs_utm,
-                base_dir=mnt_path,
-                resolution=60,
+        logger.info(f"Current date : {d}")
+        product_path = os.path.join(
+            data_path,
+            "ERA5_data",
+            f"download_era5_{d.strftime('%Y-%m-%d')}.zip",
+        )
+        era5_xrds = read(product=product_path)
+        if era5_xrds is None:
+            logger.warning(
+                "Skipping date %s because ERA5 file is unavailable", d
             )
+            continue
+        era5_xrds = normalize_longitude_latitude(era5_xrds)
 
-            # attributes required
-            data.attrs["vis_date"] = date.date()
-            data.attrs["vis_time"] = date.time()
-            data.attrs["tir_date"] = date.date()
-            data.attrs["tir_time"] = date.time()
+        era5_filtered = filter_dataset_by_hours(era5_xrds, d, list_hours)
 
-            updated = add_temp(
-                data=data,
-                path=data_path,
-                dataset=ERA5Dataset.ERA5,
-                variables=[TempVariable.TD, TempVariable.TA],
-                method=RescalTempMethod.CONST_LR,
-            )
-            T_station, Td_station = get_ta_td_celsius_at_location(
-                updated, cfg.lat, cfg.lon
-            )
-
-            ds_out = xr.Dataset(
-                {
-                    "ta": ("time", [float(T_station.item())]),
-                    "tdp": ("time", [float(Td_station.item())]),
-                },
-                coords={"time": [date]},
-            )
-
-            save_ta_td_csv(
-                ds_out,
-                cfg,
-                output,
-                name_dir="csv_era5_rescaled",
-            )
+        # FOR ERA5 data only ###################################################
+        era5_sub = create_era5_sub_dataset(era5_filtered)
+        # get ta and td in celsius at station location
+        ta, td = get_ta_td_celsius_at_location(era5_sub, cfg.lat, cfg.lon)
+        # logger.info(f"TA:{ta} and TD :{td}")
+        ds_era5_grid = xr.Dataset(
+            {
+                "ta": ta,
+                "td": td,
+            }
+        )
+        # save data as csv
+        save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_grid")
 
 
 def generate_timeseries_for_stations_multiprocess(
     start_date: dt.date,
     end_date: dt.date,
-    mnt_path: str,
     data_path: str,
     output: str,
     step_day: int = 1,
@@ -147,8 +146,6 @@ def generate_timeseries_for_stations_multiprocess(
         Start date
     end_date: dt.date
         End date
-    mnt_path: str
-        DEM directory
     data_path: str
         Data path
     output: str
@@ -193,7 +190,6 @@ def generate_timeseries_for_stations_multiprocess(
                 step_day,
                 station_id,
                 list_hours,
-                mnt_path,
                 data_path,
                 output,
             ),
@@ -236,12 +232,6 @@ def get_parser() -> argparse.ArgumentParser:
         required=True,
     )
 
-    parser.add_argument(
-        "-p",
-        "--mnt_path",
-        type=str,
-        help="Directory of DEM tiles",
-    )
     parser.add_argument(
         "-d",
         "--data_path",
@@ -338,10 +328,6 @@ if __name__ == "__main__":
         logger.debug(f"Create output path: {args.output}")
         os.makedirs(args.output, exist_ok=True)
 
-    # DEM directory
-    if args.mnt_path is not None and not os.path.isdir(args.mnt_path):
-        raise FileNotFoundError(f"DEM directory not found {args.mnt_path}")
-
     if args.id_stations == ["all"]:
         stations = "all"
     else:
@@ -350,7 +336,6 @@ if __name__ == "__main__":
     generate_timeseries_for_stations_multiprocess(
         start_date=start_date,
         end_date=end_date,
-        mnt_path=args.mnt_path,
         data_path=args.data_path,
         output=args.output,
         step_day=args.step_day,

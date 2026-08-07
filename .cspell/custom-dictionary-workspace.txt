@@ -14,6 +14,17 @@ trishna
 
 # Provider
 usgs
+icos
+fluxnet
+goes
+himawari
+msg
+ameriflux
+eumetsat
+noaa
+jaxa
+eorc
+koda
 
 # Acronym
 DSSF
@@ -25,6 +36,10 @@ latlon
 swir
 ndvi
 lai
+rflver
+fldk
+flver
+stationid
 ecols
 ecos
 
@@ -55,3 +70,10 @@ geoscience
 # Nouns
 Liang
 Bonafoni
+
+# Words
+micrometeorological
+hydrometeorology
+reprojection
+reproject
+docstrings

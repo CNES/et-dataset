@@ -2,7 +2,7 @@
 # Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
 
 #######################
-# Prepare ICOS data
+# Prepare Fluxnet data
 #######################
 
 # Imports
@@ -10,29 +10,26 @@ import argparse
 import logging
 import os
 
-import pandas as pd
-
-from etdataset.dewpoint_temp import compute_dewpoint_temp
-from etdataset.icos import (
-    download_icos_station,
-    filter_valid_data,
-    get_csv_with_valid_icos_stations,
-    get_stations_config,
-    read_csv_data,
-    save_station_data,
+from etdataset.fluxnet import (
+    download_fluxnet_data,
+    get_fluxnet_archive,
+    get_fluxnet_stations_config,
+    get_fluxnet_stations_list,
+    read_fluxnet_data,
+    save_fluxnet_station,
 )
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
 
 
-def prepare_icos_stations(
+def prepare_fluxnet_stations(
     stations: list[str] | str = "all",
     data_dir: str | None = None,
-    out_dir: str = "icos_data",
+    out_dir: str = "fluxnet_processed",
 ):
     """
-    Prepare ICOS data
+    Prepare fluxnet data
 
     Parameters
     ----------
@@ -41,44 +38,41 @@ def prepare_icos_stations(
     data_dir: str| None
         Downlaod ICOS directory
     out_dir: str
-        Output directory
     """
     # download files
-    download_icos_station(stations, data_dir)
-    # Valid stations only
-    csv_path = get_csv_with_valid_icos_stations()
-    df = pd.read_csv(csv_path)
-    valid_stations_list = df["id"].tolist()
 
+    download_fluxnet_data(stations, output_dir=data_dir)
+    # Valid stations only
+    valid_stations_list = get_fluxnet_stations_list()
     if stations == "all":
         ids = valid_stations_list
-    elif isinstance(stations, str) and stations != "all":
+    elif isinstance(stations, str):
         ids = [stations]
-    elif isinstance(stations, list) and stations != "all":
+    else:  # list
         ids = stations
 
     invalid_stations = [s for s in ids if s not in valid_stations_list]
     if invalid_stations:
         raise ValueError(f"Invalid station ID given: {invalid_stations}.")
+
     csv_paths = []
 
-    # Iterates over a list of ICOS station IDs
+    # Iterates over a list of Fluxnet station IDs
     for station_id in ids:
         # for each stations, get it configuration (latitude, longitude,
         # elevation)
-        cfg = get_stations_config(station_id)
-        # From the station's CSV, get its data
-        data = read_csv_data(cfg, data_dir)
-        # Keep only valid data
-        data = filter_valid_data(data)
+        cfg = get_fluxnet_stations_config(station_id)
+        logger.info(f"cfg = {cfg}")
+        if data_dir is not None:
+            path = get_fluxnet_archive(cfg.id, data_dir=data_dir)
+        logger.info(f"path = {path}")
 
-        # Compute dewpoint temperature with Air temperature and Relative
-        # humidity
-        td = compute_dewpoint_temp(data["TA"], data["RH"])
-        # add dewpoint
-        data["TD"] = td
-        # Save datas of station in csv
-        csv_saved = save_station_data(cfg, data, out_dir)
+        if path is None:
+            logger.warning(f"No archive for station {station_id}")
+            continue
+
+        data = read_fluxnet_data(path)
+        csv_saved = save_fluxnet_station(cfg, data, out_dir)
         csv_paths.append(csv_saved)
 
     logger.info(f"All stations are completed {csv_paths}")
@@ -88,7 +82,7 @@ def get_parser() -> argparse.ArgumentParser:
     """
     Generate argument parser for cli
     """
-    parser = argparse.ArgumentParser(description="Prepare ICOS data")
+    parser = argparse.ArgumentParser(description="Prepare Fluxnet data")
 
     parser.add_argument(
         "-v",
@@ -102,14 +96,14 @@ def get_parser() -> argparse.ArgumentParser:
         "--stations",
         nargs="+",
         type=str,
-        help="ICOS ID Stations to prepare (ex: CH-Dav, DE-Geb)",
+        help="Fluxnet ID Stations to prepare",
         required=True,
     )
     parser.add_argument(
         "-d",
         "--data_dir",
         type=str,
-        help="Downloaded ICOS data directory path",
+        help="Downloaded Fluxnet data directory path",
         default=os.getcwd(),
         required=False,
     )
@@ -117,8 +111,8 @@ def get_parser() -> argparse.ArgumentParser:
         "-o",
         "--out_dir",
         type=str,
-        help="Output directory path where prepared ICOS data will be stocked",
-        default="icos_data",
+        help="Output directory path where prepared Fluxnet data will be stocked",  # noqa: E501
+        default="fluxnet_processed",
         required=False,
     )
 
@@ -148,7 +142,7 @@ if __name__ == "__main__":
     else:
         stations_to_download = args.stations
     # Run
-    prepare_icos_stations(
+    prepare_fluxnet_stations(
         stations_to_download,
         args.data_dir,
         args.out_dir,
