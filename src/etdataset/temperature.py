@@ -1477,14 +1477,12 @@ def add_temp(
     ## ERA5 single level path data
     surface_product_path = os.path.join(
         path,
-        "ERA5_data",
         f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
     )
 
     ## ERA5 pressure levels path data
     pressure_product_path = os.path.join(
         path,
-        "ERA5_data",
         f"download_era5_pressure_{date.strftime('%Y-%m-%d')}.zip",
     )
 
