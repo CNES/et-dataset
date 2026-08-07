@@ -51,7 +51,7 @@ def assert_tree(actual: Path, expected: dict):
     Parameters
     ----------
     actual: str
-        Päth of the root tree to be compared
+        Path of the root tree to be compared
     expected: dict
         Description of the expected structure
     """

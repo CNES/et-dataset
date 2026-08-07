@@ -9,7 +9,7 @@
 
 
 ## Introduction
-This part compares ICOS meteorological data (air temperature and relative humidty).
+This part compares ICOS meteorological data (air temperature and relative humidity).
 
 The goal of the script is to:
 

@@ -30,8 +30,6 @@ def test_interpolate_temperature():
         name="temp_ref",
     ).rio.write_crs(crs)
 
-    # xdst = np.linspace(0, 3, 4)
-    # ydst = np.linspace(0, 3, 4)
     xdst = np.array([0, 1])
     ydst = np.array([0, 1])
     Xdst, Ydst = np.meshgrid(xdst, ydst)

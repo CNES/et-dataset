@@ -36,7 +36,7 @@ def prepare_fluxnet_stations(
     stations: list[str] | str
         Stations to process
     data_dir: str| None
-        Downlaod ICOS directory
+        Download ICOS directory
     out_dir: str
     """
     # download files

@@ -201,20 +201,20 @@ def crop_ds(
 
 
 def interp_column(
-    z_src: npt.ArrayLike,
-    t_src: npt.ArrayLike,
-    z_target: npt.ArrayLike,
+    z_src: npt.array_like,
+    t_src: npt.array_like,
+    z_target: npt.array_like,
 ) -> npt.NDArray:
     """
     Perform 1D vertical interpolation of a variable along a column
 
     Parameters
     ----------
-    z_src: np.arraylike
+    z_src: np.array_like
         Source vertical coordinates
-    t_src: np.arraylike
+    t_src: np.array_like
         Source variable values
-    z_target: np.arraylike
+    z_target: np.array_like
         Target vertical coordinates
 
     Returns
@@ -347,7 +347,7 @@ def rescale_temperature_with_lapserate(
     interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.DataArray | None:
     """
-    Resacle temperature using constant lapse rate
+    Rescale temperature using constant lapse rate
 
     Parameters
     ----------
@@ -925,7 +925,7 @@ def method_vertical_interp(
     finally interpolated to the DEM elevation
 
     Ref . Fiddes, J. and Gruber, S.: TopoSCALE v.1.0: downscaling gridded
-    climate data in complex terrain, Geosci. Model Dev., 7, 387-405,
+    climate data in complex terrain, Geoscience Model Dev., 7, 387-405,
     https://doi.org/10.5194/gmd-7-387-2014, 2014.
 
     Parameters
@@ -1039,8 +1039,8 @@ def method_vertical_interp(
 
 
 def _insert_surface_point(
-    z_profile: npt.ArrayLike,
-    t_profile: npt.ArrayLike,
+    z_profile: npt.array_like,
+    t_profile: npt.array_like,
     z_surface: float,
     t_surface: float,
     threshold: int = 100,
@@ -1050,9 +1050,9 @@ def _insert_surface_point(
 
     Parameters
     ----------
-    z_profile: np.ArrayLike
+    z_profile: np.array_like
         Altitude profile values.
-    t_profile: np.ArrayLike
+    t_profile: np.array_like
         Temperature profile values corresponding to z_profile
     z_surface: float
         Surface altitude
@@ -1091,26 +1091,26 @@ def _insert_surface_point(
 
 
 def _interp_col_surf(
-    z_profile: npt.ArrayLike,
-    t_profile: npt.ArrayLike,
+    z_profile: npt.array_like,
+    t_profile: npt.array_like,
     z_surface: float,
     t_surface: float,
-    z_target: npt.ArrayLike,
+    z_target: npt.array_like,
 ) -> npt.NDArray:
     """
     Interpolate a temperature profile to target levels after adding surface data
 
     Parameters
     ----------
-    z_profile : np.ArrayLike
+    z_profile : np.array_like
         height profile levels
-    t_profile : np.ArrayLike
+    t_profile : np.array_like
         temperature profile values
     z_surface : float
         surface height coordinate
     t_surface : float
         Surface temperature value
-    z_target : np.ArrayLike
+    z_target : np.array_like
         Target vertical levels where temperature should be interpolated
 
     Returns
@@ -1167,7 +1167,7 @@ def method_interp_profile_surf(
         Vertical resolution of the interpolation grid (in meters)
 
     Ref . Fiddes, J. and Gruber, S.: TopoSCALE v.1.0: downscaling gridded
-    climate data in complex terrain, Geosci. Model Dev., 7, 387-405,
+    climate data in complex terrain, Geoscience Model Dev., 7, 387-405,
     https://doi.org/10.5194/gmd-7-387-2014, 2014.
 
     Returns
@@ -1312,7 +1312,7 @@ def method_interp_lr_hybrid(
     correction based on surface level is applied
 
     Ref . Fiddes, J. and Gruber, S.: TopoSCALE v.1.0: downscaling gridded
-    climate data in complex terrain, Geosci. Model Dev., 7, 387-405,
+    climate data in complex terrain, Geoscience Model Dev., 7, 387-405,
     https://doi.org/10.5194/gmd-7-387-2014, 2014.
 
     Parameters

@@ -497,7 +497,7 @@ def create_geopckg_from_gdf(
     output : str
         Filename
     path : str
-        Path where to csv the pckg
+        Path where to write
     """
     if path is None:
         file_path = os.path.join(os.getcwd(), "pckg")

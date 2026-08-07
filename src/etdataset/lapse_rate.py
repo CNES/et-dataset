@@ -71,8 +71,8 @@ def compute_dewpoint_lr(
 
     Parameters
     ----------
-    coeff : float | np.arraylike
-        Coefficielt
+    coeff : float | np.array_like
+        Coefficient
     b : float
         Parameter
     c : float

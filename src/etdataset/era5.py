@@ -158,7 +158,7 @@ class ERA5Var(ERA5DataInfo, Enum):
     def _missing_(cls, value):
         """
         Overload the missing method to call from_key method
-        if enum is instanciated with a string
+        if enum is instantiated with a string
         """
         if isinstance(value, str):
             return cls.from_key(value)
@@ -188,7 +188,7 @@ class ERA5pressureVar(ERA5DataInfo, Enum):
     def _missing_(cls, value):
         """
         Overload the missing method to call from_key method
-        if enum is instanciated with a string
+        if enum is instantiated with a string
         """
         if isinstance(value, str):
             return cls.from_key(value)
@@ -667,7 +667,7 @@ def add(
 
     Returns
     -------
-    uodated_data: xr.Dataset
+    updated_data: xr.Dataset
         Updated data
     """
     ##############

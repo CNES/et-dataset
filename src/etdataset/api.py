@@ -368,7 +368,7 @@ def download(
 
     Notes
     -----
-    The products to dowload are listed in a DataFrame.
+    The products to download are listed in a DataFrame.
     The required column are "Product_name" and "URL"
     which must contain the URLs to download a product.
     The URLs column can be a str or a list of str.
