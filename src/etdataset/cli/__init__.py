@@ -404,7 +404,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--coll1",
         type=lambda arg: Collection[arg],
         choices=Collection,
-        help="Fisrt collection of products",
+        help="First collection of products",
     )
     parser_select.add_argument(
         "--coll2",

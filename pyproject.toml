@@ -33,7 +33,7 @@ dependencies = [
   "earthaccess",
   "sensorsio",
   "theia-picker",
-  "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git@75d4a534afd5361f3d90637a3574494fbf5d194e",
+  "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git@473e4d7490808011b87d4edac91abd16ff93df99",
   "scikit-image",
   "requests",
   "pyarrow",

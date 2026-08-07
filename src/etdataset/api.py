@@ -70,6 +70,26 @@ def create_dataset(
 ) -> xr.Dataset:
     """
     Create a dataset
+
+    Parameters
+    ----------
+    vis_path: str
+        Path to VIS product
+    tir_path: str
+        Path to TIR product
+    roi_bbox: rio.coords.BoundingBox
+        ROI bounding box
+    roi_crs: pyproj.CRS
+        ROI Coordinate Reference System
+    resolution: float
+        Resolution, default = 60m
+    resampling:roi.enums.Resampling
+        Resampling method, default = average
+
+    Returns
+    -------
+    merged_xr: xr.Dataset
+        Dataset created
     """
     if tir_path is None:
         tir_path = vis_path
@@ -130,16 +150,23 @@ def add_aux(
     path: str | None = None,
 ) -> xr.Dataset:
     """
-    Description
-    -----------
     Add auxiliary data to the dataset
+
+    Notes
+    -----
+    If necessary, auxiliary data is downloaded
 
     Parameters
     ----------
     data: xr.Dataset
         Data
     path: str
-        Directory where auxiliary data have been downloaded data
+        Directory where auxiliary data have been downloaded
+
+    Returns
+    -------
+    updated_data: xr.Dataset
+        Updated dataset with auxiliary data
     """
     # Check inputs
     if data.attrs.get("vis_date", None) is None:
@@ -163,10 +190,71 @@ def add_aux(
         latlon_bounds = utils.bb_transform(
             source_crs=str(crs), target_crs="EPSG:4326", bounding_box=bounds
         )
-        msg.download(date=date, latlon_bbox=latlon_bounds, path=path)
-        era5.download(date=date, dataset=era5.ERA5Dataset.ERA5LAND, path=path)
-        era5.download(date=date, dataset=era5.ERA5Dataset.ERA5, path=path)
-    updated_data = msg.add(data=data, path=path)
+        msg.download(
+            date=date,
+            latlon_bbox=latlon_bounds,
+            path=os.path.join(path, "MSG_data"),
+        )
+        era5.download(
+            date=date,
+            dataset=era5.ERA5Dataset.ERA5LAND,
+            path=os.path.join(path, "ERA5_data"),
+        )
+        era5.download(
+            date=date,
+            dataset=era5.ERA5Dataset.ERA5,
+            path=os.path.join(path, "ERA5_data"),
+        )
+    radiation_path = None
+    era5_path = None
+    if path is not None:
+        radiation_path = os.path.join(path, "MSG_data")
+        era5_path = os.path.join(path, "ERA5_data")
+    updated_data = add_aux_data(
+        data,
+        radiation_path=radiation_path,
+        era5_path=era5_path,
+    )
+    return updated_data
+
+
+def add_aux_data(
+    data: xr.Dataset,
+    radiation_path: str | None = None,
+    era5_path: str | None = None,
+) -> xr.Dataset:
+    """
+    Add auxiliary data to the dataset
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Data
+    radiation_path: str
+        Directory where radiation data have been downloaded
+    era5_path: str
+        Directory where radiation data have been downloaded
+
+    Returns
+    -------
+    updated_data: xr.Dataset
+        Updated dataset with auxiliary data
+    """
+    # Check inputs
+    if data.attrs.get("vis_date", None) is None:
+        raise ValueError("Vis date attribute is missing in dataset")
+    if data.attrs.get("vis_time", None) is None:
+        raise ValueError("Vis time attribute is missing in dataset")
+    if len(data.data_vars) == 0:
+        raise ValueError("Dataset is empty")
+    if data.attrs.get("crs", None) is not None:
+        crs = data.attrs["crs"]
+        data = data.rio.write_crs(crs)
+    elif hasattr(data, "rio"):
+        crs = data.rio.crs
+    else:
+        raise AttributeError("No CRS is defined")
+    updated_data = msg.add(data=data, path=radiation_path)
     updated_data = era5.add(
         data=updated_data,
         dataset=era5.ERA5Dataset.ERA5,
@@ -176,7 +264,7 @@ def add_aux(
             era5.ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY,
             era5.ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY,
         ],
-        path=path,
+        path=era5_path,
     )
     return updated_data
 
@@ -193,6 +281,30 @@ def search(
 ) -> gpd.GeoDataFrame:
     """
     Search products in a collection
+
+    Parameters
+    ----------
+    collection: Collection
+        Product collection
+    min_date: str
+        Start date (YYYY-MM-DD)
+    max_date: str
+        End date (YYYY-MM-DD)
+    tile_id: str
+        MGRS tile ID
+    roi_bbox: rio.coords.BoundingBox
+        ROI bounding box
+    roi_crs: CRS
+        ROI Coordinate Reference System
+    max_cloud_cover: float
+        Cloud cover maximum, default = 20
+    min_roi_overlap: float
+        Minimum of overlap between the product and ROI, default = 0
+
+    Returns
+    -------
+    results: gpd.GeoDataFrame
+        List of products that satisfied the search criteria
     """
     # Checks
     _ = parse_date(min_date)
@@ -253,10 +365,20 @@ def download(
 ) -> None:
     """
     Download products from catalog
+
+    Notes
+    -----
     The products to dowload are listed in a DataFrame.
     The required column are "Product_name" and "URL"
     which must contain the URLs to download a product.
     The URLs column can be a str or a list of str.
+
+    Parameters
+    ----------
+    products: pd.DataFrame
+        List of products to download
+    output_dir: str
+        Directory where to download the products, default = download/
     """
     # Checks
     os.makedirs(output_dir, exist_ok=True)
@@ -295,6 +417,43 @@ def select(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Select products
+
+    Parameters
+    ----------
+    collection1: Collection
+        First product collection
+    collection2: Collection
+        PSecond product collection
+    min_date: str
+        Start date (YYYY-MM-DD)
+    max_date: str
+        End date (YYYY-MM-DD)
+    delta: str
+        Permissible time gap between the products in the two collections
+    tile_id: str
+        MGRS tile ID
+    roi_bbox: rio.coords.BoundingBox
+        ROI bounding box
+    roi_crs: CRS
+        ROI Coordinate Reference System
+    max_cloud_cover: float
+        Cloud cover maximum, default = 20
+    min_roi_overlap: float
+        Minimum of overlap between the product and ROI, default = 40
+    min_product_overlap: float
+        Minimum of overlap between the product in the two collections,
+        default = 40
+    only_best_match: bool
+        Keep only best match, default = False
+
+    Returns
+    -------
+    selection1: pd.DataFrame
+        List of selected products for collection 1
+    selection2: pd.DataFrame
+        List of selected products for collection 2
+    matches: pd.DataFrame
+        List of matches
     """
     # Checks
     min_datetime = parse_date(min_date)
@@ -410,6 +569,13 @@ def download_aux(
 ) -> None:
     """
     Download auxiliary product related to a list of product paths.
+
+    Parameters
+    ----------
+    products: pd.DataFrame
+        List of products to download
+    output_dir: str
+        Directory where to download the products, default = current directory
     """
     if output_dir is None:
         output_dir = os.getcwd()
@@ -431,6 +597,53 @@ def download_aux(
         )
 
 
+def download_daily_radiation_timeseries(
+    start_date: str,
+    end_date: str,
+    roi_bbox: rio.coords.BoundingBox,
+    roi_crs: CRS,
+    output: str | None = None,
+) -> None:
+    """
+    Download daily radiation data on a ROI over a period of time
+
+    For each day from a start to a end date, download MSG data.
+
+    Parameters
+    ----------
+    start_date: str
+        Start date (YYYY-MM-DD)
+    end_date: str
+        End date (YYYY-MM-DD)
+    roi_bbox: rio.coords.BoundingBox
+        ROI bounding box
+    roi_crs: CRS
+        ROI Coordinate Reference System
+    path: str
+        Directory path to store .tif files
+        (default: current directory)
+    """
+    # Check
+    min_date = parse_date(start_date)
+    max_date = parse_date(end_date)
+    if output is None:
+        output = os.getcwd()
+    if max_date < min_date:
+        raise APIException("End date must be more recent than start date")
+    if not os.path.isdir(output):
+        logger.debug(f"Create output path: {output}")
+        os.makedirs(output, exist_ok=True)
+    download_radiation(
+        date1=min_date,
+        date2=max_date,
+        roi_bbox=roi_bbox,
+        roi_crs=roi_crs,
+        output=output,
+        daily_only=True,
+    )
+    logger.info("Download daily radiation: OK")
+
+
 def prepare_daily_radiation_timeseries(
     start_date: str,
     end_date: str,
@@ -438,13 +651,13 @@ def prepare_daily_radiation_timeseries(
     roi_crs: CRS,
     resolution: float = 3000,
     output: str | None = None,
+    download_path: str | None = None,
 ) -> None:
     """
     Prepare daily radiation data on a ROI over a period of time
 
     For each day from a start to a end date:
-    - Download MSG data,
-    - Read it a dataset projected on a given ROI
+    - Read MSG data and project it on a given ROI
     with a resolution of 3km per pixel
     - Create a corresponding daily radiation .tif file.
 
@@ -460,9 +673,67 @@ def prepare_daily_radiation_timeseries(
         ROI Coordinate Reference System
     resolution: float
         Resolution
-    path: str
+    output: str
         Directory path to store .tif files
         (default: current directory)
+    download_path: str
+        Directory path with download data
+        (default: MSG_data)
+    """
+    # Check
+    min_date = parse_date(start_date)
+    max_date = parse_date(end_date)
+    if output is None:
+        output = os.getcwd()
+    if download_path is None:
+        download_path = os.path.join(output, "MSG_data")
+    if max_date < min_date:
+        raise APIException("End date must be more recent than start date")
+    if not os.path.isdir(output):
+        logger.debug(f"Create output path: {output}")
+        os.makedirs(output, exist_ok=True)
+    # Run
+    grid = create_grid_dataset(
+        bounds=roi_bbox, crs=roi_crs, resolution=resolution
+    )
+    date_list = xr.date_range(min_date, freq="1D", end=max_date)
+    ts_path = os.path.join(output, "timeseries", "daily_radiation")
+    os.makedirs(ts_path, exist_ok=True)
+    logger.info("Process dates for daily radiation...")
+    for date in date_list:
+        date_dt = date.to_pydatetime()
+        dst = create_daily_radiation_dataset(
+            date=date_dt, grid=grid, path=download_path
+        )
+        filename = os.path.join(
+            ts_path, f"radiation_{date_dt.strftime('%Y%m%d')}.tif"
+        )
+        write_to_tif(dst, filename)
+    logger.info("Process dates for daily radiation: OK")
+
+
+def download_daily_et_timeseries(
+    start_date: str,
+    end_date: str,
+    output: str | None = None,
+    extra_variables: bool = False,
+) -> None:
+    """
+    Prepare daily ET timeseries for a period over a ROI
+
+    For each day from a start to a end date, download ERA5-Land.
+
+    Parameters
+    ----------
+    start_date: str
+        Start date (YYYY-MM-DD)
+    end_date: str
+        End date (YYYY-MM-DD)
+    output: str
+        Directory path to store .tif files (default: current directory)
+    extra_variables: bool
+        Boolean to activate extra ERA5land variables download and processing
+        over the period
     """
     # Check
     min_date = parse_date(start_date)
@@ -474,27 +745,24 @@ def prepare_daily_radiation_timeseries(
     if not os.path.isdir(output):
         logger.debug(f"Create output path: {output}")
         os.makedirs(output, exist_ok=True)
-    # Run
-    grid = create_grid_dataset(
-        bounds=roi_bbox, crs=roi_crs, resolution=resolution
+    # Initialization
+    variables = ["total_evaporation"]
+    extra_vars = [
+        "total_precipitation",
+        "surface_runoff",
+        "skin_reservoir_content",
+        "volumetric_soil_water_layer_1",
+    ]
+    if extra_variables:
+        variables += extra_vars
+    download_et(
+        date1=min_date,
+        date2=max_date,
+        dataset=ERA5Dataset.ERA5LAND,
+        variables=variables,
+        output=output,
     )
-
-    date_list = download_radiation(
-        min_date, max_date, roi_bbox, roi_crs, output, daily_only=True
-    )
-    ts_path = os.path.join(output, "timeseries/daily_radiation")
-    os.makedirs(ts_path, exist_ok=True)
-    logger.info("Process dates for daily radiation...")
-    for date in date_list:
-        date_dt = date.to_pydatetime()
-        dst = create_daily_radiation_dataset(
-            date=date_dt, grid=grid, path=output
-        )
-        filename = os.path.join(
-            ts_path, f"radiation_{date_dt.strftime('%Y%m%d')}.tif"
-        )
-        write_to_tif(dst, filename)
-    logger.info("Process dates for daily radiation: OK")
+    logger.info("Download daily evapotranspiration: OK")
 
 
 def prepare_daily_et_timeseries(
@@ -504,6 +772,7 @@ def prepare_daily_et_timeseries(
     roi_crs: CRS,
     resolution: float = 3000,
     output: str | None = None,
+    download_path: str | None = None,
     extra_variables: bool = False,
 ) -> None:
     """
@@ -511,8 +780,7 @@ def prepare_daily_et_timeseries(
 
     For each day from a start to a end date:
 
-    - Download ERA5-Land,
-    - Read it as a dataset:
+    - Read it as dataset:
 
         - projecting on a given ROI with a resolution of 3km per pixel,
         - keeping only the evapotranspiration variable,
@@ -542,9 +810,8 @@ def prepare_daily_et_timeseries(
         Resolution
     output: str
         Directory path to store .tif files (default: current directory)
-    add_radation: bool
-        Boolean to activate radiation data download and processing
-        over the period
+    download_path: str
+        Directory path with downloaded data (default: ERA5_data)
     extra_variables: bool
         Boolean to activate extra ERA5land variables download and processing
         over the period
@@ -554,6 +821,8 @@ def prepare_daily_et_timeseries(
     max_date = parse_date(end_date)
     if output is None:
         output = os.getcwd()
+    if download_path is None:
+        download_path = os.path.join(output, "ERA5_data")
     if max_date < min_date:
         raise APIException("End date must be more recent than start date")
     if not os.path.isdir(output):
@@ -574,9 +843,7 @@ def prepare_daily_et_timeseries(
         bounds=roi_bbox, crs=roi_crs, resolution=resolution
     )
     # Create dates
-    date_list = download_et(
-        min_date, max_date, ERA5Dataset.ERA5LAND, variables, output
-    )
+    date_list = xr.date_range(min_date, freq="1D", end=max_date)
     # Create output paths
     et_path = os.path.join(output, "timeseries/et")
     os.makedirs(et_path, exist_ok=True)
@@ -587,13 +854,17 @@ def prepare_daily_et_timeseries(
     logger.info("Process dates for evapotranspiration...")
     for date in date_list:
         date_dt = date.to_pydatetime()
-        dst = create_daily_et_dataset(date_dt, grid, output)
+        dst = create_daily_et_dataset(
+            date=date_dt, grid=grid, path=download_path
+        )
         et_filename = os.path.join(
             et_path, f"et_single_date_{date.strftime('%Y%m%d')}.tif"
         )
         write_to_tif(dst, et_filename)
         if extra_variables:
-            extra_dst = create_daily_explanatory_dataset(date_dt, grid, output)
+            extra_dst = create_daily_explanatory_dataset(
+                date=date_dt, grid=grid, path=download_path
+            )
             extra_filename = os.path.join(
                 extra_path, f"extra_{date.strftime('%Y%m%d')}.tif"
             )

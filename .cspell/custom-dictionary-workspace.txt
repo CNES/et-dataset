@@ -24,6 +24,12 @@ eumetsat
 noaa
 jaxa
 eorc
+koda
+
+# Acronym
+DSSF
+icos
+LSASAF
 
 # Variables
 latlon
@@ -34,6 +40,8 @@ rflver
 fldk
 flver
 stationid
+ecols
+ecos
 
 # Python package
 earthaccess
@@ -42,6 +50,26 @@ lste
 mgrs
 rioxarray
 sensorsio
+bvnet
+cdsapi
+icoscp
+contextily
+mapclassify
+ipynb
+
+# functions
+getaffinity
+
+# Words
+reproject
+shapefile
+narrowband
+untar
+geoscience
+
+# Nouns
+Liang
+Bonafoni
 
 # Words
 micrometeorological

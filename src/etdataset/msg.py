@@ -399,7 +399,7 @@ def download(
     if path is None:
         path = os.getcwd()
     # Create a directory MSG products
-    msg_path = os.path.join(path, "MSG_data")
+    msg_path = path
     os.makedirs(msg_path, exist_ok=True)
     # Choose satellite
     satellite = get_satellite(latlon_bbox)
@@ -473,7 +473,7 @@ def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
     product: str
         Path to daily product
     """
-    # Ressource management
+    # Resource management
     mem_limit = int(
         np.ceil(
             len(data.x)
@@ -519,12 +519,14 @@ def add_daily_data(data: xr.Dataset, product: str) -> xr.Dataset:
     projected["daily_msg"].attrs.clear()
     projected["daily_msg"].attrs.update({"long_name": "DAILY DSSF"})
     # Add attributes
-    projected["daily_msg"].attrs["standard_name"] = "rld"
-    projected["daily_msg"].attrs["long_name"] = "Longwave downwelling radiation"
-    projected["daily_msg"].attrs["name"] = "rld"
-    projected["daily_msg"].attrs["unit"] = "W.m-2"
+    projected["daily_msg"].attrs["standard_name"] = "daily_rsd"
+    projected["daily_msg"].attrs["long_name"] = (
+        "Daily shortwave downwelling radiation"
+    )
+    projected["daily_msg"].attrs["name"] = "daily_rsd"
+    projected["daily_msg"].attrs["unit"] = "J.m-2"
     projected["daily_msg"].attrs["description"] = (
-        "Longwave downwelling radiation"
+        "Daily shortwave downwelling radiation"
     )
     return data.merge(projected)
 
@@ -546,7 +548,7 @@ def add_solar_data(
     products: list[str]
         List of paths to solar products
     """
-    # Ressource management
+    # Resource management
     mem_limit = int(
         np.ceil(
             len(data.x)
@@ -594,7 +596,7 @@ def add_solar_data(
         xrds = xrds.chunk(chunks=chunk_size_calc)
     # Get number of lines
     N = len(xrds.lat)
-    # Create time bias aray
+    # Create time bias array
     t_bias = da.empty(
         shape=(N, len(xrds.lon)),
         chunks=(chunk_size_calc["lat"], chunk_size_calc["lon"]),
@@ -684,7 +686,7 @@ def add_thermal_data(
     products: list[str]
         List of paths to thermal products
     """
-    # Ressource management
+    # source management
     mem_limit = int(
         np.ceil(
             len(data.x)
@@ -814,7 +816,7 @@ def add(
     satellite = get_satellite(latlon_bounds)
     # Data path
     product_path = os.path.join(
-        path, "MSG_data", f"{satellite.key}_{date.strftime('%Y-%m-%d')}"
+        path, f"{satellite.key}_{date.strftime('%Y-%m-%d')}"
     )
     logger.debug(f"Product path: {product_path}")
     if not os.path.isdir(product_path):
@@ -899,7 +901,7 @@ def download_date_by_date(
     roi_crs: CRS,
     output: str | None = None,
     daily_only: bool = True,
-) -> pd.DatetimeIndex:
+) -> None:
     """import datetime as dt
     Description
     -----------
@@ -931,7 +933,6 @@ def download_date_by_date(
     time = xr.date_range(date1, freq="1D", end=date2)
     for t in time:
         download(t.to_pydatetime().date(), roi_bbox_latlon, output, daily_only)
-    return time
 
 
 def create_daily_radiation_dataset(
@@ -960,7 +961,7 @@ def create_daily_radiation_dataset(
     # Get the path of the subdirectory where data have been downloaded
     if path is None:
         path = os.getcwd()
-    msg_path = os.path.join(path, "MSG_data")
+    msg_path = path
     if grid.rio.crs is None:
         if grid.attrs.get("crs") is not None:
             crs = grid.attrs["crs"]
@@ -995,4 +996,8 @@ def create_daily_radiation_dataset(
     ).rename_vars({"daily_msg": "daily_radiation"})
     # Select daily_radiation variable
     dst_rad = dst[["daily_radiation"]]
+    # TODO: Handle NaN values in daily radiation product (To be removed)
+    dst_rad["daily_radiation"] = dst_rad["daily_radiation"].interpolate_na(
+        dim="x", method="linear"
+    )
     return dst_rad

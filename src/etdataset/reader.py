@@ -6,9 +6,12 @@ Remote sensing products
 """
 
 import datetime
+import os
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from fnmatch import fnmatch
+from json import load
 from types import MappingProxyType
 
 import affine
@@ -101,6 +104,9 @@ class LandsatReader(ProductReader):
     """
 
     ds: landsat.Landsat = field(init=False)
+    sun_elevation: float = field(init=False)
+    sun_azimuth: float = field(init=False)
+    satellite: str = field(init=False)
 
     vis_band_mapping = MappingProxyType(
         {
@@ -143,6 +149,35 @@ class LandsatReader(ProductReader):
         self.time = self.ds.time
         # Snap bbox
         self._bb = utils.bb_snap(self._bb, align=self.resolution)
+        # Satellite
+        if "LC08" in self.ds.product_name:
+            self.satellite = "landsat8"
+        elif "LC08" in self.ds.product_name:
+            self.satellite = "landsat9"
+        else:
+            msg = "Only Landsat8/9 can be used"
+            raise ValueError(msg)
+        # Angles
+        # Open metadata
+        meta_data_file = None
+        for root, _, files in os.walk(self.path):
+            for name in files:
+                if fnmatch(name, "*_MTL.json"):
+                    meta_data_file = os.path.join(root, name)
+        if meta_data_file is None:
+            msg = "Metadata file is missing"
+            raise OSError(msg)
+        with open(meta_data_file) as data_file:
+            metadata = load(data_file)["LANDSAT_METADATA_FILE"][
+                "IMAGE_ATTRIBUTES"
+            ]
+            self.sun_elevation = float(metadata["SUN_ELEVATION"])
+            self.sun_azimuth = float(metadata["SUN_AZIMUTH"])
+
+    def compute_angles(self):
+        """
+        Compute angles using sun position at the center of the image
+        """
 
     def compute_albedo(self, data: xr.Dataset) -> xr.DataArray:
         """
@@ -243,10 +278,42 @@ class LandsatReader(ProductReader):
         # Compute NDVI
         ls_xr["ndvi"] = compute_ndvi(ls_xr)
 
+        # Add angles
+        ls_xr["cos(View_Zenith)"] = xr.ones_like(ls_xr["red"])
+        ls_xr["cos(Sun_Zenith)"] = xr.full_like(
+            ls_xr["red"],
+            fill_value=np.cos(
+                np.deg2rad(90 - self.sun_elevation), dtype=np.float32
+            ),
+        )
+        ls_xr["cos(Rel_Azimuth)"] = xr.full_like(
+            ls_xr["red"],
+            fill_value=np.cos(
+                np.deg2rad(90 - self.sun_azimuth), dtype=np.float32
+            ),
+        )
+
         # Compute LAI with BVnet
         # Cf. https://forge.ird.fr/cesbio/modelisation/pybvnet/-/tree/main?ref_type=heads
         ls_xr["lai"], ls_xr["fcover"] = compute_bvnet(
-            ls_xr, self.path, satellite="landsat8"
+            ls_xr,
+            band_list=[
+                "green",
+                "red",
+                "nir",
+                "swir1",
+                "swir2",
+                "cos(View_Zenith)",
+                "cos(Sun_Zenith)",
+                "cos(Rel_Azimuth)",
+            ],
+            satellite=self.satellite,
+            version="V3.1",
+        )
+
+        # Delete angles
+        ls_xr = ls_xr.drop_vars(
+            ["cos(View_Zenith)", "cos(Sun_Zenith)", "cos(Rel_Azimuth)"]
         )
 
         # Compute albedo
@@ -285,7 +352,7 @@ class LandsatReader(ProductReader):
             -self.resolution,
             self._bb.top,
         )
-        # Add capteur name
+        # Add sensor name
         ls_xr.attrs["tir"] = "Landsat"
         # Add acquisition date
         ls_xr.attrs["tir_date"] = self.ds.date
@@ -501,7 +568,7 @@ class HLSReader(ProductReader):
             -self.resolution,
             self._bb.top,
         )
-        # Add capteur name
+        # Add sensor name
         hls_xr.attrs["vis"] = self.params.name
         # Add acquisition date
         hls_xr.attrs["vis_date"] = self.ds.date

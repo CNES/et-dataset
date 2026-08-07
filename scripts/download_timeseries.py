@@ -6,8 +6,8 @@ import datetime as dt
 import os
 
 from etdataset.api import (
-    prepare_daily_et_timeseries,
-    prepare_daily_radiation_timeseries,
+    download_daily_et_timeseries,
+    download_daily_radiation_timeseries,
 )
 from etdataset.cli import CLIException
 from etdataset.logging import LoggerManager
@@ -54,21 +54,11 @@ def get_parser() -> argparse.ArgumentParser:
         help="Output directory",
         default=os.getcwd(),
     )
-    parser.add_argument(
-        "--era5_path",
-        type=str,
-        help="Directory of ERA5 data",
-    )
-    parser.add_argument(
-        "--radiation_path",
-        type=str,
-        help="Directory of radiation data",
-    )
 
     return parser
 
 
-def prepare_timeseries() -> None:
+def download_timeseries() -> None:
     # Parser arguments
     parser = get_parser()
     args = parser.parse_args()
@@ -93,40 +83,25 @@ def prepare_timeseries() -> None:
     if not os.path.isdir(args.output):
         logger.debug(f"Create output path: {args.output}")
         os.makedirs(args.output, exist_ok=True)
-    if args.radiation_path is not None and not os.path.isdir(
-        args.radiation_path
-    ):
-        raise FileNotFoundError(
-            f"Radiation directory not found {args.radiation_path}"
-        )
-    if args.era5_path is not None and not os.path.isdir(args.era5_path):
-        raise FileNotFoundError(f"ERA5 directory not found {args.era5_path}")
 
     # Run
-    resolution = 3000
     roi_bbox, roi_crs = get_utm_bbox_from_roi(args.roi)
     # Prepare daily radiation files
-    prepare_daily_radiation_timeseries(
+    download_daily_radiation_timeseries(
         start_date=args.start_date,
         end_date=args.end_date,
         roi_bbox=roi_bbox,
         roi_crs=roi_crs,
-        resolution=resolution,
-        output=args.output,
-        download_path=args.radiation_path,
+        output=os.path.join(args.output, "MSG_data"),
     )
 
     # Prepare et single dat files
-    prepare_daily_et_timeseries(
+    download_daily_et_timeseries(
         start_date=args.start_date,
         end_date=args.end_date,
-        roi_bbox=roi_bbox,
-        roi_crs=roi_crs,
-        resolution=resolution,
-        output=args.output,
-        download_path=args.era5_path,
+        output=os.path.join(args.output, "ERA5_data"),
     )
 
 
 if __name__ == "__main__":
-    prepare_timeseries()
+    download_timeseries()

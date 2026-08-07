@@ -21,24 +21,11 @@ prepare_landsat_*.ipynb
 method_*/
 metrics_*/
 base/
+pckg/
 Data_*/
 fluxnet_data/
-validation/temperature/notebooks/stage_liaise/
-validation/radiation/notebooks/SAC_GlobalSolarradiation.ipynb
-validation/temperature/notebooks/maroc.ipynb
-validation/radiation/notebooks/docs
-validation/radiation/notebooks/data
-validation/temperature/notebooks/data
-daily_radiation.ipynb
-goes_data.ipynb
-himawari_data.ipynb
-
 **/aeris-catalogue-prod/
-
-# src
-daily_radiation.py
-goes.py
-himawari.py
+validation/
 
 # Data
 *.tif
@@ -54,18 +41,18 @@ himawari.py
 *.zip
 *.dat
 *.zarr/
-!validation/temperature/notebooks/roi_maroc.gpkg
 
 # Package data
 !src/etdataset/data/geopotential_era5.nc
 !src/etdataset/data/geopotential_era5land.zarr/
 !src/etdataset/data/stations_meteoL2.csv
 !src/etdataset/data/fluxnet_shuttle.csv
+
 # Test data
 !tests/data/**/
+
 # Re-allow specific file types
 !tests/data/**/*.csv
-
 
 # pixi environments
 .pixi/

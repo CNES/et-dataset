@@ -141,7 +141,6 @@ def add_et(
     # ERA5-Land data path
     product_path = os.path.join(
         path,
-        "ERA5_data",
         f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
     )
     logger.debug(f"Product path: {product_path}")
@@ -238,7 +237,6 @@ def add_explanatory(
     # ERA5-Land data path
     product_path = os.path.join(
         path,
-        "ERA5_data",
         f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
     )
     logger.debug(f"Product path: {product_path}")

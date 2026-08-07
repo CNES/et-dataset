@@ -7,9 +7,7 @@ Vegetation indices
 Albedo
 """
 
-import os
-from fnmatch import fnmatch
-from json import load
+from typing import Any
 
 import numpy as np
 import xarray as xr
@@ -67,81 +65,68 @@ def compute_lai_from_ndvi(
 
 
 def compute_bvnet(
-    data: xr.Dataset, image_path: str, satellite: str
+    data: xr.Dataset,
+    band_list: list[str],
+    satellite: str,
+    version: str | None = None,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """
     Compute LAI and Fcover with BVNet
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Data
+    band_list: list[str]
+        List of bands to use for BVNET
+    satellite: str
+        Model to use for BVNET
+    version: optional(str)
+        Model version to use for BVNET
+
+    Parameters
+    ----------
+    lai: xr.DataArray
+        LAI estimated
+    fcover: sxr.DataArray
+        FCOVER estimated
     """
-    # Create a new "band" dimension from the variables
-    # representing spectral bands
-    band_list = [
-        "green",
-        "red",
-        "nir",
-        "swir1",
-        "swir2",
-        "swir2",
-        "swir2",
-        "swir2",
-    ]
     stacked_inputs = xr.concat([data[var] for var in band_list], dim="band")
 
     # Assign band names or indices as a coordinate for the new dimension
     stacked_inputs = stacked_inputs.assign_coords(band=band_list)
 
     # Convert to a dataset with one variable
-    # TODO: check mypy error
     stacked_inputs = stacked_inputs.to_dataset(name="band_data")  # type: ignore
-
-    # Name band coordinates
-    stacked_inputs["band"] = [
-        "green",
-        "red",
-        "nir",
-        "swir1",
-        "swir2",
-        "cos(View_Zenith)",
-        "cos(Sun_Zenith)",
-        "cos(Rel_Azimuth)",
-    ]
-
-    # Open metadata
-    for root, _, files in os.walk(image_path):
-        for name in files:
-            if fnmatch(name, "*_MTL.json"):
-                meta_data_file = os.path.join(root, name)
-    with open(meta_data_file) as data_file:
-        metadata = load(data_file)["LANDSAT_METADATA_FILE"]["IMAGE_ATTRIBUTES"]
-
-    # Add angles
-    stacked_inputs.loc[{"band": "cos(View_Zenith)"}] = np.float32(1)
-    stacked_inputs.loc[{"band": "cos(Sun_Zenith)"}] = np.cos(
-        np.deg2rad(90 - float(metadata["SUN_ELEVATION"])), dtype=np.float32
-    )
-    stacked_inputs.loc[{"band": "cos(Rel_Azimuth)"}] = np.cos(
-        np.deg2rad(90 - float(metadata["SUN_AZIMUTH"])), dtype=np.float32
-    )
 
     # Define dimensions and arrays for output data
     dims = data[band_list[0]].dims
     output_data = np.empty(shape=data[band_list[0]].shape, dtype=np.float32)
     output_flag_data = np.zeros(shape=data[band_list[0]].shape, dtype=np.int8)
+    output_uncertainty_data = np.empty(
+        shape=data[band_list[0]].shape, dtype=np.float32
+    )
 
     # Create output dataset
-    datavars = {}
+    datavars: dict[str, Any] = {}
     datavars["LAI"] = (dims, output_data)
     datavars["FCOVER"] = (dims, output_data)
-    # TODO: Check mypy error
-    datavars["LAI_flag"] = (dims, output_flag_data)  # type: ignore
-    datavars["FCOVER_flag"] = (dims, output_flag_data)  # type: ignore
+    datavars["LAI_flag"] = (dims, output_flag_data)
+    datavars["FCOVER_flag"] = (dims, output_flag_data)
+    datavars["LAI_uncertainty"] = (dims, output_uncertainty_data)
+    datavars["FCOVER_uncertainty"] = (dims, output_uncertainty_data)
     output = xr.Dataset(
         data_vars=datavars,
         coords={"y": data.coords["y"], "x": data.coords["x"]},
     )
 
-    bvnet_xr = apply_NNT(stacked_inputs, output, ["LAI", "FCOVER"], satellite)[
-        ["LAI", "FCOVER"]
-    ]
+    bvnet_xr = apply_NNT(
+        stacked_inputs,
+        output,
+        ["LAI", "FCOVER"],
+        satellite=satellite,
+        version=version,
+    )[["LAI", "FCOVER"]]
     # Clip Fcover
     bvnet_xr["FCOVER"] = bvnet_xr["FCOVER"].clip(0.0, 1.0)
     bvnet_xr["LAI"].attrs["standard_name"] = "lai"

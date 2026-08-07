@@ -47,6 +47,10 @@
   "[json]": {
     "editor.defaultFormatter": "vscode.json-language-features"
   },
+  "cSpell.ignorePaths": [
+    ".gitignore",
+    "settings.json"
+  ],
   "cSpell.ignoreWords": [],
   "cSpell.dictionaries": [
     "python"
