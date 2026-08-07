@@ -53,6 +53,7 @@ zdem
 tdem
 zref
 tcvw
+markexpr
 
 # Python package
 earthaccess
