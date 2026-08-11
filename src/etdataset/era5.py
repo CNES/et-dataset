@@ -9,262 +9,25 @@ Module for reading ERA5 and ERA5-land
 import datetime as dt
 import os
 import tempfile
-import zipfile
-from dataclasses import dataclass
-from enum import Enum
-from functools import lru_cache
-from pathlib import Path
-from time import sleep
 
-import cdsapi
 import pandas as pd
 import rasterio as rio
 import xarray as xr
 from pyproj import CRS
 
+from etdataset.era5_type import ERA5Dataset, ERA5Exception, ERA5Var
+from etdataset.era5_utils import download, get_era5_dem, get_era5land_dem, read
 from etdataset.logging import LoggerManager
-from etdataset.temperature import rescale_temperature_with_lapserate
+from etdataset.temperature import (
+    RescalTempMethod,
+    TempVariable,
+    add_temp,
+)
 
 logger = LoggerManager.get_logger(__name__)
 
 # Gravitational constant
 G_CST = 9.80665
-
-
-class ERA5Exception(Exception):
-    """
-    Exception for ERA5
-    """
-
-
-@dataclass
-class DatasetInfo:
-    """Class for dataset info"""
-
-    key: str
-    label: str
-    variables: list[str]
-
-
-class ERA5Dataset(DatasetInfo, Enum):
-    """
-    ERA5 dataset
-    """
-
-    ERA5 = (
-        "era5",
-        "reanalysis-era5-single-levels",
-        [
-            "10m_u_component_of_wind",
-            "10m_v_component_of_wind",
-            "2m_dewpoint_temperature",
-            "2m_temperature",
-            "surface_solar_radiation_downward_clear_sky",
-            "surface_solar_radiation_downwards",
-            "surface_thermal_radiation_downward_clear_sky",
-            "surface_thermal_radiation_downwards",
-            "total_column_ozone",
-            "total_column_water",
-            "total_precipitation",
-            "total_column_water_vapour",
-        ],
-    )
-    ERA5LAND = (
-        "era5land",
-        "reanalysis-era5-land",
-        [
-            "10m_u_component_of_wind",
-            "10m_v_component_of_wind",
-            "2m_dewpoint_temperature",
-            "2m_temperature",
-            "surface_solar_radiation_downwards",
-            "surface_thermal_radiation_downwards",
-            "total_precipitation",
-            "total_evaporation",
-            "surface_runoff",
-            "skin_reservoir_content",
-            "volumetric_soil_water_layer_1",
-        ],
-    )
-
-    ERA5PRESSURE = (
-        "era5_pressure",
-        "reanalysis-era5-pressure-levels",
-        ["Temperature", "Geopotential", "Relative humidity"],
-    )
-
-
-@dataclass
-class ERA5DataInfo:
-    """Class for describing ERA5 data"""
-
-    key: str
-    label: str
-    unit: str
-
-
-class ERA5Var(ERA5DataInfo, Enum):
-    """
-    ERA5 variables
-    """
-
-    DEWPOINT_TEMPERATURE = ("d2m", "2m dewpoint temperature", "K")
-    TEMPERATURE = ("t2m", "2m temperature", "K")
-    GEOPOTENTIAL = ("z", "Geopotential", "m2 s-2")
-    HEIGHT = ("h", "Geopotential height", "m")
-    SURFACE_PRESSURE = ("sp", "Surface pressure", "Pa")
-    SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY = (
-        "ssrdc",
-        "Surface solar radiation downward, clear sky",
-        "J m-2",
-    )
-    SURFACE_SOLAR_RADIATION_DOWNWARD = (
-        "ssrd",
-        "Surface solar radiation downwards",
-        "J m-2",
-    )
-    SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY = (
-        "strdc",
-        "Surface thermal radiation downward, clear sky",
-        "J m-2",
-    )
-    SURFACE_THERMAL_RADIATION_DOWNWARD = (
-        "strd",
-        "Surface thermal radiation downwards",
-        "J m-2",
-    )
-    TOTAL_COLUMN_OZONE = ("tco3", "Total column ozone", "kg m-2")
-    TOTAL_COLUMN_WATER = ("tcw", "Total column water", "kg m-2")
-    TOTAL_COLUMN_WATER_VAPOR = ("tcwv", "Total column water vapour", "kg m-2")
-    TOTAL_PRECIPITATION = ("tp", "Total precipitation", "m")
-    U_WIND = ("u10", "10m u-component of wind", "m s-1")
-    V_WIND = ("v10", "10m v-component of wind", "m s-1")
-    TOTAL_EVAPORATION = ("e", "Total evaporation", "m")
-    SURFACE_RUNOFF = ("sro", "Surface runoff", "m")
-    SKIN_RESERVOIR_CONTENT = ("src", "Skin reservoir content", "m")
-    SOIL_WATER_LEVEL1 = ("swvl1", "Volumetric soil water level 1", "m-3 m3")
-
-    @classmethod
-    def from_key(cls, key):
-        """
-        Create enum from a key value
-        """
-        for value in cls:
-            if value.key == key:
-                return value
-        raise ValueError(f"No variable found with key {key}")
-
-    @classmethod
-    def _missing_(cls, value):
-        """
-        Overload the missing method to call from_key method
-        if enum is instantiated with a string
-        """
-        if isinstance(value, str):
-            return cls.from_key(value)
-        return super()._missing_(value)
-
-
-class ERA5pressureVar(ERA5DataInfo, Enum):
-    """
-    ERA5 pressure variables
-    """
-
-    TEMPERATURE = ("t", "Temperature", "K")
-    GEOPOTENTIAL = ("z", "Geopotential", "m2 s-2")
-    RELATIVE_HUMIDITY = ("r", "Relative humidity", "%")
-
-    @classmethod
-    def from_key(cls, key):
-        """
-        Create enum from a key value
-        """
-        for value in cls:
-            if value.key == key:
-                return value
-        raise ValueError(f"No variable found with key {key}")
-
-    @classmethod
-    def _missing_(cls, value):
-        """
-        Overload the missing method to call from_key method
-        if enum is instantiated with a string
-        """
-        if isinstance(value, str):
-            return cls.from_key(value)
-        return super()._missing_(value)
-
-
-def read(product: str) -> xr.Dataset:
-    """
-    Read ERA5 product
-
-    Parameter
-    ---------
-    product: str
-        Path to ERA5 product
-
-    Return
-    ------
-    data: xr.Dataset
-        Data
-    """
-    if zipfile.is_zipfile(product):
-        # Read archive content
-        with zipfile.ZipFile(product, "r") as zip_file:
-            file_list = zip_file.namelist()
-            datasets: list[xr.Dataset] = [
-                xr.open_dataset(zip_file.open(filename))  # type: ignore
-                for filename in file_list
-            ]
-        # Merge
-        return (
-            xr.merge(datasets)
-            .rio.write_crs(CRS("4236"))
-            .rename({"valid_time": "time"})
-            .drop_vars("number")
-        )
-    return xr.open_dataset(product)
-
-
-@lru_cache
-def get_era5_dem() -> xr.DataArray:
-    """
-    Get DEM for ERA5
-
-    Returns
-    -------
-    dem: xr.DataArray
-        ERA5 DEM
-    """
-    data = xr.open_dataarray(
-        os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "data",
-            "geopotential_era5.nc",
-        )
-    )
-    return data / G_CST
-
-
-@lru_cache
-def get_era5land_dem() -> xr.DataArray:
-    """
-    Get DEM for ERA5Land
-
-    Returns
-    -------
-    dem: xr.DataArray
-        ERA5 DEM
-    """
-    data = xr.open_dataarray(
-        os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "data",
-            "geopotential_era5land.zarr",
-        )
-    )
-    return data / G_CST
 
 
 def interpolate_time(
@@ -415,184 +178,6 @@ def interpolate_radiation(
     )
 
 
-def _download(dataset: str, request: dict, target: str) -> None:
-    """
-    Download data from ERA5
-
-    Parameters
-    ----------
-    dataset: str
-        Dataset name
-    request: dict
-        Data request for download
-    target: str
-        Target filename
-    """
-    creds = Path(Path.home(), Path(".cdsapirc"))
-    if not creds.is_file():
-        raise FileNotFoundError("Credentials for CDS are missing.")
-
-    client = cdsapi.Client(timeout=600, wait_until_complete=False, delete=False)
-    result = client.retrieve(dataset, request)
-    delta_sleep = 30
-
-    while True:
-        result.update()
-        reply = result.reply
-
-        if reply["state"] == "completed":
-            break
-        if reply["state"] in ("queued", "running"):
-            sleep(delta_sleep)
-        elif reply["state"] in ("failed",):
-            result.error(f"Message: {reply['error'].get('message')}")
-            result.error(f"Reason:  {reply['error'].get('reason')}")
-            for n in (
-                reply.get("error", {})
-                .get("context", {})
-                .get("traceback", "")
-                .split("\n")
-            ):
-                if n.strip() == "":
-                    break
-                result.error(f"  {n}")
-            raise ERA5Exception(
-                f"{reply['error'].get('message')}  "
-                f"{reply['error'].get('reason')}"
-            )
-    result.download(target)
-
-
-def download(
-    date: dt.datetime,
-    dataset: ERA5Dataset,
-    variables: list[str] | None = None,
-    path: str | None = None,
-) -> None:
-    """
-    Description
-    -----------
-    Download data from a ERA5 dataset
-
-    Parameters
-    ----------
-    date: dt.datetime
-        Date
-    dataset: ERA5Dataset
-        ERA5 Dataset used for download
-    variables: list[str] | None
-        List of product to download
-    path: str | None
-        Directory path to store data
-    """
-    if path is None:
-        path = os.getcwd()
-    # Create a directory MSG products
-    era5_path = path
-    os.makedirs(era5_path, exist_ok=True)
-    # Filename
-    filename = os.path.join(
-        era5_path,
-        f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
-    )
-    # Skip download if file already exists
-    if os.path.exists(filename):
-        logger.info(f"File {filename} already exits. Skip download.")
-        return
-    # Dataset
-    if variables is None:
-        variables = dataset.variables
-    if dataset == ERA5Dataset.ERA5PRESSURE:
-        request = {
-            "product_type": "reanalysis",
-            "variable": variables,
-            "year": date.year,
-            "month": date.month,
-            "day": date.day,
-            "pressure_level": [
-                "700",
-                "725",
-                "750",
-                "775",
-                "800",
-                "825",
-                "850",
-                "875",
-                "900",
-                "925",
-                "950",
-                "975",
-                "1000",
-            ],
-            "time": [
-                "00:00",
-                "01:00",
-                "02:00",
-                "03:00",
-                "04:00",
-                "05:00",
-                "06:00",
-                "07:00",
-                "08:00",
-                "09:00",
-                "10:00",
-                "11:00",
-                "12:00",
-                "13:00",
-                "14:00",
-                "15:00",
-                "16:00",
-                "17:00",
-                "18:00",
-                "19:00",
-                "20:00",
-                "21:00",
-                "22:00",
-                "23:00",
-            ],
-            "data_format": "netcdf",
-            "download_format": "zip",
-        }
-    else:
-        request = {
-            "product_type": "reanalysis",
-            "variable": variables,
-            "year": date.year,
-            "month": date.month,
-            "day": date.day,
-            "time": [
-                "00:00",
-                "01:00",
-                "02:00",
-                "03:00",
-                "04:00",
-                "05:00",
-                "06:00",
-                "07:00",
-                "08:00",
-                "09:00",
-                "10:00",
-                "11:00",
-                "12:00",
-                "13:00",
-                "14:00",
-                "15:00",
-                "16:00",
-                "17:00",
-                "18:00",
-                "19:00",
-                "20:00",
-                "21:00",
-                "22:00",
-                "23:00",
-            ],
-            "data_format": "netcdf",
-            "download_format": "zip",
-        }
-    # Download
-    _download(dataset.label, request, filename)
-
-
 def rescale_radiation(
     dem: xr.DataArray,
     era5_data: xr.DataArray | None,
@@ -645,6 +230,7 @@ def add(
     dataset: ERA5Dataset = ERA5Dataset.ERA5,
     variables: list[ERA5Var] | None = None,
     path: str | None = None,
+    temp_method: RescalTempMethod = RescalTempMethod.CONST_LR,
     interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
 ) -> xr.Dataset:
     """
@@ -662,6 +248,8 @@ def add(
         List of variables to add
     path: str | None
         Directory where ERA5 data have been downloaded data
+    temp_method : RescalTempMethod
+        Temperature rescaling method to apply
     interp_type: rio.enums.Resampling
         Method used for resampling
 
@@ -776,34 +364,23 @@ def add(
     #############
     # Temperature
     #############
-    # Add temperature
-    if ERA5Var.TEMPERATURE in variables:
-        rescaled = rescale_temperature_with_lapserate(
-            dem=dem,
-            era5_data=era5_xrds.get(ERA5Var.TEMPERATURE.key, None),
-            era5_dem=era5_dem,
-            lapse_rate=-0.0065,
+    list_var = [
+        temp_var
+        for era5_var, temp_var in [
+            (ERA5Var.TEMPERATURE, TempVariable.TA),
+            (ERA5Var.DEWPOINT_TEMPERATURE, TempVariable.TD),
+        ]
+        if era5_var in variables
+    ]
+    if list_var:
+        updated_data = add_temp(
+            data=data,
+            dataset=ERA5Dataset.ERA5,
+            variables=list_var,
+            method=temp_method,
             interp_type=interp_type,
-            key="ta",
-            description="2m air temperature",
+            path=path,
         )
-        if rescaled is not None:
-            updated_data["ta"] = rescaled
-            logger.debug("Add temperature:OK")
-    # Add dewpoint temperature temperature
-    if ERA5Var.DEWPOINT_TEMPERATURE in variables:
-        rescaled = rescale_temperature_with_lapserate(
-            dem=dem,
-            era5_data=era5_xrds.get(ERA5Var.DEWPOINT_TEMPERATURE.key, None),
-            era5_dem=era5_dem,
-            lapse_rate=-0.0052,
-            interp_type=interp_type,
-            key="tdp",
-            description="dewpoint temperature",
-        )
-        if rescaled is not None:
-            updated_data["tdp"] = rescaled
-            logger.debug("Add dewpoint temperature:OK")
     ###########
     # Radiation
     ###########

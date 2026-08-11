@@ -18,14 +18,12 @@ from pyproj import CRS, Transformer
 
 from etdataset.dewpoint_temp import add_dewpoint
 from etdataset.era5 import (
-    ERA5Dataset,
-    ERA5pressureVar,
     download,
     get_era5_dem,
     get_era5land_dem,
     read,
 )
-from etdataset.icos import StationConfig
+from etdataset.era5_type import ERA5Dataset, ERA5pressureVar
 from etdataset.interpolation import interpolate_time
 from etdataset.lapse_rate import (
     compute_dewpoint_lr,
@@ -1847,7 +1845,7 @@ def add_temp(
 
 def save_ta_td_csv(
     ds: xr.Dataset,
-    cfg: StationConfig,
+    id_station: str,
     path: str | None = None,
     name_dir: str | None = None,
 ):
@@ -1876,7 +1874,7 @@ def save_ta_td_csv(
 
     os.makedirs(file_path, exist_ok=True)
 
-    file_name = os.path.join(file_path, f"{cfg.id}_csv.csv")
+    file_name = os.path.join(file_path, f"{id_station}_csv.csv")
 
     df = ds.to_dataframe().reset_index()
     df = df[["time", "ta", "tdp"]]
