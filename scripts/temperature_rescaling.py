@@ -19,7 +19,7 @@ import xarray as xr
 
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
-from etdataset.era5 import ERA5Dataset
+from etdataset.era5_type import ERA5Dataset
 from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
@@ -120,7 +120,7 @@ def run_stations_process(
 
             save_ta_td_csv(
                 ds_out,
-                cfg,
+                cfg.id,
                 output,
                 name_dir="csv_era5_rescaled",
             )

@@ -18,7 +18,7 @@ import rioxarray  # noqa # Use to activate rio attributes
 import xarray as xr
 
 from etdataset.cli import CLIException
-from etdataset.era5 import read
+from etdataset.era5_utils import read
 from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
@@ -123,7 +123,7 @@ def run_stations_process(
             }
         )
         # save data as csv
-        save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_grid")
+        save_ta_td_csv(ds_era5_grid, cfg.id, output, name_dir="csv_era5_grid")
 
 
 def generate_timeseries_for_stations_multiprocess(
