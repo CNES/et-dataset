@@ -19,13 +19,13 @@ import xarray as xr
 
 from etdataset.cli import CLIException
 from etdataset.dem import get_dem_from_roi
+from etdataset.era5 import add_temp
 from etdataset.era5_type import ERA5Dataset
 from etdataset.icos import get_csv_with_valid_icos_stations, get_stations_config
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
     RescalTempMethod,
     TempVariable,
-    add_temp,
     save_ta_td_csv,
 )
 from etdataset.utils import (
