@@ -189,20 +189,18 @@ def crop_ds(
 
 
 def interp_column(
-    z_src: npt.array_like,
-    t_src: npt.array_like,
-    z_target: npt.array_like,
+    z_src: npt.ArrayLike, t_src: npt.ArrayLike, z_target: npt.ArrayLike
 ) -> npt.NDArray:
     """
     Perform 1D vertical interpolation of a variable along a column
 
     Parameters
     ----------
-    z_src: np.array_like
+    z_src: npt.ArrayLike
         Source vertical coordinates
-    t_src: np.array_like
+    t_src: npt.ArrayLike
         Source variable values
-    z_target: np.array_like
+    z_target: npt.ArrayLike
         Target vertical coordinates
 
     Returns
@@ -1027,8 +1025,8 @@ def method_vertical_interp(
 
 
 def _insert_surface_point(
-    z_profile: npt.array_like,
-    t_profile: npt.array_like,
+    z_profile: npt.ArrayLike,
+    t_profile: npt.ArrayLike,
     z_surface: float,
     t_surface: float,
     threshold: int = 100,
@@ -1038,9 +1036,9 @@ def _insert_surface_point(
 
     Parameters
     ----------
-    z_profile: np.array_like
+    z_profile: npt.ArrayLike
         Altitude profile values.
-    t_profile: np.array_like
+    t_profile: npt.ArrayLike
         Temperature profile values corresponding to z_profile
     z_surface: float
         Surface altitude
@@ -1079,26 +1077,26 @@ def _insert_surface_point(
 
 
 def _interp_col_surf(
-    z_profile: npt.array_like,
-    t_profile: npt.array_like,
+    z_profile: npt.ArrayLike,
+    t_profile: npt.ArrayLike,
     z_surface: float,
     t_surface: float,
-    z_target: npt.array_like,
+    z_target: npt.ArrayLike,
 ) -> npt.NDArray:
     """
     Interpolate a temperature profile to target levels after adding surface data
 
     Parameters
     ----------
-    z_profile : np.array_like
+    z_profile : npt.ArrayLike
         height profile levels
-    t_profile : np.array_like
+    t_profile : npt.ArrayLike
         temperature profile values
     z_surface : float
         surface height coordinate
     t_surface : float
         Surface temperature value
-    z_target : np.array_like
+    z_target : npt.ArrayLike
         Target vertical levels where temperature should be interpolated
 
     Returns
