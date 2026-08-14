@@ -1495,6 +1495,147 @@ def method_interp_lr_hybrid(
     return updated_data
 
 
+def process_temp_rescaling_method(
+    data: xr.Dataset,
+    variables: set[TempVariable],
+    era5_surface: xr.Dataset,
+    era5_dem_surface: xr.DataArray,
+    dem: xr.DataArray,
+    date: dt.datetime,
+    era5_pressure: xr.Dataset | None = None,
+    era5_dem_pressure: xr.DataArray | None = None,
+    method: RescalTempMethod = RescalTempMethod.CONST_LR,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
+):
+
+    ##################### PROCESSING METHODS ###################################
+    if method == RescalTempMethod.CONST_LR:
+        if era5_surface is None or era5_dem_surface is None:
+            raise ValueError(
+                "Missing ERA5 surface or DEM surface for CONST_LR method"
+            )
+
+        rescaled_data = method_const_lr(
+            data=data,
+            variables_set=variables,
+            dem=dem,
+            era5_surface=era5_surface,
+            era5_dem_surface=era5_dem_surface,
+            interp_type=interp_type,
+        )
+
+    if method == RescalTempMethod.MONTHLY_LR:
+        if era5_surface is None or era5_dem_surface is None:
+            raise ValueError(
+                "Missing ERA5 surface or DEM surface for MONTHLY_LR method"
+            )
+        rescaled_data = method_monthly_lr(
+            data=data,
+            date=date,
+            variables_set=variables,
+            dem=dem,
+            era5_surface=era5_surface,
+            era5_dem_surface=era5_dem_surface,
+            interp_type=interp_type,
+        )
+
+    if method == RescalTempMethod.LR_PROFILE_FIXED_LEVELS:
+        if (
+            era5_surface is None
+            or era5_dem_surface is None
+            or era5_pressure is None
+            or era5_dem_pressure is None
+        ):
+            raise ValueError(
+                "Missing ERA5 datas for LR_PROFILE_FIXED_LEVELS method"
+            )
+        rescaled_data = method_lr_profile_fixed_levels(
+            data=data,
+            variables_set=variables,
+            dem=dem,
+            era5_surface=era5_surface,
+            era5_dem_surface=era5_dem_surface,
+            era5_pressure=era5_pressure,
+            era5_dem_pressure=era5_dem_pressure,
+            interp_type=interp_type,
+        )
+    if method == RescalTempMethod.LR_PROFILE_ALT_DEP:
+        if (
+            era5_surface is None
+            or era5_dem_surface is None
+            or era5_pressure is None
+            or era5_dem_pressure is None
+        ):
+            raise ValueError("Missing ERA5 datas for LR_PROFILE_ALT_DEP method")
+        rescaled_data = method_lr_profile_alt_dep(
+            data=data,
+            variables_set=variables,
+            dem=dem,
+            era5_surface=era5_surface,
+            era5_dem_surface=era5_dem_surface,
+            era5_pressure=era5_pressure,
+            era5_dem_pressure=era5_dem_pressure,
+            interp_type=interp_type,
+        )
+
+    if method == RescalTempMethod.VERTICAL_INTERP:
+        if era5_pressure is None or era5_dem_pressure is None:
+            raise ValueError(
+                "Missing ERA5 pressure or DEM pressure for VERTICAL_INTERP "
+                r"\method"
+            )
+        rescaled_data = method_vertical_interp(
+            data=data,
+            variables_set=variables,
+            dem=dem,
+            era5_pressure=era5_pressure,
+            era5_dem_pressure=era5_dem_pressure,
+            interp_type=interp_type,
+            dz=100,
+        )
+
+    if method == RescalTempMethod.INTERP_PROFILE_SURF:
+        if (
+            era5_surface is None
+            or era5_dem_surface is None
+            or era5_pressure is None
+            or era5_dem_pressure is None
+        ):
+            raise ValueError("Missing ERA5 datas for INTERP_PROFILE_SURF")
+        rescaled_data = method_interp_profile_surf(
+            data=data,
+            variables_set=variables,
+            dem=dem,
+            era5_surface=era5_surface,
+            era5_dem_surface=era5_dem_surface,
+            era5_pressure=era5_pressure,
+            era5_dem_pressure=era5_dem_pressure,
+            interp_type=interp_type,
+            dz=100,
+        )
+
+    if method == RescalTempMethod.INTERP_LR_HYBRID:
+        if (
+            era5_surface is None
+            or era5_dem_surface is None
+            or era5_pressure is None
+            or era5_dem_pressure is None
+        ):
+            raise ValueError("Missing ERA5 datas for INTERP_LR_HYBRID method")
+        rescaled_data = method_interp_lr_hybrid(
+            data=data,
+            variables_set=variables,
+            dem=dem,
+            era5_surface=era5_surface,
+            era5_dem_surface=era5_dem_surface,
+            era5_pressure=era5_pressure,
+            era5_dem_pressure=era5_dem_pressure,
+            interp_type=interp_type,
+            dz=100,
+        )
+    return rescaled_data
+
+
 def save_ta_td_csv(
     ds: xr.Dataset,
     id_station: str,
