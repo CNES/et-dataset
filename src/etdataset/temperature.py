@@ -1506,7 +1506,39 @@ def process_temp_rescaling_method(
     era5_dem_pressure: xr.DataArray | None = None,
     method: RescalTempMethod = RescalTempMethod.CONST_LR,
     interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
-):
+) -> xr.Dataset:
+    """
+    Process methods for temperature rescaling
+
+    Parameters
+    ----------
+    data: xr.Dataset
+        Data
+    variables: set[TempVariable]
+        List of variables to process
+    era5_surface: xr.Dataset
+        ERA5 data
+    era5_dem_surface: xr.DataArray
+        ERA5 DEM
+    dem: xr.DataArray
+        DEM
+    date: dt.datetime
+        Date
+    era5_pressure: xr.Dataset | None
+        ERA5 pressure data
+    era5_dem_pressure: xr.Dataset | None
+        ERA5 DEM pressure data
+    method: RescalTempMethod
+        Rescaling Temperature method
+    inter_type : rio.enums.Resampling
+        Interpolation type
+
+
+    Returns
+    -------
+    rescaled_data : xr.Dataset
+        Rescaled data
+    """
 
     ##################### PROCESSING METHODS ###################################
     if method == RescalTempMethod.CONST_LR:
@@ -1524,7 +1556,7 @@ def process_temp_rescaling_method(
             interp_type=interp_type,
         )
 
-    if method == RescalTempMethod.MONTHLY_LR:
+    elif method == RescalTempMethod.MONTHLY_LR:
         if era5_surface is None or era5_dem_surface is None:
             raise ValueError(
                 "Missing ERA5 surface or DEM surface for MONTHLY_LR method"
@@ -1539,7 +1571,7 @@ def process_temp_rescaling_method(
             interp_type=interp_type,
         )
 
-    if method == RescalTempMethod.LR_PROFILE_FIXED_LEVELS:
+    elif method == RescalTempMethod.LR_PROFILE_FIXED_LEVELS:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1559,7 +1591,7 @@ def process_temp_rescaling_method(
             era5_dem_pressure=era5_dem_pressure,
             interp_type=interp_type,
         )
-    if method == RescalTempMethod.LR_PROFILE_ALT_DEP:
+    elif method == RescalTempMethod.LR_PROFILE_ALT_DEP:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1578,7 +1610,7 @@ def process_temp_rescaling_method(
             interp_type=interp_type,
         )
 
-    if method == RescalTempMethod.VERTICAL_INTERP:
+    elif method == RescalTempMethod.VERTICAL_INTERP:
         if era5_pressure is None or era5_dem_pressure is None:
             raise ValueError(
                 "Missing ERA5 pressure or DEM pressure for VERTICAL_INTERP "
@@ -1594,7 +1626,7 @@ def process_temp_rescaling_method(
             dz=100,
         )
 
-    if method == RescalTempMethod.INTERP_PROFILE_SURF:
+    elif method == RescalTempMethod.INTERP_PROFILE_SURF:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1614,7 +1646,7 @@ def process_temp_rescaling_method(
             dz=100,
         )
 
-    if method == RescalTempMethod.INTERP_LR_HYBRID:
+    elif method == RescalTempMethod.INTERP_LR_HYBRID:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1633,6 +1665,8 @@ def process_temp_rescaling_method(
             interp_type=interp_type,
             dz=100,
         )
+    else:
+        raise ValueError(f"Unsupported temperature rescaling method: {method}")
     return rescaled_data
 
 

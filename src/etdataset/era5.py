@@ -27,6 +27,7 @@ from etdataset.era5_type import (
     ERA5Exception,
     ERA5pressureVar,
     ERA5Var,
+    PreparedData,
 )
 from etdataset.logging import LoggerManager
 from etdataset.temperature import (
@@ -500,15 +501,7 @@ def prepare_data(
     variables: list[ERA5Var] | None = None,
     path: str | None = None,
     temp_method: RescalTempMethod = RescalTempMethod.CONST_LR,
-) -> tuple[
-    xr.Dataset,
-    xr.Dataset | None,
-    xr.DataArray,
-    xr.DataArray | None,
-    list[ERA5Var],
-    xr.DataArray,
-    dt.datetime,
-]:
+) -> PreparedData:
     """
     Prepare ERA5 datas to be added to the dataset
 
@@ -527,14 +520,8 @@ def prepare_data(
 
     Returns
     -------
-    era5_surface : xr.Dataset
-        ERA5 data prepared
-    era5_pressure : xr.Dataset | None
-        ERA5 pressure prepared
-    era5_dem :  xr.DataArray
-        ERA5 DEM prepared
-    era5_dem_pressure : xr.DataArray | None
-        ERA5 pressure DEM prepared
+    PreparedData
+        Prepared Data
     """
     ###################### CHECK INPUTS #######################################
     if data.attrs.get("vis_date", None) is None:
@@ -719,7 +706,8 @@ def prepare_data(
     ).rio.write_crs(CRS(4326))
 
     # Prepare ERA5 DEM
-    # TODO: type de era5_dem
+    # TODO: type de era5_dem ?
+
     # era5_dem_ = era5_dem.to_dataset(name="dem")
     # era5_dem_ = normalize_longitude_latitude(era5_dem_)
     # era5_dem = era5_dem_["dem"]
@@ -749,14 +737,13 @@ def prepare_data(
     if temp_dir is not None:
         temp_dir.cleanup()  # Manually delete the directory
 
-    return (
+    return PreparedData(
         era5_surface,
         era5_pressure,
         era5_dem,
         era5_dem_pressure,
         variables,
         dem,
-        date,
     )
 
 
@@ -801,6 +788,17 @@ def add_temp(
     """
 
     logger.info(f"ADD TEMP | method={method}")
+    ###################### CHECK INPUTS #######################################
+    if data.attrs.get("vis_date", None) is None:
+        raise ValueError("Vis date attribute is missing in dataset")
+
+    if data.attrs.get("vis_time", None) is None:
+        raise ValueError("Vis time attribute is missing in dataset")
+
+    if len(data.data_vars) == 0:
+        raise ValueError("Dataset is empty")
+    # Extract data
+    date = dt.datetime.combine(data.attrs["vis_date"], data.attrs["vis_time"])
 
     ##################### PREPARE DATAS ###################################
 
@@ -816,15 +814,7 @@ def add_temp(
         ]
         if temp_var in variables_set
     ]
-    (
-        era5_surface,
-        era5_pressure,
-        era5_dem_surface,
-        era5_dem_pressure,
-        _,
-        dem,
-        date,
-    ) = prepare_data(
+    prepared = prepare_data(
         data=data,
         dataset=dataset,
         variables=variables_era5,
@@ -835,12 +825,12 @@ def add_temp(
     updated_data = process_temp_rescaling_method(
         data=data,
         variables=variables_set,
-        era5_surface=era5_surface,
-        era5_dem_surface=era5_dem_surface,
-        dem=dem,
+        era5_surface=prepared.era5_xrds,
+        era5_dem_surface=prepared.era5_dem,
+        dem=prepared.dem,
         date=date,
-        era5_pressure=era5_pressure,
-        era5_dem_pressure=era5_dem_pressure,
+        era5_pressure=prepared.era5_pressure,
+        era5_dem_pressure=prepared.era5_dem_pressure,
         method=method,
         interp_type=interp_type,
     )
@@ -881,22 +871,14 @@ def add(
         Updated data
     """
     ###################### PREPARE DATA #######################################
-    (
-        era5_xrds,
-        era5_pressure,
-        era5_dem,
-        era5_dem_pressure,
-        variables,
-        dem,
-        date,
-    ) = prepare_data(
+    prepared = prepare_data(
         data=data,
         dataset=dataset,
         variables=variables,
         path=path,
         temp_method=temp_method,
     )
-    crs = dem.rio.crs
+    crs = prepared.dem.rio.crs
     ###################### ADD DATA #######################################
     # Copy data
     updated_data = data.copy()
@@ -910,19 +892,22 @@ def add(
             (ERA5Var.TEMPERATURE, TempVariable.TA),
             (ERA5Var.DEWPOINT_TEMPERATURE, TempVariable.TD),
         ]
-        if era5_var in variables
+        if era5_var in prepared.variables
     ]
     if list_var:
+        date = dt.datetime.combine(
+            data.attrs["vis_date"], data.attrs["vis_time"]
+        )
         variables_set = normalize_variables(list_var)
         updated_data = process_temp_rescaling_method(
             data=data,
             variables=variables_set,
-            era5_surface=era5_xrds,
-            era5_dem_surface=era5_dem,
-            dem=dem,
+            era5_surface=prepared.era5_xrds,
+            era5_dem_surface=prepared.era5_dem,
+            dem=prepared.dem,
             date=date,
-            era5_pressure=era5_pressure,
-            era5_dem_pressure=era5_dem_pressure,
+            era5_pressure=prepared.era5_pressure,
+            era5_dem_pressure=prepared.era5_dem_pressure,
             method=temp_method,
             interp_type=interp_type,
         )
@@ -930,11 +915,11 @@ def add(
     # Radiation
     ###########
     # Add solar radiation
-    if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD in variables:
+    if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD in prepared.variables:
         dst = next(iter(data.data_vars.values()))
         rescaled = rescale_radiation(
             dem=dst.rio.write_crs(crs),  # transfer crs attribute
-            era5_data=era5_xrds.get(
+            era5_data=prepared.era5_xrds.get(
                 ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD.key, None
             ),
             key="rsd",
@@ -944,11 +929,11 @@ def add(
             updated_data[f"rsd_{dataset.key}"] = rescaled
             logger.debug("Add solar radiation:OK")
     # Add solar radiation
-    if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY in variables:
+    if ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY in prepared.variables:
         dst = next(iter(data.data_vars.values()))
         rescaled = rescale_radiation(
             dem=dst.rio.write_crs(crs),  # transfer crs attribute
-            era5_data=era5_xrds.get(
+            era5_data=prepared.era5_xrds.get(
                 ERA5Var.SURFACE_SOLAR_RADIATION_DOWNWARD_CLEAR_SKY.key, None
             ),
             key="rsd",
@@ -958,11 +943,11 @@ def add(
             updated_data[f"rsd_{dataset.key}"] = rescaled
             logger.debug("Add solar radiation (clear sky):OK")
     # Add solar radiation
-    if ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD in variables:
+    if ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD in prepared.variables:
         dst = next(iter(data.data_vars.values()))
         rescaled = rescale_radiation(
             dem=dst.rio.write_crs(crs),  # transfer crs attribute
-            era5_data=era5_xrds.get(
+            era5_data=prepared.era5_xrds.get(
                 ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD.key, None
             ),
             key="rld",
@@ -972,11 +957,14 @@ def add(
             updated_data[f"rld_{dataset.key}"] = rescaled
             logger.debug("Add thermal radiation:OK")
     # Add solar radiation
-    if ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY in variables:
+    if (
+        ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY
+        in prepared.variables
+    ):
         dst = next(iter(data.data_vars.values()))
         rescaled = rescale_radiation(
             dem=dst.rio.write_crs(crs),  # transfer crs attribute
-            era5_data=era5_xrds.get(
+            era5_data=prepared.era5_xrds.get(
                 ERA5Var.SURFACE_THERMAL_RADIATION_DOWNWARD_CLEAR_SKY.key, None
             ),
             key="rld",
@@ -987,12 +975,12 @@ def add(
             logger.debug("Add thermal radiation (clear sky):OK")
     # Add ozone
     if (
-        ERA5Var.TOTAL_COLUMN_OZONE in variables
-        and ERA5Var.TOTAL_COLUMN_OZONE.key in era5_xrds.data_vars
+        ERA5Var.TOTAL_COLUMN_OZONE in prepared.variables
+        and ERA5Var.TOTAL_COLUMN_OZONE.key in prepared.era5_xrds.data_vars
     ):
         dst = next(iter(data.data_vars.values()))
         updated_data[f"tco3_{dataset.key}"] = interpolate_ozone(
-            data=era5_xrds[ERA5Var.TOTAL_COLUMN_OZONE.key],
+            data=prepared.era5_xrds[ERA5Var.TOTAL_COLUMN_OZONE.key],
             dem=dst.rio.write_crs(crs),  # transfer crs attribute
         )
         updated_data[f"tco3_{dataset.key}"].attrs.clear()

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+import xarray as xr
+
 from etdataset.logging import LoggerManager
 
 logger = LoggerManager.get_logger(__name__)
@@ -171,3 +173,17 @@ class ERA5pressureVar(ERA5DataInfo, Enum):
         if isinstance(value, str):
             return cls.from_key(value)
         return super()._missing_(value)
+
+
+@dataclass
+class PreparedData:
+    """
+    Dataclass for prepared data
+    """
+
+    era5_xrds: xr.Dataset
+    era5_pressure: xr.Dataset | None
+    era5_dem: xr.DataArray
+    era5_dem_pressure: xr.DataArray | None
+    variables: list[ERA5Var]
+    dem: xr.DataArray
