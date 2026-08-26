@@ -54,7 +54,7 @@ def plot_images(
         Data
     title: str
         Plot title
-    outfnale: str | None
+    outfname: str | None
         Filename to save the plot
     """
     # Compute number of plot

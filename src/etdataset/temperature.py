@@ -6,7 +6,6 @@ Module for temperature rescaling
 
 import datetime as dt
 import os
-import tempfile
 from collections.abc import Iterable
 from enum import Enum
 
@@ -16,18 +15,7 @@ import rasterio as rio
 import xarray as xr
 from pyproj import CRS, Transformer
 
-from etdataset.dewpoint_temp import add_dewpoint
-from etdataset.era5 import (
-    ERA5Dataset,
-    ERA5pressureVar,
-    download,
-    get_era5_dem,
-    get_era5land_dem,
-    read,
-    rescale_temperature_with_lapserate,
-)
-from etdataset.icos import StationConfig
-from etdataset.interpolation import interpolate_time
+from etdataset.era5_type import ERA5pressureVar
 from etdataset.lapse_rate import (
     compute_dewpoint_lr,
     compute_lapse_rate_from_2_levels_roi,
@@ -37,7 +25,6 @@ from etdataset.lapse_rate import (
 from etdataset.logging import LoggerManager
 from etdataset.utils import (
     filter_dataset_by_pressure_levels,
-    normalize_longitude_latitude,
 )
 
 logger = LoggerManager.get_logger(__name__)
@@ -202,20 +189,18 @@ def crop_ds(
 
 
 def interp_column(
-    z_src: npt.ArrayLike,
-    t_src: npt.ArrayLike,
-    z_target: npt.ArrayLike,
+    z_src: npt.ArrayLike, t_src: npt.ArrayLike, z_target: npt.ArrayLike
 ) -> npt.NDArray:
     """
     Perform 1D vertical interpolation of a variable along a column
 
     Parameters
     ----------
-    z_src: np.arraylike
+    z_src: npt.ArrayLike
         Source vertical coordinates
-    t_src: np.arraylike
+    t_src: npt.ArrayLike
         Source variable values
-    z_target: np.arraylike
+    z_target: npt.ArrayLike
         Target vertical coordinates
 
     Returns
@@ -282,6 +267,121 @@ def interpolate_variant_temperature(
     # Keep attributes
     dem_temp.attrs.update(src_temp.attrs)
     return dem_temp
+
+
+def interpolate_temperature(
+    src_temp: xr.DataArray,
+    src_dem: xr.DataArray,
+    dst_dem: xr.DataArray,
+    lapse_rate: float,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
+) -> xr.DataArray:
+    """
+    This method interpolates temperature data on a new grid
+    by taking into account altitude.
+
+    First, the ERA5 temperature is adjusted to a common level,
+    using the formula  Tref = Tin + rate x (Zref - Zin).
+    Zout is a reference elevation taken as Zout = 0.
+    The reference-level temperature is then projected
+    from the original geographic coordinate system (i.e. WGS84 for ERA5)
+    onto the projection coordinate system of the destination DEM
+    using bilinear interpolation.
+    The DEM data and lapse rate are then used to adjust the
+    reference-level gridded temperature to the elevations provided
+    by the DEM, using  Tdem = Tref + rate x (Zdem - Zref), where
+    where Tref is now the gridded temperature at the reference elevation Zref,
+    and Tdem is the gridded temperature at the elevation of the DEM Zdem.
+
+    Parameters
+    ----------
+    src_temp: xr.DataArray
+        Temperature (reference grid)
+    src_dem: xr.DataArray
+        Elevation associated to the temperature (reference grid)
+    dst_dem: xr.DataArray
+        Elevation associated to the temperature (projection grid)
+    lapse_rate: float
+        Gradient of temperature per unit of elevation
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+
+    Return
+    ------
+    dem_temp: xr.DataArray
+        Temperature projected on the new DEM
+    """
+    # Compute temperature at reference elevation
+    ref_temp = src_temp - lapse_rate * src_dem
+    # Project into the coordinate system of the destination DEM
+    projected_temp = ref_temp.rio.reproject_match(
+        dst_dem,
+        resampling=interp_type,
+    )
+    # Adjust temperatures to DEM elevation
+    dem_temp = projected_temp + lapse_rate * dst_dem
+    return dem_temp
+
+
+def rescale_temperature_with_lapserate(
+    dem: xr.DataArray | None,
+    era5_data: xr.DataArray | None,
+    era5_dem: xr.DataArray | None,
+    lapse_rate: float,
+    key: str,
+    description: str,
+    interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
+) -> xr.DataArray | None:
+    """
+    Rescale temperature using constant lapse rate
+
+    Parameters
+    ----------
+    dem: xr.DataArray | None
+        DEM used to rescale data
+    era5_data: xr.DataArray | None
+        Data to rescaled
+    era5_dem: xr.DataArray | None
+        DEM corresponding to data to rescaled
+    lapse_rate: float
+        Lapse rate
+    key: str
+        Variable name
+    description: str
+        Variable description
+    interp_type: rio.enums.Resampling
+        Method used for resampling
+
+    Returns
+    -------
+    data: xr.DataArray
+        Rescaled data
+    """
+    if era5_data is None:
+        msg = f"Skip {description} interpolation because data is missing"
+        logger.warning(msg)
+        return None
+    if era5_dem is None:
+        msg = f"Skip {description} interpolation because dem data is missing"
+        logger.warning(msg)
+        return None
+    if dem is None:
+        logger.warning("Skip temperature interpolation because DEM is missing")
+        return None
+    data = interpolate_temperature(
+        src_temp=era5_data,
+        src_dem=era5_dem,
+        dst_dem=dem,
+        lapse_rate=lapse_rate,
+        interp_type=interp_type,
+    )
+    data.attrs.clear()
+    data.attrs["standard_name"] = key
+    data.attrs["long_name"] = description
+    data.attrs["name"] = key
+    data.attrs["unit"] = "K"
+    data.attrs["description"] = description
+    return data
 
 
 def rescale_temperature_with_variable_lapserate(
@@ -811,7 +911,7 @@ def method_vertical_interp(
     finally interpolated to the DEM elevation
 
     Ref . Fiddes, J. and Gruber, S.: TopoSCALE v.1.0: downscaling gridded
-    climate data in complex terrain, Geosci. Model Dev., 7, 387-405,
+    climate data in complex terrain, Geoscience Model Dev., 7, 387-405,
     https://doi.org/10.5194/gmd-7-387-2014, 2014.
 
     Parameters
@@ -936,9 +1036,9 @@ def _insert_surface_point(
 
     Parameters
     ----------
-    z_profile: np.ArrayLike
+    z_profile: npt.ArrayLike
         Altitude profile values.
-    t_profile: np.ArrayLike
+    t_profile: npt.ArrayLike
         Temperature profile values corresponding to z_profile
     z_surface: float
         Surface altitude
@@ -988,15 +1088,15 @@ def _interp_col_surf(
 
     Parameters
     ----------
-    z_profile : np.ArrayLike
+    z_profile : npt.ArrayLike
         height profile levels
-    t_profile : np.ArrayLike
+    t_profile : npt.ArrayLike
         temperature profile values
     z_surface : float
         surface height coordinate
     t_surface : float
         Surface temperature value
-    z_target : np.ArrayLike
+    z_target : npt.ArrayLike
         Target vertical levels where temperature should be interpolated
 
     Returns
@@ -1053,7 +1153,7 @@ def method_interp_profile_surf(
         Vertical resolution of the interpolation grid (in meters)
 
     Ref . Fiddes, J. and Gruber, S.: TopoSCALE v.1.0: downscaling gridded
-    climate data in complex terrain, Geosci. Model Dev., 7, 387-405,
+    climate data in complex terrain, Geoscience Model Dev., 7, 387-405,
     https://doi.org/10.5194/gmd-7-387-2014, 2014.
 
     Returns
@@ -1198,7 +1298,7 @@ def method_interp_lr_hybrid(
     correction based on surface level is applied
 
     Ref . Fiddes, J. and Gruber, S.: TopoSCALE v.1.0: downscaling gridded
-    climate data in complex terrain, Geosci. Model Dev., 7, 387-405,
+    climate data in complex terrain, Geoscience Model Dev., 7, 387-405,
     https://doi.org/10.5194/gmd-7-387-2014, 2014.
 
     Parameters
@@ -1395,215 +1495,50 @@ def method_interp_lr_hybrid(
     return updated_data
 
 
-def add_temp(
+def process_temp_rescaling_method(
     data: xr.Dataset,
-    path: str | None = None,
-    dataset: ERA5Dataset = ERA5Dataset.ERA5,
-    variables: TempVariable | Iterable[TempVariable] | None = None,
+    variables: set[TempVariable],
+    era5_surface: xr.Dataset,
+    era5_dem_surface: xr.DataArray,
+    dem: xr.DataArray,
+    date: dt.datetime,
+    era5_pressure: xr.Dataset | None = None,
+    era5_dem_pressure: xr.DataArray | None = None,
     method: RescalTempMethod = RescalTempMethod.CONST_LR,
     interp_type: rio.enums.Resampling = rio.enums.Resampling.cubic_spline,
-):
+) -> xr.Dataset:
     """
-    Add temperature variables to a dataset using ERA5/ERA5-Land data
-
-    This function retrieves the required ERA5 datasets (surface and/or pressure)
-    depending on the selected rescaling method, processes them, and applies
-    a temperature rescaling algorithm
+    Process methods for temperature rescaling
 
     Parameters
     ----------
     data: xr.Dataset
-        Input dataset containing at least:
-        - 'height' variable (DEM)
-        - 'vis_date' and 'vis_time' attributes
-        - CRS information
-    path: str | None
-        Path to a directory containing ERA5 data files
-    dataset: ERA5Dataset
-        Surface dataset to use (ERA5 or ERA5-Land)
-    variables: TempVariable | Iterable[TempVariable] | None,
-        Temperature variables to compute (e.g., TA, TD)
+        Data
+    variables: set[TempVariable]
+        List of variables to process
+    era5_surface: xr.Dataset
+        ERA5 data
+    era5_dem_surface: xr.DataArray
+        ERA5 DEM
+    dem: xr.DataArray
+        DEM
+    date: dt.datetime
+        Date
+    era5_pressure: xr.Dataset | None
+        ERA5 pressure data
+    era5_dem_pressure: xr.Dataset | None
+        ERA5 DEM pressure data
     method: RescalTempMethod
-        Temperature rescaling method to apply
-    interp_type: rio.enums.Resampling
-        Method used for resampling
-        By default, "cubic_spline"
+        Rescaling Temperature method
+    inter_type : rio.enums.Resampling
+        Interpolation type
+
 
     Returns
     -------
-    xr.Dataset
-        Dataset with added/rescaled temperature variables.
+    rescaled_data : xr.Dataset
+        Rescaled data
     """
-
-    logger.info(f"ADD TEMP | method={method}")
-
-    ###################### METHOD REQUIREMENTS ################################
-    req = METHOD_REQUIREMENTS.get(method)
-    if req is None:
-        raise ValueError(f"Unsupported method: {method}")
-
-    ###################### CHECK INPUTS #######################################
-    if data.attrs.get("vis_date", None) is None:
-        raise ValueError("Vis date attribute is missing in dataset")
-
-    if data.attrs.get("vis_time", None) is None:
-        raise ValueError("Vis time attribute is missing in dataset")
-
-    if len(data.data_vars) == 0:
-        raise ValueError("Dataset is empty")
-
-    date = dt.datetime.combine(data.attrs["vis_date"], data.attrs["vis_time"])
-
-    ###################### GET ERA5 DATA ####################################
-    # Download data
-    if path is None:
-        logger.debug("Download only required ERA5 data")
-        temp_dir = tempfile.TemporaryDirectory()
-        path = temp_dir.name
-        logger.debug(f"Temp dir: {path}")
-
-        ## Get ERA5 single level
-        if req["surface"]:
-            logger.debug(f"Downloading surface dataset: {dataset.key}")
-            download(date=date, dataset=dataset, path=path)
-
-        ## Get ERA5 pressure level
-        if req["pressure"]:
-            logger.debug("Downloading ERA5 pressure dataset")
-            download(date=date, dataset=ERA5Dataset.ERA5PRESSURE, path=path)
-
-    # Product path data
-
-    ## ERA5 single level path data
-    surface_product_path = os.path.join(
-        path,
-        "ERA5_data",
-        f"download_{dataset.key}_{date.strftime('%Y-%m-%d')}.zip",
-    )
-
-    ## ERA5 pressure levels path data
-    pressure_product_path = os.path.join(
-        path,
-        "ERA5_data",
-        f"download_era5_pressure_{date.strftime('%Y-%m-%d')}.zip",
-    )
-
-    logger.debug(f"Surface path: {surface_product_path}")
-    logger.debug(f"Pressure path: {pressure_product_path}")
-
-    # Check file
-    use_surface = req["surface"] and os.path.isfile(surface_product_path)
-    use_pressure = req["pressure"] and os.path.isfile(pressure_product_path)
-
-    if req["surface"] and not use_surface:
-        raise ValueError(
-            f"Missing surface file ({dataset.key}) for method {method}"
-        )
-
-    if not use_surface:
-        logger.warning(f"ERA5 surface not used for method {method}")
-
-    if req["pressure"] and not use_pressure:
-        raise ValueError(f"Missing ERA5 pressure file for method {method}")
-
-    if not use_pressure:
-        logger.warning(f"ERA5 pressure not used for method {method}")
-
-    ######################## EXTRACT DEM ######################################
-    # DEM
-    if data.rio.crs is None:
-        if data.attrs.get("crs") is not None:
-            crs = data.attrs["crs"]
-            data = data.rio.write_crs(crs)
-        raise ValueError("crs attribute is missing in dataset")
-
-    crs = data.rio.crs
-
-    height = data.get("height", None)
-
-    if height is None:
-        raise ValueError("DEM (height) is missing in dataset")
-
-    dem = height.rio.write_crs(crs)
-
-    ###################### VARIABLES ##########################################
-    variables_set = normalize_variables(variables)
-
-    ###################### READ ERA5 FILES ####################################
-    era5_surface = None
-    era5_pressure = None
-
-    # SURFACE DATA
-    if use_surface and surface_product_path is not None:
-        era5_surface_data = read(product=surface_product_path)
-
-        if era5_surface_data is not None:
-            era5_surface_data = interpolate_time(
-                data=era5_surface_data, date=date
-            )
-            era5_surface = normalize_longitude_latitude(era5_surface_data)
-            era5_surface = rename_var_ds(era5_surface, NAME_MAP)
-
-            if era5_surface is not None:
-                era5_surface = era5_surface.rio.write_crs("EPSG:4326")
-                era5_surface = crop_ds(era5_surface, dem)
-        else:
-            logger.warning("ERA5 surface read failed")
-
-    # PRESSURE DATA
-    if use_pressure and pressure_product_path is not None:
-        era5_pressure_data = read(product=pressure_product_path)
-
-        if era5_pressure_data is not None:
-            era5_pressure_data = interpolate_time(
-                data=era5_pressure_data, date=date
-            )
-            era5_pressure = normalize_longitude_latitude(era5_pressure_data)
-
-            if TempVariable.TD in variables_set:
-                era5_pressure = add_dewpoint(era5_pressure)
-
-            era5_pressure = rename_var_ds(era5_pressure, NAME_MAP)
-
-            if era5_pressure is not None:
-                era5_pressure = era5_pressure.rio.write_crs("EPSG:4326")
-                era5_pressure = crop_ds(era5_pressure, dem)
-        else:
-            logger.warning("ERA5 pressure read failed")
-
-    ###################### BUILD ERA5 DEM ######################################
-    ## HEIGHT ERA5 SURFACE
-    era5_dem_surface = None
-    if era5_surface is not None:
-        if dataset == ERA5Dataset.ERA5:
-            era5_dem_surface_init = get_era5_dem()
-        elif dataset == ERA5Dataset.ERA5LAND:
-            era5_dem_surface_init = get_era5land_dem()
-        era5_dem_surface = xr.DataArray(
-            era5_dem_surface_init.data,
-            dims=("latitude", "longitude"),
-            coords={
-                "latitude": era5_surface_data.latitude,
-                "longitude": era5_surface_data.longitude,
-            },
-        ).rio.write_crs(CRS(4326))
-        era5_dem_surface_ = era5_dem_surface.to_dataset(name="dem")
-        era5_dem_surface_ = normalize_longitude_latitude(era5_dem_surface_)
-        era5_dem_surface = era5_dem_surface_["dem"]
-        era5_dem_surface = era5_dem_surface.rio.write_crs("EPSG:4326")
-        era5_dem_surface = crop_ds(era5_dem_surface, dem)
-
-    ## HEIGHT ERA5 PRESSURE
-    era5_dem_pressure = None
-    if era5_pressure is not None:
-        era5_dem_pressure = (
-            era5_pressure[ERA5pressureVar.GEOPOTENTIAL.key] / G_CST
-        )
-        era5_dem_pressure = era5_dem_pressure.rio.write_crs("EPSG:4326")
-        if era5_dem_pressure is not None:
-            era5_dem_pressure_ = era5_dem_pressure.to_dataset(name="dem")
-            era5_dem_pressure_ = crop_ds(era5_dem_pressure_, dem)
-            era5_dem_pressure = era5_dem_pressure_["dem"]
 
     ##################### PROCESSING METHODS ###################################
     if method == RescalTempMethod.CONST_LR:
@@ -1614,14 +1549,14 @@ def add_temp(
 
         rescaled_data = method_const_lr(
             data=data,
-            variables_set=variables_set,
+            variables_set=variables,
             dem=dem,
             era5_surface=era5_surface,
             era5_dem_surface=era5_dem_surface,
             interp_type=interp_type,
         )
 
-    if method == RescalTempMethod.MONTHLY_LR:
+    elif method == RescalTempMethod.MONTHLY_LR:
         if era5_surface is None or era5_dem_surface is None:
             raise ValueError(
                 "Missing ERA5 surface or DEM surface for MONTHLY_LR method"
@@ -1629,14 +1564,14 @@ def add_temp(
         rescaled_data = method_monthly_lr(
             data=data,
             date=date,
-            variables_set=variables_set,
+            variables_set=variables,
             dem=dem,
             era5_surface=era5_surface,
             era5_dem_surface=era5_dem_surface,
             interp_type=interp_type,
         )
 
-    if method == RescalTempMethod.LR_PROFILE_FIXED_LEVELS:
+    elif method == RescalTempMethod.LR_PROFILE_FIXED_LEVELS:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1648,7 +1583,7 @@ def add_temp(
             )
         rescaled_data = method_lr_profile_fixed_levels(
             data=data,
-            variables_set=variables_set,
+            variables_set=variables,
             dem=dem,
             era5_surface=era5_surface,
             era5_dem_surface=era5_dem_surface,
@@ -1656,7 +1591,7 @@ def add_temp(
             era5_dem_pressure=era5_dem_pressure,
             interp_type=interp_type,
         )
-    if method == RescalTempMethod.LR_PROFILE_ALT_DEP:
+    elif method == RescalTempMethod.LR_PROFILE_ALT_DEP:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1666,7 +1601,7 @@ def add_temp(
             raise ValueError("Missing ERA5 datas for LR_PROFILE_ALT_DEP method")
         rescaled_data = method_lr_profile_alt_dep(
             data=data,
-            variables_set=variables_set,
+            variables_set=variables,
             dem=dem,
             era5_surface=era5_surface,
             era5_dem_surface=era5_dem_surface,
@@ -1675,7 +1610,7 @@ def add_temp(
             interp_type=interp_type,
         )
 
-    if method == RescalTempMethod.VERTICAL_INTERP:
+    elif method == RescalTempMethod.VERTICAL_INTERP:
         if era5_pressure is None or era5_dem_pressure is None:
             raise ValueError(
                 "Missing ERA5 pressure or DEM pressure for VERTICAL_INTERP "
@@ -1683,7 +1618,7 @@ def add_temp(
             )
         rescaled_data = method_vertical_interp(
             data=data,
-            variables_set=variables_set,
+            variables_set=variables,
             dem=dem,
             era5_pressure=era5_pressure,
             era5_dem_pressure=era5_dem_pressure,
@@ -1691,7 +1626,7 @@ def add_temp(
             dz=100,
         )
 
-    if method == RescalTempMethod.INTERP_PROFILE_SURF:
+    elif method == RescalTempMethod.INTERP_PROFILE_SURF:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1701,7 +1636,7 @@ def add_temp(
             raise ValueError("Missing ERA5 datas for INTERP_PROFILE_SURF")
         rescaled_data = method_interp_profile_surf(
             data=data,
-            variables_set=variables_set,
+            variables_set=variables,
             dem=dem,
             era5_surface=era5_surface,
             era5_dem_surface=era5_dem_surface,
@@ -1711,7 +1646,7 @@ def add_temp(
             dz=100,
         )
 
-    if method == RescalTempMethod.INTERP_LR_HYBRID:
+    elif method == RescalTempMethod.INTERP_LR_HYBRID:
         if (
             era5_surface is None
             or era5_dem_surface is None
@@ -1721,7 +1656,7 @@ def add_temp(
             raise ValueError("Missing ERA5 datas for INTERP_LR_HYBRID method")
         rescaled_data = method_interp_lr_hybrid(
             data=data,
-            variables_set=variables_set,
+            variables_set=variables,
             dem=dem,
             era5_surface=era5_surface,
             era5_dem_surface=era5_dem_surface,
@@ -1730,12 +1665,14 @@ def add_temp(
             interp_type=interp_type,
             dz=100,
         )
+    else:
+        raise ValueError(f"Unsupported temperature rescaling method: {method}")
     return rescaled_data
 
 
 def save_ta_td_csv(
     ds: xr.Dataset,
-    cfg: StationConfig,
+    id_station: str,
     path: str | None = None,
     name_dir: str | None = None,
 ):
@@ -1764,7 +1701,7 @@ def save_ta_td_csv(
 
     os.makedirs(file_path, exist_ok=True)
 
-    file_name = os.path.join(file_path, f"{cfg.id}_csv.csv")
+    file_name = os.path.join(file_path, f"{id_station}_csv.csv")
 
     df = ds.to_dataframe().reset_index()
     df = df[["time", "ta", "tdp"]]

@@ -123,7 +123,7 @@ def run_stations_process(
             }
         )
         # save data as csv
-        save_ta_td_csv(ds_era5_grid, cfg, output, name_dir="csv_era5_grid")
+        save_ta_td_csv(ds_era5_grid, cfg.id, output, name_dir="csv_era5_grid")
 
 
 def generate_timeseries_for_stations_multiprocess(

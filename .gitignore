@@ -47,7 +47,6 @@ validation/
 !src/etdataset/data/geopotential_era5land.zarr/
 !src/etdataset/data/stations_meteoL2.csv
 !src/etdataset/data/fluxnet_shuttle.csv
-
 # Test data
 !tests/data/**/
 

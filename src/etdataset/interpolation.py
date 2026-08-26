@@ -180,7 +180,7 @@ def interpolate_on_grid(
     data: xr.Dataset | xr.DataArray
         Data to be spatially interpolated
     grid: xr.Dataarray
-        Grid used for interplation
+        Grid used for interpolation
     algorithm: rio.enums.Resampling
         Algorithm used for resampling
 

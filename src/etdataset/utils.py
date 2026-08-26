@@ -374,7 +374,7 @@ def mask_bits(arr: npt.ArrayLike, pos: int, mask: str = "1") -> npt.NDArray:
 
     Parameters
     ----------
-    arr: np.arraylike
+    arr: np.array_like
         Bytes array
     pos: int
         Position in the byte array
@@ -383,7 +383,7 @@ def mask_bits(arr: npt.ArrayLike, pos: int, mask: str = "1") -> npt.NDArray:
 
     Returns
     -------
-    mask: np.ndarray
+    mask: np.array
         Mask extracted
     """
     if pos < 0:

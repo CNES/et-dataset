@@ -54,11 +54,12 @@ class StationConfig:
 def get_csv_with_valid_icos_stations(update: bool = False):
     """
     Return the file path that contains all ICOS ecosystem stations (ES)
-    that have available Meteo L2 dataset.
+    that have available meteorological L2 dataset.
 
     If the file is not available or an update has been requested,
-    fetch all ICOS ecosystem stations (ES) that have available Meteo L2 dataset,
-    extract their metadata, save the list into a CSV file.
+    fetch all ICOS ecosystem stations (ES) that have available
+    meteorological L2 dataset, extract their metadata,
+    save the list into a CSV file.
 
     Parameters
     ----------
@@ -149,7 +150,7 @@ def filter_stations_by_country_code(country_code: str):
 
 def filter_valid_data(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Filter invalid RH and TA datas in station's data
+    Filter invalid RH and TA data in station's data
 
     Parameters
     -----------

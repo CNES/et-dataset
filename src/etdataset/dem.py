@@ -63,7 +63,7 @@ def get_dem_from_tile(
     ----------
     tile_id: str
         Tile ID
-    resolution: str, deflaut=60
+    resolution: str, default=60
         DEM spatial resolution
     base_dir: str
         Path to the DEM directory
@@ -138,7 +138,7 @@ def get_dem_from_tiles(
     ----------
     tile_ids: List[str]
         List of tile IDs
-    resolution: str, deflaut=60
+    resolution: str, default=60
         DEM spatial resolution
     base_dir: str
         Path to the DEM directory
@@ -238,7 +238,7 @@ def get_elevation_from_tile(
     ----------
     tile_id: str
         Tile ID
-    resolution: str, deflaut=60
+    resolution: str, default=60
         DEM spatial resolution
     base_dir: str
         Path to the DEM directory
@@ -301,7 +301,7 @@ def get_dem_from_roi(
        ROI bounding box
     roi_crs: pyproj.CRS
        ROI CRS
-    resolution: str, deflaut=60
+    resolution: str, default=60
         DEM spatial resolution
     base_dir: str
         Path to the DEM directory
@@ -332,7 +332,7 @@ def get_dem_from_roi(
     transform = from_origin(left, top, res_x, res_y)
     datasets = []
     for tile in file_names:
-        # Reda file
+        # Read file
         ds = rioxarray.open_rasterio(tile, masked=True)
         # Reproject tile
         grid = ds.rio.reproject(  # type: ignore
@@ -512,7 +512,7 @@ def compute_egm96_height(data: xr.DataArray | xr.Dataset) -> xr.DataArray:
     transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
     # Apply transformation to the grid
     lon2d, lat2d = transformer.transform(x2d, y2d)
-    # Generate lat/lon daatarray
+    # Generate lat/lon dataarray
     lat = xr.DataArray(
         data=lat2d,
         coords={col_name: x, row_name: y},

@@ -611,7 +611,7 @@ class Sentinel2Reader(ProductReader):
 
     def __post_init__(self):
         """
-        Initiliazation
+        Initialization
         """
         # Create an instance of Sentinel2 from the product path
         self.ds = sentinel2.Sentinel2(self.path)
@@ -764,7 +764,7 @@ class EcostressReader(ProductReader):
 
     def __post_init__(self):
         """
-        Initiliazation
+        Initialization
         """
         # Create an instance of Ecostress from the product path
         self.ds = ecostress_v2.EcostressV2(self.path)

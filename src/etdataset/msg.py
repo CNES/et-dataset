@@ -127,7 +127,7 @@ class MSGVar(MSGDataInfo, Enum):
     def _missing_(cls, value):
         """
         Overload the missing method to call from_key method
-        if enum is instanciated with a string
+        if enum is instantiated with a string
         """
         if isinstance(value, str):
             return cls.from_key(value)
@@ -925,7 +925,7 @@ def download_date_by_date(
     Return
     ------
     time: pandas.core.indexes.datetimes.DatetimeIndex
-        list of dates beetween start and end date
+        list of dates between start and end date
     """
     roi_bbox_latlon = utils.bb_transform(
         source_crs=str(roi_crs), target_crs="EPSG:4326", bounding_box=roi_bbox

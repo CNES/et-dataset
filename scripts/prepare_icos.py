@@ -39,7 +39,7 @@ def prepare_icos_stations(
     stations: list[str] | str
         Stations to process
     data_dir: str| None
-        Downlaod ICOS directory
+        Download ICOS directory
     out_dir: str
         Output directory
     """
@@ -77,7 +77,7 @@ def prepare_icos_stations(
         td = compute_dewpoint_temp(data["TA"], data["RH"])
         # add dewpoint
         data["TD"] = td
-        # Save datas of station in csv
+        # Save data of station in csv
         csv_saved = save_station_data(cfg, data, out_dir)
         csv_paths.append(csv_saved)
 
