@@ -54,6 +54,7 @@ tdem
 zref
 tcvw
 markexpr
+rescal
 
 # Python package
 earthaccess

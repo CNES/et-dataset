@@ -56,12 +56,12 @@ def read(product: str) -> xr.Dataset:
 
     Parameter
     ---------
-    product: str
+    product : str
         Path to ERA5 product
 
     Return
     ------
-    data: xr.Dataset
+    data : xr.Dataset
         Data
     """
     if zipfile.is_zipfile(product):
@@ -89,7 +89,7 @@ def get_era5_dem() -> xr.DataArray:
 
     Returns
     -------
-    dem: xr.DataArray
+    dem : xr.DataArray
         ERA5 DEM
     """
     data = xr.open_dataarray(
@@ -109,7 +109,7 @@ def get_era5land_dem() -> xr.DataArray:
 
     Returns
     -------
-    dem: xr.DataArray
+    dem : xr.DataArray
         ERA5 DEM
     """
     data = xr.open_dataarray(
@@ -128,11 +128,11 @@ def _download(dataset: str, request: dict, target: str) -> None:
 
     Parameters
     ----------
-    dataset: str
+    dataset : str
         Dataset name
-    request: dict
+    request : dict
         Data request for download
-    target: str
+    target : str
         Target filename
     """
     creds = Path(Path.home(), Path(".cdsapirc"))
@@ -177,19 +177,17 @@ def download(
     path: str | None = None,
 ) -> None:
     """
-    Description
-    -----------
     Download data from a ERA5 dataset
 
     Parameters
     ----------
-    date: dt.datetime
+    date : dt.datetime
         Date
-    dataset: ERA5Dataset
+    dataset : ERA5Dataset
         ERA5 Dataset used for download
-    variables: list[str] | None
+    variables : list[str] | None
         List of product to download
-    path: str | None
+    path : str | None
         Directory path to store data
     """
     if path is None:
@@ -309,16 +307,16 @@ def interpolate_time(
 
     Parameters
     ----------
-    data: xr.Dataset
+    data : xr.Dataset
         Dataset all the variables and the dates
-    date: dt.datetime
+    date : dt.datetime
         Date at which interpolation is computed
-    variables: list[ERA5Var] | None
+    variables : list[ERA5Var] | None
         List of Variables to consider for the interpolation
 
     Return
     ------
-    interpolated_data: xr.Dataset
+    interpolated_data : xr.Dataset
         Dataset interpolated
     """
     # Check variable
@@ -366,14 +364,14 @@ def interpolate_ozone(
 
     Parameters
     ----------
-    data: xr.DataArray
+    data : xr.DataArray
         Data to project
-    dem:  xr.DataArray
+    dem :  xr.DataArray
         Grid used for the projection
 
     Return
     ------
-    projected: xr.DataArray
+    projected : xr.DataArray
         Data projected
     """
     return data.rio.reproject_match(
@@ -399,14 +397,14 @@ def interpolate_tcvw(
 
     Parameters
     ----------
-    data: xr.DataArray
+    data : xr.DataArray
         Data to project
-    dem:  xr.DataArray
+    dem :  xr.DataArray
         Grid used for the projection
 
     Return
     ------
-    projected: xr.DataArray
+    projected : xr.DataArray
         Data projected
     """
     return data.rio.reproject_match(
@@ -431,14 +429,14 @@ def interpolate_radiation(
 
     Parameters
     ----------
-    data: xr.DataArray
+    data : xr.DataArray
         Data to project
-    dem:  xr.DataArray
+    dem :  xr.DataArray
         Grid used for the projection
 
     Return
     ------
-    projected: xr.DataArray
+    projected : xr.DataArray
         Data projected
     """
     # Project into the coordinate system of the destination DEM
@@ -459,18 +457,18 @@ def rescale_radiation(
 
     Parameters
     ----------
-    dem: xr.DataArray
+    dem : xr.DataArray
         DEM or grid used to rescale data
-    era5_data: xr.DataArray | None
+    era5_data : xr.DataArray | None
         Data to rescaled
-    key: str
+    key : str
         Variable name
-    description: str
+    description : str
         Variable description
 
     Returns
     -------
-    data: xr.DataArray
+    data : xr.DataArray
         Rescaled data
     """
     radiation_factor = 3600.0
@@ -503,17 +501,17 @@ def prepare_data(
     temp_method: RescalTempMethod = RescalTempMethod.CONST_LR,
 ) -> PreparedData:
     """
-    Prepare ERA5 datas to be added to the dataset
+    Prepare ERA5 data to be added to the dataset
 
     Parameters
     ----------
-    data: xr.Dataset
+    data : xr.Dataset
         Data
-    dataset: ERA5Dataset
+    dataset : ERA5Dataset
         ERA5 Dataset used for download
-    variables: list[ERA5Var] | None
+    variables : list[ERA5Var] | None
         List of variables to prepare
-    path: str | None
+    path : str | None
         Directory where ERA5 data have been downloaded data
     temp_method : RescalTempMethod
         Temperature rescaling method used
@@ -625,7 +623,7 @@ def prepare_data(
             raise OSError(
                 f"ERA5 pressure data not found: {pressure_product_path}"
             )
-    # Warning for temperature rescaling input datas
+    # Warning for temperature rescaling input data
     if not req["surface"]:
         logger.warning(
             f"ERA5 data not used for rescaling temperature method {temp_method}"
@@ -764,20 +762,20 @@ def add_temp(
 
     Parameters
     ----------
-    data: xr.Dataset
+    data : xr.Dataset
         Input dataset containing at least:
         - 'height' variable (DEM)
         - 'vis_date' and 'vis_time' attributes
         - CRS information
-    path: str | None
+    path : str | None
         Path to a directory containing ERA5 data files
-    dataset: ERA5Dataset
+    dataset : ERA5Dataset
         Surface dataset to use (ERA5 or ERA5-Land)
-    variables: TempVariable | Iterable[TempVariable] | None,
+    variables : TempVariable | Iterable[TempVariable] | None,
         Temperature variables to compute (e.g., TA, TD)
-    method: RescalTempMethod
+    method : RescalTempMethod
         Temperature rescaling method to apply
-    interp_type: rio.enums.Resampling
+    interp_type : rio.enums.Resampling
         Method used for resampling
         By default, "cubic_spline"
 
@@ -800,7 +798,7 @@ def add_temp(
     # Extract data
     date = dt.datetime.combine(data.attrs["vis_date"], data.attrs["vis_time"])
 
-    ##################### PREPARE DATAS ###################################
+    ##################### PREPARE DATA ###################################
 
     # Variables
     ## Variables for processing methods
