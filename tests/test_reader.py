@@ -28,7 +28,7 @@ def test_landsat_reader():
     landsat_path = os.path.join(
         os.environ["ETDATASET_TEST_DATA_PATH"],
         "Landsat",
-        "LC09_L2SP_205050_20230327_20230329_02_T1/",
+        "LC09_L2SP_205050_20230311_20230313_02_T1",
     )
     reader = LandsatReader(landsat_path)
     assert reader
@@ -112,7 +112,7 @@ class ReaderParams:
             os.path.join(
                 os.environ["ETDATASET_TEST_DATA_PATH"],
                 "Landsat",
-                "LC09_L2SP_205050_20230327_20230329_02_T1/",
+                "LC09_L2SP_205050_20230311_20230313_02_T1/",
             )
         ),
         ReaderParams(

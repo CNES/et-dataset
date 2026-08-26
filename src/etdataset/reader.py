@@ -114,7 +114,7 @@ class LandsatReader(ProductReader):
             "SR_B3": "green",
             "SR_B4": "red",
             "SR_B5": "nir",
-            "SR_B6": "swir1",
+            "SR_B6": "swir",
             "SR_B7": "swir2",
             "cloud": "cloud",
             "water": "water",
@@ -152,7 +152,7 @@ class LandsatReader(ProductReader):
         # Satellite
         if "LC08" in self.ds.product_name:
             self.satellite = "landsat8"
-        elif "LC08" in self.ds.product_name:
+        elif "LC09" in self.ds.product_name:
             self.satellite = "landsat9"
         else:
             msg = "Only Landsat8/9 can be used"
@@ -190,7 +190,7 @@ class LandsatReader(ProductReader):
             0.356 * data.blue
             + 0.130 * data.red
             + 0.373 * data.nir
-            + 0.085 * data.swir1
+            + 0.085 * data.swir
             + 0.072 * data.swir2
             - 0.0018
         )
@@ -301,7 +301,7 @@ class LandsatReader(ProductReader):
                 "green",
                 "red",
                 "nir",
-                "swir1",
+                "swir",
                 "swir2",
                 "cos(View_Zenith)",
                 "cos(Sun_Zenith)",
@@ -423,7 +423,7 @@ class HLSReader(ProductReader):
                     "B03": "green",
                     "B04": "red",
                     "B05": "nir",
-                    "B06": "swir1",
+                    "B06": "swir",
                     "B07": "swir2",
                     "cloud": "cloud",
                     "water": "water",
@@ -446,7 +446,7 @@ class HLSReader(ProductReader):
                     "B03": "green",
                     "B04": "red",
                     "B8A": "nir",
-                    "B11": "swir1",
+                    "B11": "swir",
                     "B12": "swir2",
                     "cloud": "cloud",
                     "water": "water",
@@ -496,7 +496,7 @@ class HLSReader(ProductReader):
             0.356 * data.blue
             + 0.130 * data.red
             + 0.373 * data.nir
-            + 0.085 * data.swir1
+            + 0.085 * data.swir
             + 0.072 * data.swir2
             - 0.0018
         )
@@ -601,7 +601,7 @@ class Sentinel2Reader(ProductReader):
             "B6": "red_edge",
             "B8": "nir",
             "B8A": "nir2",
-            "B11": "swir1",
+            "B11": "swir",
             "B12": "swir2",
             "cloud": "cloud",
             "water": "water",
@@ -640,7 +640,7 @@ class Sentinel2Reader(ProductReader):
             + 0.1236 * data.green
             + 0.1573 * data.red
             + 0.3417 * data.nir
-            + 0.1170 * data.swir1
+            + 0.1170 * data.swir
             + 0.0338 * data.swir2
         )
         return albedo.clip(0.01, 0.99)
