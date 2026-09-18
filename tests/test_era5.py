@@ -1,4 +1,7 @@
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Copyright (C) 2024 CESBIO / Centre National d'Etudes Spatiales
 #
 """
 This module contains tests for ERA5, ERA5-land and ERA5 pressure data driver

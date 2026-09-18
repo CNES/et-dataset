@@ -1,4 +1,12 @@
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Copyright (C) 2024 CESBIO / Centre National d'Etudes Spatiales
+#
+"""
+Module for high-level API
+"""
+
 import datetime as dt
 import os
 

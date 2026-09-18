@@ -1,6 +1,7 @@
 #
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales /
-#            Université Paul Sabatier (UT3)
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Copyright (C) 2024 CESBIO / Centre National d'Etudes Spatiales
 #
 """
 Module for reading ERA5 and ERA5-land

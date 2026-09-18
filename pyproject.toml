@@ -4,7 +4,7 @@ version = "0.0.1"
 description = 'Data preparation for ET dataset'
 readme = "README.md"
 requires-python = ">=3.12"
-license = "LicenseRef-Public-Domain"
+license = "AGPL-3.0-only"
 keywords = []
 authors = [
   { name = "Emmanuelle Sarrazin", email = "emmanuelle.sarrazin@cnes.fr" },
@@ -33,7 +33,7 @@ dependencies = [
   "earthaccess",
   "sensorsio",
   "theia-picker",
-  "pyBVNET @ git+https://forge.ird.fr/cesbio/modelisation/pybvnet.git@473e4d7490808011b87d4edac91abd16ff93df99",
+  "pyBVNET @ git+https://src.koda.cnrs.fr/trishna/pybvnet.git@39047a7401b6c09f33dc3cd981cb92c54ca1cc33",
   "scikit-image",
   "requests",
   "pyarrow",

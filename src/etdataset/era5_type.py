@@ -1,3 +1,12 @@
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Copyright (C) 2026 CESBIO / Centre National d'Etudes Spatiales
+#
+"""
+Module for ERA5 types
+"""
+
 from dataclasses import dataclass
 from enum import Enum
 

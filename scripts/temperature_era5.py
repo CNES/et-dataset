@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-
-# Copyright: (c) 2024 CESBIO / Centre National d'Etudes Spatiales
-
-#######################
-# Air Temperature and Dew point Temperature rescaling
-#######################
-
-# Imports
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Copyright (C) 2026 CESBIO / Centre National d'Etudes Spatiales
+#
 import argparse
 import datetime as dt
 import logging

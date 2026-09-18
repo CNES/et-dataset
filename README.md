@@ -418,3 +418,8 @@ Example
 ```bash
 python scripts/prepare_timeseries.py -r notebooks/data/Zone_Senegal_Centre.shp -s "2024-03-01" -e "2024-03-12" -o notebooks/out_ts
 ```
+
+## License
+
+This project is licensed under the GNU Affero General Public License
+version 3. See [LICENSE](LICENSE) for the full text.

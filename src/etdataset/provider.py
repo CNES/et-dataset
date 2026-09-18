@@ -1,6 +1,7 @@
 #
-# Copyright: (c) 2023 CESBIO / Centre National d'Etudes Spatiales /
-#             Université Paul Sabatier (UT3)
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Copyright (C) 2023 CESBIO / Centre National d'Etudes Spatiales
 #
 """
 Manage provider for EarthData and earthExplorer (USGS)

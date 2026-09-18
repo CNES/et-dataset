@@ -1,0 +1,71 @@
+# Contributing guide.
+
+1. [Bug report](#bug-report)
+2. [Contributing workflow](#contributing-workflow)
+3. [Coding guide](#coding-guide)
+4. [Pre-commit validation](#pre-commit-validation)
+
+## Bug report
+
+Any proven or suspected malfunction should be traced in a bug report, the latter being an issue in the ET-dataset github repository.
+
+**Don't hesitate to do so: It is best to open a bug report and quickly resolve it than to let a problem remains in the project.**
+**Notifying the potential bugs is the first way for contributing to a software.**
+
+In the problem description, be as accurate as possible. Include:
+
+  * The procedure used to initialize the environment
+  * The incriminated command line or python function
+  * The content of the input and output configuration files
+
+## Contributing workflow
+
+Any code modification requires a Merge Request. It is forbidden to push patches directly into main branch (this branch is protected).
+
+It is recommended to open your Merge Request as soon as possible in order to inform the developers of your ongoing work.
+Please add `WIP:` before your Merge Request title if your work is in progress: This prevents an accidental merge and informs the other developers of the unfinished state of your work.
+
+The Merge Request shall have a short description of the proposed changes. If it is relative to an issue, you can signal it by adding `Closes xx` where xx is the reference number of the issue.
+
+Likewise, if you work on a branch (which is recommended), prefix the branch's name by `xx-` in order to link it to the xx issue.
+
+Classical workflow is :
+
+  * Create an issue (or begin from an existing one)
+  * Create a Merge Request from the issue: a MR is created accordingly with "WIP:", "Closes xx" and associated "xx-name-issue" branch
+  * Modify ET-dataset code from a local working directory or from the forge (less possibilities)
+  * Git add, commit and push from local working clone directory or from the forge directly
+  * Follow [Conventional commits](https://www.conventionalcommits.org/) specifications for commit messages
+  * Beware that pre-commit hooks can be installed for code analysis (see below pre-commit validation).
+  * Launch the tests with [pytest](https://pytest.org) on your modifications (or don't forget to add ones).
+  * When finished, change your Merge Request name (erase "WIP:" in title ) and ask to review the code.
+
+## Coding guide
+
+Here are some rules to apply when developing a new functionality:
+
+  * Include a comments ratio high enough and use explicit variables names. A comment by code block of several lines is necessary to explain a new functionality.
+  * The usage of the `print()` function is forbidden: use the `logging` python standard module instead.
+  * Each new functionality shall have a corresponding test in its module's test file. This test shall, if possible, check the function's outputs and the corresponding degraded cases.
+  * All functions shall be documented (object, parameters, return values).
+  * Factorize the code as much as possible. The command line tools shall only include the main workflow and rely on the pandora python modules.
+  * If major modifications of the user interface or of the tool's behavior are done, update the user documentation (and the notebooks if necessary).
+  * Do not add new dependencies unless it is absolutely necessary, and only if it has a permissive license.
+  * Use the type hints provided by the `typing` python module.
+  * Correct ruff/mypy errors (see below)
+
+
+## Pre-commit validation
+
+Pre-commit hooks for code analysis can be installed:
+```bash
+pre-commit install
+```
+
+This command installs the pre-commit hooks in `.git/hooks/pre-commit`  from `.pre-commit-config.yaml` file configuration.
+It is possible to test pre-commit before committing:
+```bash
+pre-commit run --all-files              # Run all hooks on all files
+pre-commit run --files [FILE]           # Run all hooks on one file
+pre-commit run ruff                     # Run only ruff hook
+```
