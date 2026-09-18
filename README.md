@@ -39,7 +39,7 @@ The installation requires to have:
 ### Clone the repository
 
 ```console
-git clone https://src.koda.cnrs.fr/trishna/et-dataset.git
+git clone https://github.com/et-dataset.git
 ```
 
 ### Install
