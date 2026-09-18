@@ -22,7 +22,6 @@ Python package to prepare datasets for evapotranspiration processing:
 
 To search and download products and auxiliary data, you need accounts and set environment variables corresponding to login and password for each catalog:
 * [USGS machine to machine](https://m2m.cr.usgs.gov/): required to define `USGS_USERNAME` and `USGS_PASSWORD` (the api key is used as a password here)
-* [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2): required to define `THEIA_IDENT` and `THEIA_PASS`
 * [Earth Data](https://search.earthdata.nasa.gov/search): required to define `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`
 * [LSA SAF Data](https://datalsasaf.lsasvcs.ipma.pt/): required to define `LSASAF_USER` and `LSASAF_PASSWORD`
 * [Climate Data Store](https://cds.climate.copernicus.eu/): required to configure CDS API ([see instructions](https://cds.climate.copernicus.eu/how-to-api))
@@ -89,7 +88,6 @@ pixi shell -e dev
 
 The command enables to search products in catalogs:
 * For Landsat [USGS machine to machine](https://m2m.cr.usgs.gov/)
-* For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
 * For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
 #### Command line
@@ -121,7 +119,6 @@ options:
 
 The command enables to download products from a product list from catalogs:
 * For Landsat [USGS machine to machine](https://m2m.cr.usgs.gov/)
-* For Sentinel2 [THEIA](https://theia.cnes.fr/atdistrib/rocket/#/search?collection=SENTINEL2)
 * For ECOSTRESS (collection v2) and HLS [Earth Data](https://search.earthdata.nasa.gov/search)
 
 The product list must be provided in a CSV file format.

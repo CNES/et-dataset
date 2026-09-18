@@ -11,12 +11,10 @@ from __future__ import annotations
 
 import json  # to open and read json files
 import os
-import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import Enum
-from typing import Any
 
 import earthaccess
 import geopandas as gpd
@@ -26,10 +24,7 @@ import requests  # to send url requests
 from earthaccess.auth import Auth as EarthDataAuth
 from earthaccess.results import DataGranule
 from sensorsio import mgrs
-from sensorsio.sentinel2 import find_tile_orbit_pairs
 from shapely.geometry import Point, Polygon
-from theia_picker.download import Feature, TheiaCatalog
-from theia_picker.download import RequestsManager as TheiaAuth
 from tqdm import tqdm  # to print progress bars
 
 from etdataset.logging import LoggerManager
@@ -88,269 +83,6 @@ class Provider:
         """
         Download products from catalog
         """
-
-
-@dataclass
-class TheiaProvider(Provider):
-    """
-    Provider for Theia
-    """
-
-    name: str = field(default="THEIA")
-    catalog: TheiaCatalog = field(init=False)
-    auth: TheiaAuth = field(init=False)
-
-    def __post_init__(self):
-        """
-        Initialize dataset
-        """
-        self.login()
-
-    def login(self) -> None:
-        """
-        Login to Theia catalog
-        """
-        # Authentication
-        try:
-            username = os.environ["THEIA_IDENT"]
-            password = os.environ["THEIA_PASS"]
-        except KeyError:
-            raise AuthenticationException(
-                "Variables THEIA_IDENT and THEIA_PASS must be set"
-            )
-
-        self.catalog = TheiaCatalog(
-            credentials={"ident": username, "pass": password}
-        )
-        self.auth = self.catalog.requests_mgr
-
-    def _get_optimal_relative_orbit_for_mgrs_tile(self, tile_id: str) -> int:
-        """
-        Given a MGRS tile return the best relative orbit
-        """
-        tile_bbox = mgrs.get_bbox_mgrs_tile(tile_id)
-        # Convert bounds to polygon
-        aoi = Polygon(
-            [
-                [tile_bbox[0], tile_bbox[1]],
-                [tile_bbox[0], tile_bbox[3]],
-                [tile_bbox[2], tile_bbox[3]],
-                [tile_bbox[2], tile_bbox[1]],
-            ]
-        )
-
-        orbits_df = gpd.read_file(
-            os.path.join(
-                os.path.dirname(os.path.abspath(mgrs.__file__)),
-                "data/sentinel2/orbits.gpkg",
-            )
-        )
-        intersections = []
-        orbits = []
-        for _, orbit_row in orbits_df.iterrows():
-            # Last test is to exclude weird duplicates (malformed gpkg ?)
-            if (
-                orbit_row.geometry.intersects(aoi)
-                and orbit_row.orbit_number not in orbits
-            ):
-                orbits.append(orbit_row.orbit_number)
-                inter_aoi_orbit = aoi.intersection(orbit_row.geometry)
-                mgrs_orbit_coverage = inter_aoi_orbit.area / aoi.area
-                intersections.append(
-                    (orbit_row.orbit_number, mgrs_orbit_coverage)
-                )
-        labels = ["relative_orbit_number", "tile_and_orbit_coverage"]
-        return int(
-            pd.DataFrame.from_records(intersections, columns=labels)
-            .sort_values(by="tile_and_orbit_coverage", ascending=False)
-            .iloc[0]
-            .relative_orbit_number
-        )
-
-    def _filter(
-        self,
-        results: gpd.GeoDataFrame,
-        latlon_bbox: rio.coords.BoundingBox,
-    ) -> gpd.GeoDataFrame:
-        """
-        Given a ROI, filter with tile_id and relative_orbit_number
-        """
-        to_keep = find_tile_orbit_pairs(latlon_bbox, 4326)
-        to_supp = to_keep[to_keep["tile_and_orbit_coverage"] <= 0.1][
-            ["tile_id", "relative_orbit_number"]
-        ].values
-        logger.debug(f"Tiles to remove: {to_supp}")
-        to_keep = to_keep[to_keep["tile_and_orbit_coverage"] > 0.1]
-        idx = (
-            to_keep.groupby(["tile_id"])["tile_and_orbit_coverage"].transform(
-                "max"
-            )
-            == to_keep["tile_and_orbit_coverage"]
-        )
-        to_keep = to_keep[idx][["tile_id", "relative_orbit_number"]].values
-        logger.debug(f"Tiles to keep: {to_keep}")
-        for i, orbit in to_supp:
-            results = results.drop(
-                results[
-                    (results.Tile_ID == str(i))
-                    & (results.Relative_orbit == int(orbit))
-                ].index
-            )
-        for i, orbit in to_keep:
-            results = results.drop(
-                results[
-                    (results.Tile_ID == str(i))
-                    & (results.Relative_orbit != int(orbit))
-                ].index
-            )
-        return results
-
-    def search(
-        self,
-        min_date: str,
-        max_date: str,
-        tile_id: str | None = None,
-        latlon_bbox: rio.coords.BoundingBox | None = None,
-        max_cloud_cover: float = 20,
-    ) -> gpd.GeoDataFrame:
-        """
-        Search on catalog
-        """
-        logger.debug(
-            f"Search on THEIA catalog: min_date={min_date}, "
-            f"max_date = {max_date}, "
-            f"tile_id = {tile_id}, bbox = {latlon_bbox}, "
-            f"max_cloud_cover = {max_cloud_cover}"
-        )
-        tile_name = None
-        relative_orbit = None
-        bbox = None
-        if tile_id is not None:
-            tile_name = "T" + tile_id
-            relative_orbit = self._get_optimal_relative_orbit_for_mgrs_tile(
-                tile_id
-            )
-        if latlon_bbox is not None:
-            bbox = tuple(latlon_bbox)
-        # Request
-        results = self.catalog.search(
-            start_date=min_date,
-            end_date=(
-                datetime.strptime(max_date, "%Y-%m-%d") + timedelta(days=1)
-            ).strftime("%Y-%m-%d"),
-            tile_name=tile_name,
-            level="LEVEL2A",
-            bbox=bbox,
-            relative_orbit_number=relative_orbit,
-        )
-        logger.debug(f"Number of products found on Theia: {len(results)}")
-        # Filter with cloud cover
-        if len(results) > 0:
-            results = [
-                result
-                for result in results
-                if result.properties.cloud_cover < max_cloud_cover
-            ]
-        logger.debug(
-            "Number of products found on Theia after cloud "
-            f"cover filtering: {len(results)}"
-        )
-        # Convert to GeoDataFrame
-        url_pattern = re.compile("(.*?/download/)")
-        data: list[tuple[str, date, str, str, str, str, str, str, str]] = []
-        geometry = []
-        if len(results) > 0:
-            for result in results:
-                url_matching = url_pattern.search(
-                    result.properties.services.download.url
-                )
-                if url_matching is None:
-                    continue
-                url = url_matching.group(0)
-                data.append(
-                    (
-                        result.properties.product_identifier,
-                        result.properties.acquisition_date.date(),
-                        self.name,
-                        result.properties.collection,
-                        result.properties.tile[1:],
-                        result.properties.cloud_cover,
-                        result.properties.relative_orbit_number,
-                        url,
-                        result.properties.services.download.checksum,
-                    )
-                )
-            geometry = [
-                Polygon(result.geometry.polygon[0]) for result in results
-            ]
-        gdf = gpd.GeoDataFrame(
-            data=data,
-            columns=[
-                "Product_name",
-                "Date",
-                "Provider",
-                "Collection",
-                "Tile_ID",
-                "Cloud_cover",
-                "Relative_orbit",
-                "URL",
-                "Checksum",
-            ],
-            geometry=geometry,
-            crs=4326,
-        )
-        if latlon_bbox is not None:
-            gdf = self._filter(gdf, latlon_bbox)
-            logger.debug(
-                "Number of products found on Theia after "
-                f"tile filtering: {len(gdf)}"
-            )
-        return gdf
-
-    def download(
-        self, products: pd.DataFrame, local_path: str = os.getcwd()
-    ) -> None:
-        """
-        Download products from catalog
-        """
-        logger.debug(
-            f"List of products to download: {products['Product_name'].values}"
-        )
-        url_id = re.compile("SENTINEL2/(.*?)/download/")
-        for _, product in products.iterrows():
-            # Create feature instance
-            url_id_matching = url_id.search(product.URL)
-            if url_id_matching is None:
-                continue
-            data_id = url_id_matching.group(1)
-            data: dict[str, Any] = {
-                "type": "Feature",
-                "id": data_id,
-                "properties": {
-                    "collection": "",
-                    "productIdentifier": product.Product_name,
-                    "title": "",
-                    "productType": "",
-                    "startDate": datetime.now(),
-                    "processingLevel": "",
-                    "waterCover": 0,
-                    "snowCover": 0,
-                    "cloudCover": 0,
-                    "relativeOrbitNumber": 0,
-                    "location": "",
-                    "services": {
-                        "download": {
-                            "url": product.URL,
-                            "mimeType": "application/zip",
-                            "checksum": product.Checksum,
-                        }
-                    },
-                },
-                "geometry": {"coordinates": []},
-            }
-            feature = Feature(requests_mgr=self.auth, **data)
-            # Download
-            feature.download_archive(download_dir=local_path, renew_token=True)
 
 
 @dataclass
@@ -962,7 +694,6 @@ class LandsatProvider(Provider):
 class Collection(Enum):
     ECOSTRESS = EcostressProvider
     LANDSAT = LandsatProvider
-    SENTINEL2 = TheiaProvider
     HLSSENTINEL2 = HLSSProvider
     HLSLANDSAT = HLSLProvider
 
