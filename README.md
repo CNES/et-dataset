@@ -39,7 +39,7 @@ The installation requires to have:
 ### Clone the repository
 
 ```console
-git clone https://github.com/cnes/et-dataset.git
+git clone https://github.com/CNES/et-dataset.git
 ```
 
 ### Install
